@@ -81,19 +81,19 @@ function init() {
   </div>`);
   const shootSec = h(`
   <div class="sc-shoot-wrap">
-    <div class="sec-title">Name this shoot</div>
-    <input class="sc-shoot-input" id="scShootInput" maxlength="60" spellcheck="false" placeholder="e.g. FluentCRM Intro" aria-label="Shoot name">
-    <div class="sc-shoot-hint">Used for the script, every take and the audio file names (e.g. “FluentCRM Intro - Take 01.wav”).</div>
+    <div class="sec-title">Take name</div>
+    <input class="sc-shoot-input" id="scShootInput" maxlength="60" spellcheck="false" placeholder="e.g. Studio Tour" aria-label="Take name">
+    <div class="sc-shoot-hint">Used for the script, every take and the audio file names (e.g. “Studio Tour - Take 01.wav”).</div>
   </div>`);
   const shootRail = h(`
-  <div class="sc-shoot-rail" id="scShootRail" role="button" tabindex="0" title="Change the shoot name">
-    <span class="sec-title">Shoot</span>
+  <div class="sc-shoot-rail" id="scShootRail" role="button" tabindex="0" title="Change the take name">
+    <span class="sec-title">Take name</span>
     <span class="sc-shoot-rail-name" id="scShootRailName">Not named</span>
     <span class="sc-shoot-rail-edit" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75z"/></svg></span>
   </div>`);
   const strip = h(`
   <div class="sc-strip-wrap">
-    <div class="sec-title"><span>Before you shoot</span><button type="button" class="sc-mini-btn" id="scSample">Load sample data</button></div>
+    <div class="sec-title"><span>Connect Devices</span><button type="button" class="sc-mini-btn" id="scSample">Load sample data</button></div>
     <div class="sc-strip">
       <div class="sc-card" id="scCardCam">
         <div class="sc-card-top"><span class="sc-card-title">Camera</span><span class="sc-state" id="scCardCamState">off</span></div>
@@ -365,7 +365,7 @@ function init() {
   // ------------------------------------------------------------------ shoot name
   let shoot = store.get('shoot', '');
   const todayStr = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  const shootOrDefault = () => shoot || `Shoot ${todayStr()}`;
+  const shootOrDefault = () => shoot || `Untitled ${todayStr()}`;
   const dirName = x => x.replace(/[\\/:*?"<>|]+/g, '-').trim().slice(0, 60) || 'Shoot';
   window.spaceCamShoot = () => shoot;
   const shootInput = $('scShootInput'), shootRailName = $('scShootRailName');
@@ -380,8 +380,8 @@ function init() {
   const editShoot = () => {
     if (!$('setup').classList.contains('hidden')) { shootInput.focus(); shootInput.select(); return; }
     const m = modal(`
-      <div class="sc-modal-head"><div class="sc-modal-title">Shoot name</div><button type="button" class="sc-modal-x" data-close aria-label="Close">✕</button></div>
-      <input class="sc-modal-input" value="${esc(shoot)}" maxlength="60" spellcheck="false" placeholder="e.g. FluentCRM Intro">
+      <div class="sc-modal-head"><div class="sc-modal-title">Take name</div><button type="button" class="sc-modal-x" data-close aria-label="Close">✕</button></div>
+      <input class="sc-modal-input" value="${esc(shoot)}" maxlength="60" spellcheck="false" placeholder="e.g. Studio Tour">
       <div class="sc-modal-hint">New takes use this name. Takes already recorded keep theirs.</div>
       <div class="sc-modal-row"><button type="button" class="btn ghost" data-close>Cancel</button><button type="button" class="btn primary sc-ok">Save</button></div>`);
     const inp = m.wrap.querySelector('input'); inp.focus(); inp.select();

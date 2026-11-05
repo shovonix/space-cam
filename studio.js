@@ -94,7 +94,7 @@ function init() {
       <div class="sc-card" id="scCardCam">
         <div class="sc-card-top"><span class="sc-card-title">Camera</span><span class="sc-state" id="scCardCamState">off</span></div>
         <div class="sc-card-sub" id="scCardCamSub">USB · PC Remote · camera on</div>
-        <img class="sc-card-preview" id="scCardPreview" alt="Live camera preview" hidden>
+        <div class="sc-card-preview" id="scCardPreviewBox" hidden><span>Waiting for preview…</span><img id="scCardPreview" alt=""></div>
         <button type="button" class="tbtn sc-wide" id="scCardCamBtn"><span>Connect camera</span></button>
       </div>
       <div class="sc-card" id="scCardMic">
@@ -136,7 +136,7 @@ function init() {
     micState: $('scMicState'), micOn: $('scMicOn'), mic: $('scMic'), meterWrap: $('scMeterWrap'), meterFill: $('scMeterFill'),
     meterPeak: $('scMeterPeak'), db: $('scDb'), clip: $('scClip'), folderName: $('scFolderName'), folderBtn: $('scFolderBtn'),
     rec: recBtn, recLabel: $('scRecLabel'), takeList: $('scTakeList'), saveAll: $('scSaveAll'),
-    cCamState: $('scCardCamState'), cCamSub: $('scCardCamSub'), cCamBtn: $('scCardCamBtn'), cPreview: $('scCardPreview'), micOff: $('scMicOff'),
+    cCamState: $('scCardCamState'), cCamSub: $('scCardCamSub'), cCamBtn: $('scCardCamBtn'), cPreview: $('scCardPreview'), cPreviewBox: $('scCardPreviewBox'), micOff: $('scMicOff'),
     cMicState: $('scCardMicState'), cMicSub: $('scCardMicSub'), cMicBtn: $('scCardMicBtn'), cMeter: $('scCardMeter'), cMeterFill: $('scCardMeterFill'),
     cFolderState: $('scCardFolderState'), cFolderSub: $('scCardFolderSub'), cFolderBtn: $('scCardFolderBtn'), problem2: $('scProblem2'), help: $('scHelp'), help2: $('scHelp2'),
   };
@@ -164,7 +164,7 @@ function init() {
     if (!on) ui.fps.textContent = '';
     ui.cCamState.textContent = ui.camState.textContent; ui.cCamState.className = ui.camState.className;
     ui.cCamSub.textContent = on ? 'Connected' : 'USB · PC Remote · camera on';
-    ui.cPreview.hidden = !on;
+    ui.cPreviewBox.hidden = !on; if (!on) { ui.cPreview.removeAttribute('src'); ui.cPreviewBox.classList.remove('live'); }
     ui.cCamBtn.querySelector('span').textContent = on ? 'Disconnect' : ui.connect.textContent;
     ui.cCamBtn.disabled = ui.connect.disabled && !on;
     ui.cCamBtn.parentElement.classList.toggle('ready', on);
@@ -189,7 +189,7 @@ function init() {
   });
   cam.addEventListener('frame', e => {
     const url = URL.createObjectURL(e.detail.blob);
-    ui.img.src = url; ui.cPreview.src = url; if (big) big.img.src = url;
+    ui.img.src = url; ui.cPreview.src = url; ui.cPreviewBox.classList.add('live'); if (big) big.img.src = url;
     if (lastUrl) URL.revokeObjectURL(lastUrl);
     lastUrl = url;
   });

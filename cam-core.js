@@ -98,6 +98,15 @@ export const CamCore = class CamCore extends EventTarget {
     await new Promise(r => setTimeout(r, 1500));
   }
 
+  /** Close the camera session cleanly (used before a reload, so the camera isn't left stuck in a dead session). */
+  async release() {
+    if (this.state !== 'connected') return;
+    this.#previewOn = false;
+    await new Promise(r => setTimeout(r, 400)); // let the in-flight preview frame finish
+    this.#teardown('idle');
+    await new Promise(r => setTimeout(r, 400));
+  }
+
   async disconnect() {
     if (this.recording) this.#log('Disconnected while recording — the camera keeps recording until you stop it on the body', 'warn');
     this.#teardown('idle');

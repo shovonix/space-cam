@@ -67,6 +67,7 @@ function init() {
       <div class="sc-meter-bar"><i id="scMeterFill"></i><b id="scMeterPeak"></b></div>
       <div class="sc-meter-label"><span id="scDb">−∞ dB</span><span class="sc-clip" id="scClip">CLIP</span></div>
     </div>
+    <button type="button" class="sc-link" id="scMicOff" hidden>Disable microphone</button>
     <div class="sc-folder">
       <div class="sc-folder-row"><span>Save to</span><b id="scFolderName">Not chosen</b></div>
       <button type="button" class="tbtn sc-wide" id="scFolderBtn"><span>Choose folder</span></button>
@@ -93,6 +94,7 @@ function init() {
       <div class="sc-card" id="scCardCam">
         <div class="sc-card-top"><span class="sc-card-title">Camera</span><span class="sc-state" id="scCardCamState">off</span></div>
         <div class="sc-card-sub" id="scCardCamSub">USB · PC Remote · camera on</div>
+        <img class="sc-card-preview" id="scCardPreview" alt="Live camera preview" hidden>
         <button type="button" class="tbtn sc-wide" id="scCardCamBtn"><span>Connect camera</span></button>
       </div>
       <div class="sc-card" id="scCardMic">
@@ -134,7 +136,7 @@ function init() {
     micState: $('scMicState'), micOn: $('scMicOn'), mic: $('scMic'), meterWrap: $('scMeterWrap'), meterFill: $('scMeterFill'),
     meterPeak: $('scMeterPeak'), db: $('scDb'), clip: $('scClip'), folderName: $('scFolderName'), folderBtn: $('scFolderBtn'),
     rec: recBtn, recLabel: $('scRecLabel'), takeList: $('scTakeList'), saveAll: $('scSaveAll'),
-    cCamState: $('scCardCamState'), cCamSub: $('scCardCamSub'), cCamBtn: $('scCardCamBtn'),
+    cCamState: $('scCardCamState'), cCamSub: $('scCardCamSub'), cCamBtn: $('scCardCamBtn'), cPreview: $('scCardPreview'), micOff: $('scMicOff'),
     cMicState: $('scCardMicState'), cMicSub: $('scCardMicSub'), cMicBtn: $('scCardMicBtn'), cMeter: $('scCardMeter'), cMeterFill: $('scCardMeterFill'),
     cFolderState: $('scCardFolderState'), cFolderSub: $('scCardFolderSub'), cFolderBtn: $('scCardFolderBtn'), problem2: $('scProblem2'), help: $('scHelp'), help2: $('scHelp2'),
   };
@@ -161,7 +163,8 @@ function init() {
     ui.camState.className = 'sc-state' + (cam.recording ? ' rec' : on ? ' on' : '');
     if (!on) ui.fps.textContent = '';
     ui.cCamState.textContent = ui.camState.textContent; ui.cCamState.className = ui.camState.className;
-    ui.cCamSub.textContent = on ? 'Connected — live preview in Spotlight' : 'USB · PC Remote · camera on';
+    ui.cCamSub.textContent = on ? 'Connected' : 'USB · PC Remote · camera on';
+    ui.cPreview.hidden = !on;
     ui.cCamBtn.querySelector('span').textContent = on ? 'Disconnect' : ui.connect.textContent;
     ui.cCamBtn.disabled = ui.connect.disabled && !on;
     ui.cCamBtn.parentElement.classList.toggle('ready', on);
@@ -186,7 +189,7 @@ function init() {
   });
   cam.addEventListener('frame', e => {
     const url = URL.createObjectURL(e.detail.blob);
-    ui.img.src = url; if (big) big.img.src = url;
+    ui.img.src = url; ui.cPreview.src = url; if (big) big.img.src = url;
     if (lastUrl) URL.revokeObjectURL(lastUrl);
     lastUrl = url;
   });
@@ -327,7 +330,9 @@ function init() {
     ui.mic.disabled = audio.state === 'recording';
     ui.cMicState.textContent = ui.micState.textContent; ui.cMicState.className = ui.micState.className;
     ui.cMicSub.textContent = on ? audio.deviceLabel : 'Any mic your Mac sees';
-    ui.cMicBtn.hidden = on; ui.cMeter.hidden = !on;
+    ui.cMeter.hidden = !on; ui.micOff.hidden = !on;
+    ui.cMicBtn.querySelector('span').textContent = on ? 'Disable' : 'Enable microphone';
+    ui.cMicBtn.disabled = audio.state === 'recording';
     ui.cMicBtn.parentElement.classList.toggle('ready', on);
   }
   async function openMic(id) {
@@ -336,7 +341,12 @@ function init() {
     renderRec();
   }
   ui.micOn.onclick = () => openMic();
-  ui.cMicBtn.onclick = () => openMic();
+  async function closeMic() {
+    if (take || audio.state === 'recording') return toast('Stop recording first.', 'error');
+    store.set('micAuto', false); await audio.close(); renderMic(); renderRec(); toast('Microphone off.');
+  }
+  ui.cMicBtn.onclick = () => (audio.state !== 'off' ? closeMic() : openMic());
+  ui.micOff.onclick = closeMic;
   ui.mic.onchange = () => openMic(ui.mic.value);
   if (!AudioCore.supported) { ui.micOn.disabled = ui.cMicBtn.disabled = true; ui.micOn.querySelector('span').textContent = ui.cMicBtn.querySelector('span').textContent = 'Audio needs Chrome'; }
   // Re-open the mic automatically if permission was already given in an earlier visit.
@@ -826,6 +836,16 @@ function init() {
   }
   ui.rec.onclick = () => { ui.rec.blur(); toggleTake(); };
   window.addEventListener('beforeunload', e => { if (take) { e.preventDefault(); e.returnValue = ''; } });
+  // Cmd/Ctrl+R: close the camera session cleanly first, then reload, so it reconnects without a replug.
+  // (Cmd+Shift+R is left alone: hard reload still starts disconnected.)
+  window.addEventListener('keydown', async e => {
+    if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'r') return;
+    if (cam.state !== 'connected' || take) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    toast('Reloading…');
+    await cam.release();
+    location.reload();
+  }, true);
   window.addEventListener('pagehide', () => { if (cam.state === 'connected') cam.disconnect(); });
 
   // ------------------------------------------------------------------ keys (prompter keys stay as they are)

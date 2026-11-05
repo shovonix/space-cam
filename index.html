@@ -3293,6 +3293,12 @@ var qrcode = function() {
   }
   function activeScript(){ return findScript(state.activeScriptId); }
   function nextDefaultName(){
+    var shoot = (typeof window.spaceCamShoot === 'function') ? window.spaceCamShoot() : '';
+    if(shoot){
+      var nm = shoot, k = 2;
+      while(state.scripts.some(function(s){ return s.name === nm; })){ nm = shoot + ' ' + k; k++; }
+      return nm;
+    }
     var n = state.scripts.length + 1;
     var name = 'Script ' + n;
     while(state.scripts.some(function(s){ return s.name === name; })){ n++; name = 'Script ' + n; }
@@ -3728,6 +3734,8 @@ var qrcode = function() {
     }
     s.text = v;
     s.updatedAt = Date.now();
+    // Space Cam: a script still called "Script N" takes the shoot name once one is set.
+    if(/^Script \d+$/.test(s.name) && typeof window.spaceCamShoot === 'function' && window.spaceCamShoot()) s.name = nextDefaultName();
     save();
     renderScriptTabs();
   }

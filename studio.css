@@ -158,3 +158,30 @@ body.sc-big{margin:0;height:100vh;display:flex;flex-direction:column;background:
 .sc-card .tbtn{margin:4px 0 0}
 .sc-card-meter{margin:10px 0 6px}
 #scProblem2{margin-top:10px}
+
+/* first page: shoot name; no device/pedal row (Bluetooth comes back later somewhere else) */
+#setup .setup-device{display:none!important}
+.sc-shoot-wrap{margin:0 0 22px}
+.sc-shoot-input{width:100%;background:var(--raised);border:1px solid var(--hair);border-radius:12px;padding:14px 16px;color:var(--fg);font:700 20px 'Archivo',system-ui,sans-serif;outline:none}
+.sc-shoot-input:focus{border-color:rgba(255,255,255,.45)}
+.sc-shoot-input::placeholder{color:#55555c;font-weight:600}
+.sc-shoot-hint{font-size:12px;color:var(--fg-dim);margin-top:8px}
+/* left rail: current shoot */
+.sc-shoot-rail{display:grid;grid-template-columns:1fr auto;align-items:center;gap:4px 8px;margin-top:22px;padding:11px 12px 11px 13px;border:1px solid var(--hair);border-radius:10px;background:var(--surface);cursor:pointer}
+.sc-shoot-rail:hover{border-color:#44444a}
+.sc-shoot-rail .sec-title{grid-column:1/-1;margin:0;font-size:10px}
+.sc-shoot-rail-name{font-family:'Archivo',system-ui,sans-serif;font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-shoot-rail.empty .sc-shoot-rail-name{color:var(--fg-dim);font-weight:600}
+.sc-shoot-rail-edit svg{width:15px;height:15px;fill:var(--fg-dim)}
+.sc-head-btns{display:flex;gap:6px}
+/* import clips popup */
+.sc-modal-card.sc-imp{width:min(560px,100%)}
+.sc-imp-list{display:flex;flex-direction:column;gap:6px;max-height:46vh;overflow:auto}
+.sc-imp-row{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--hair);border-radius:10px;padding:9px 11px;cursor:pointer;background:var(--raised)}
+.sc-imp-row input{margin-top:3px;accent-color:#F0F0EE}
+.sc-imp-row span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.sc-imp-row b{font-size:13px}
+.sc-imp-row small{font:11px var(--mono);color:var(--fg-dim)}
+.sc-imp-progress{display:flex;flex-direction:column;gap:6px;font:11.5px var(--mono);color:var(--fg-dim)}
+.sc-imp-bar{height:6px;border-radius:3px;background:#1c1c1e;overflow:hidden}
+.sc-imp-bar i{display:block;height:100%;width:0;background:#F0F0EE}

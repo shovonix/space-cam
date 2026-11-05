@@ -80,8 +80,8 @@ function init() {
   </div>`);
   const strip = h(`
   <div class="sc-strip-wrap">
-    <div class="sec-title"><span>Connect Devices</span><button type="button" class="sc-mini-btn" id="scSample">Load sample data</button></div>
-    <div class="sc-strip sc-strip-2">
+    <div class="sec-title"><span>Get ready</span><button type="button" class="sc-mini-btn" id="scSample">Load sample data</button></div>
+    <div class="sc-strip sc-strip-3">
       <div class="sc-card sc-card-big" id="scCardCam">
         <div class="sc-card-top"><span class="sc-card-title">Camera</span><span class="sc-status" id="scCardCamState">Off</span></div>
         <div class="sc-card-sub" id="scCardCamSub">USB · PC Remote · camera on</div>
@@ -94,21 +94,37 @@ function init() {
         <div class="sc-media sc-media-meter" id="scCardWaveBox"><div class="sc-bigmeter"><div class="sc-bigmeter-bar"><i id="scCardFill"></i><b id="scCardPeak"></b></div><div class="sc-bigmeter-scale"><span>−50</span><span>−24</span><span>−12</span><span>−6</span><span>0</span></div><div class="sc-bigmeter-read" id="scCardDb">Mic off</div></div><span id="scCardWaveMsg" hidden></span></div>
         <button type="button" class="sc-cbtn primary" id="scCardMicBtn"><span>Connect mic</span></button>
       </div>
+      <div class="sc-card sc-card-big sc-card-script" id="scCardScript">
+        <div class="sc-card-top"><span class="sc-card-title">Script</span><span class="sc-card-tools" id="scScriptTools"></span></div>
+        <div class="sc-card-sub">Paste a script, then save it to the left</div>
+        <div class="sc-script-slot" id="scScriptSlot"></div>
+        <button type="button" class="sc-cbtn primary" id="scScriptSave"><span>Save script</span></button>
+      </div>
+      <div class="sc-note"><div class="sc-problem" id="scProblem2" hidden></div><details class="sc-help" id="scHelp2"></details></div>
+      <div class="sc-note"><p>WAV 24-bit at the mic's rate (usually 48 kHz), no browser processing. Set the level on your interface; aim for peaks around −12 dB.</p></div>
+      <div class="sc-note" id="scScriptNote"><p>Saved scripts appear on the left. Click one to use it; ✎ edits it. <kbd>⌘S</kbd> saves.</p></div>
     </div>
-    <div class="sc-problem" id="scProblem2" hidden></div>
-    <details class="sc-help" id="scHelp2"></details>
   </div>`);
-  const pedalCard = h(`
-      <div class="sc-card sc-card-pedal" id="scCardPedal">
-        <div class="sc-card-top"><span class="sc-card-title">Pedal</span><span class="sc-status" id="scCardPedalState">Off</span></div>
-        <div class="sc-card-sub sc-wrap" id="scCardPedalSub">Bluetooth pedal for the prompter</div>
-        <button type="button" class="sc-cbtn primary pedal-trigger" id="scCardPedalBtn"><span>Set up pedal</span></button>
-      </div>`);
+  const setupRail = h(`
+  <aside class="rail sc-setup-rail" id="scSetupRail" aria-label="Setup options">
+    <div class="sec sc-sec">
+      <div class="sec-title"><span>Save folder</span></div>
+      <div class="sc-rail-row"><span class="sc-rail-ico">${'<svg viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>'}</span><b id="scFolderName">Downloads</b></div>
+      <button type="button" class="tbtn sc-wide" id="scFolderBtn"><span>Choose folder</span></button>
+      <button type="button" class="sc-link" id="scFolderReset" hidden>Save to Downloads instead</button>
+      <div class="caption">Takes download to Downloads when you stop. Pick a folder to save there instead (and rename files from the app).</div>
+    </div>
+    <div class="sec sc-sec">
+      <div class="sec-title"><span>Bluetooth device</span><span class="sc-status" id="scCardPedalState">Off</span></div>
+      <div class="sc-rail-row"><span class="sc-rail-ico">${'<svg viewBox="0 0 24 24"><path d="M17.71 7.71L12 2h-1v7.59L6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 11 14.41V22h1l5.71-5.71-4.3-4.29 4.3-4.29zM13 5.83l1.88 1.88L13 9.59V5.83zm1.88 10.46L13 18.17v-3.76l1.88 1.88z"/></svg>'}</span><span id="scCardPedalSub">Pedal or clicker for the prompter</span></div>
+      <button type="button" class="tbtn sc-wide pedal-trigger" id="scCardPedalBtn"><span>Set up</span></button>
+      <div class="caption">Pair it in macOS Bluetooth settings first, then press Set up and tap the pedal.</div>
+    </div>
+  </aside>`);
   const goSec = h(`
   <div class="sc-go">
     <div class="sc-go-text"><b>Ready to shoot?</b><span>Spotlight shows the prompter, the camera and Record. The selected script is used; no script is fine too.</span></div>
   </div>`);
-  const saveIn = h(`<div class="sc-savein"><span>Saving to</span><b id="scFolderName">Downloads</b><button type="button" id="scFolderBtn">Change</button><button type="button" id="scFolderReset" title="Save to Downloads again" aria-label="Save to Downloads again" hidden>×</button></div>`);
   const toastEl = h(`<div class="sc-toast" id="scToast" hidden></div>`);
 
   const rightRail = $('right-rail'), utility = $('utility');
@@ -119,16 +135,23 @@ function init() {
   scriptsHead.before(takesSec);
   document.body.append(toastEl);
   document.querySelector('#setup .brand')?.before(strip);
-  // paste box + pedal side by side; Go to Spotlight gets its own section
+  // Script card sits next to Camera and Mic; Go to Spotlight gets its own section; setup options go in a right sidebar
   {
-    const ta = $('script-input'), row = document.querySelector('#setup .setup-row');
-    const compose = h(`<div class="sc-compose"><div class="sc-compose-main"></div></div>`);
-    ta.before(compose); compose.firstElementChild.append(ta, row); compose.append(pedalCard);
-    compose.after(goSec);
+    $('scScriptSlot').append($('script-input'));
+    $('scScriptTools').append($('demo-btn'));
+    $('scScriptNote').append($('screen-note'));
+    $('scScriptSave').onclick = () => {
+      const ta = $('script-input');
+      if (!ta.value.trim()) { ta.focus(); return toast('Paste a script first.'); }
+      $('save-script-btn').click(); toast('Script saved — it’s on the left.', 'ok');
+    };
+    document.querySelector('#setup .brand')?.classList.add('sc-gone');
+    document.querySelector('#setup .sub')?.classList.add('sc-gone');
+    document.querySelector('#setup .setup-row')?.classList.add('sc-gone');
+    strip.after(goSec);
     goSec.append($('start-btn'), $('cancel-edit'));
-    $('save-script-btn').textContent = 'Save script';
+    document.body.append(setupRail);
   }
-  document.querySelector('#left-rail .copyright')?.before(saveIn);
   const hint = $('shortcuts-hint');
   if (hint) [['R', 'record camera + audio'], ['A', 'hold to autofocus'], ['← →', 'focus near / far (MF)'], ['G', 'grid']]
     .forEach(([k, t]) => hint.append(h(`<span>${k.split(' ').map(x => `<kbd>${x}</kbd>`).join('')} ${t}</span>`)));
@@ -256,9 +279,8 @@ function init() {
   function renderPedal() {
     const n = window.spaceCamPedal?.count() || 0;
     badge(ui.cPedalState, n ? 'on' : 'off', n ? 'Ready' : 'Off');
-    ui.cPedalSub.textContent = n ? `${n} pedal button${n > 1 ? 's' : ''} set` : 'Bluetooth pedal for the prompter';
-    ui.cPedalBtn.querySelector('span').textContent = n ? 'Edit pedal' : 'Set up pedal';
-    ui.cPedalBtn.classList.toggle('primary', !n);
+    ui.cPedalSub.textContent = n ? `${n} button${n > 1 ? 's' : ''} set` : 'Pedal or clicker for the prompter';
+    ui.cPedalBtn.querySelector('span').textContent = n ? 'Edit buttons' : 'Set up';
   }
   ui.cPedalBtn.onclick = e => window.spaceCamPedal?.open(e.currentTarget);
   window.addEventListener('spacecam-pedal', renderPedal);
@@ -406,7 +428,7 @@ function init() {
     const ok = await folderOk(false);
     ui.folderName.textContent = folder ? folder.name : 'Downloads';
     ui.folderName.title = folder ? 'Takes are saved into this folder' : 'Takes download to your Downloads folder when you stop';
-    ui.folderBtn.textContent = folder && !ok ? 'Allow' : 'Change';
+    ui.folderBtn.querySelector('span').textContent = folder ? (ok ? 'Change folder' : 'Allow access') : 'Choose folder';
     ui.folderReset.hidden = !folder;
   }
   ui.folderBtn.onclick = async () => {

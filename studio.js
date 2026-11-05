@@ -307,19 +307,23 @@ function init() {
   audio.addEventListener('state', e => renderMic());
   audio.addEventListener('error', e => toast(e.detail.message, 'error'));
   let peakHold = -120, peakHoldT = 0, shown = -120, shownT = performance.now();
+  const FLOOR = -50; // dB at the left edge; quiet room noise sits near the start instead of filling a third of the bar
+  const toPct = db => Math.max(0, Math.min(100, (db - FLOOR) / -FLOOR * 100));
   audio.addEventListener('level', e => {
     const { clip } = e.detail;
-    const now0 = performance.now();
-    // meter ballistics: instant attack, ~24 dB/s release, so short peaks stay readable
-    const fall = shown - 24 * (now0 - shownT) / 1000;
-    shown = Math.max(e.detail.peakDb, fall, -120); shownT = now0;
+    const now0 = performance.now(), dt = Math.min(0.1, (now0 - shownT) / 1000);
+    // Calm meter: the bar follows loudness (RMS), rises quickly and falls slowly (~12 dB/s).
+    const target = Math.max(e.detail.rmsDb, -120);
+    shown = target > shown ? shown + (target - shown) * Math.min(1, dt * 18) : Math.max(target, shown - 12 * dt);
+    shownT = now0;
     const peakDb = shown;
-    const pct = Math.max(0, Math.min(100, (peakDb + 60) / 60 * 100));
+    const pct = toPct(peakDb);
     ui.meterFill.style.width = pct + '%'; ui.cMeterFill.style.width = pct + '%';
-    const now = performance.now();
-    if (peakDb > peakHold || now - peakHoldT > 1500) { peakHold = peakDb; peakHoldT = now; }
-    ui.meterPeak.style.left = Math.max(0, Math.min(100, (peakHold + 60) / 60 * 100)) + '%';
-    ui.db.textContent = peakDb <= -119 ? '−∞ dB' : `${peakDb.toFixed(0)} dB`;
+    // The thin marker shows real peaks (held 1.5 s), so you still see how close you get to clipping.
+    const now = performance.now(), p = e.detail.peakDb;
+    if (p > peakHold || now - peakHoldT > 1500) { peakHold = p; peakHoldT = now; }
+    ui.meterPeak.style.left = toPct(peakHold) + '%';
+    ui.db.textContent = peakHold <= -119 ? "−∞ dB" : `peak ${peakHold.toFixed(0)} dB`;
     ui.clip.classList.toggle('on', clip);
   });
   function renderMic() {

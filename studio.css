@@ -166,11 +166,13 @@ body.sc-big{margin:0;height:100vh;display:flex;flex-direction:column;background:
 .sc-shoot-input:focus{border-color:rgba(255,255,255,.45)}
 .sc-shoot-input::placeholder{color:#55555c;font-weight:600}
 .sc-shoot-hint{font-size:12px;color:var(--fg-dim);margin-top:8px}
-/* left rail: current shoot */
-.sc-shoot-rail{display:grid;grid-template-columns:1fr auto;align-items:center;gap:4px 8px;margin-top:22px;padding:11px 12px 11px 13px;border:1px solid var(--hair);border-radius:10px;background:var(--surface);cursor:pointer}
-.sc-shoot-rail:hover{border-color:#44444a}
-.sc-shoot-rail .sec-title{grid-column:1/-1;margin:0;font-size:10px}
-.sc-shoot-rail-name{font-family:'Archivo',system-ui,sans-serif;font-weight:700;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sc-shoot-rail.empty .sc-shoot-rail-name{color:var(--fg-dim);font-weight:600}
-.sc-shoot-rail-edit svg{width:15px;height:15px;fill:var(--fg-dim)}
+/* Takes header carries the current take name */
+.sc-takes-title{display:flex;align-items:center;justify-content:flex-start;gap:6px;min-width:0;flex:1}
+.sc-cur{display:inline-flex;align-items:center;gap:6px;min-width:0;cursor:pointer;color:var(--fg);letter-spacing:.02em;text-transform:none;font-weight:700;font-size:12.5px}
+.sc-cur i{font-style:normal;color:var(--fg-dim)}
+.sc-cur span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px}
+.sc-cur svg{width:13px;height:13px;fill:var(--fg-dim);flex:none}
+.sc-cur:hover svg{fill:var(--fg)}
+.sc-shoot-rail.empty,.sc-cur.empty span{color:var(--fg-dim);font-weight:600}
+.sc-takes .scripts-head{gap:8px}
 .sc-head-btns{display:flex;gap:6px}

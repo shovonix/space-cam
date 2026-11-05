@@ -76,7 +76,7 @@ function init() {
   const recBtn = h(`<button type="button" class="cap-side sc-rec" id="scRec" aria-label="Record camera and audio — key R"><i></i><span id="scRecLabel">Record</span></button>`);
   const takesSec = h(`
   <div class="sec sc-sec sc-takes" id="scTakesSec">
-    <div class="scripts-head"><div class="sec-title">Takes</div><button type="button" class="sc-mini-btn" id="scSaveAll" hidden>Save all</button></div>
+    <div class="scripts-head"><div class="sec-title sc-takes-title">Takes<span class="sc-cur" id="scShootRail" role="button" tabindex="0" title="Change the take name"><i>·</i><span id="scShootRailName">Not named</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75z"/></svg></span></div><button type="button" class="sc-mini-btn" id="scSaveAll" hidden>Save all</button></div>
     <div id="scTakeList"><div class="sc-none">No takes yet. Press <kbd>R</kbd> to record.</div></div>
   </div>`);
   const shootSec = h(`
@@ -84,12 +84,6 @@ function init() {
     <div class="sec-title">Take name</div>
     <input class="sc-shoot-input" id="scShootInput" maxlength="60" spellcheck="false" placeholder="e.g. Studio Tour" aria-label="Take name">
     <div class="sc-shoot-hint">Used for the script, every take and the audio file names (e.g. “Studio Tour - Take 01.wav”).</div>
-  </div>`);
-  const shootRail = h(`
-  <div class="sc-shoot-rail" id="scShootRail" role="button" tabindex="0" title="Change the take name">
-    <span class="sec-title">Take name</span>
-    <span class="sc-shoot-rail-name" id="scShootRailName">Not named</span>
-    <span class="sc-shoot-rail-edit" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75z"/></svg></span>
   </div>`);
   const strip = h(`
   <div class="sc-strip-wrap">
@@ -122,7 +116,7 @@ function init() {
   play.after(recBtn); play.after(h(`<span class="cap-div"></span>`));
   const scriptsHead = document.querySelector('#left-rail .scripts-head');
   scriptsHead.before(takesSec);
-  takesSec.before(shootRail);
+  const shootRail = $('scShootRail');
   document.body.append(toastEl);
   document.querySelector('#setup .brand')?.before(strip);
   strip.before(shootSec);

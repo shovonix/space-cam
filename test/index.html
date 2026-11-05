@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Space Cam · test</title>
+<!-- Turns on cross-origin isolation (needed by the gphoto2 engine) on a plain static host. Reloads the page once on first visit. -->
+<script src="../coi-serviceworker.js"></script>
+<style>
+  :root { --bg:#0A0A0B; --fg:#f2f2f2; --dim:#8a8a8f; --line:#232326; --rec:#ff3b30; --ok:#30d158; --warn:#ffd60a; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.45 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display:flex; align-items:center; gap:12px; padding:14px 20px; border-bottom:1px solid var(--line); }
+  header h1 { font-size:16px; margin:0; letter-spacing:.02em; }
+  header .tag { font:11px ui-monospace, "JetBrains Mono", monospace; color:var(--dim); border:1px solid var(--line); padding:2px 6px; border-radius:4px; }
+  #status { margin-left:auto; font:12px ui-monospace, monospace; color:var(--dim); }
+  #status.ok { color:var(--ok); } #status.err { color:var(--rec); }
+  main { display:grid; grid-template-columns: minmax(0,1fr) 360px; gap:0; height:calc(100vh - 53px); }
+  .stage { position:relative; background:#000; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+  .stage img { max-width:100%; max-height:100%; display:block; }
+  .stage .empty { color:var(--dim); }
+  .hud { position:absolute; top:12px; left:12px; display:flex; gap:8px; font:12px ui-monospace, monospace; }
+  .hud span { background:rgba(0,0,0,.6); padding:3px 8px; border-radius:4px; }
+  #recBadge { display:none; background:var(--rec) !important; color:#fff; font-weight:700; }
+  #recBadge.on { display:inline; }
+  aside { border-left:1px solid var(--line); overflow:auto; padding:16px; display:flex; flex-direction:column; gap:18px; }
+  h2 { font-size:11px; text-transform:uppercase; letter-spacing:.12em; color:var(--dim); margin:0 0 8px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; }
+  button { background:#18181b; color:var(--fg); border:1px solid #2e2e33; border-radius:8px; padding:9px 14px; font:inherit; cursor:pointer; }
+  button:hover:not(:disabled) { border-color:#55555c; }
+  button:disabled { opacity:.35; cursor:not-allowed; }
+  button.primary { background:var(--fg); color:var(--bg); border-color:var(--fg); font-weight:600; }
+  button.rec { border-color:var(--rec); color:var(--rec); }
+  button.rec.on { background:var(--rec); color:#fff; }
+  .note { color:var(--dim); font-size:12px; margin:6px 0 0; }
+  .found { font:12px ui-monospace, monospace; display:grid; grid-template-columns:auto 1fr; gap:2px 10px; }
+  .found .y { color:var(--ok); } .found .n { color:var(--rec); }
+  #log { font:11px/1.5 ui-monospace, monospace; background:#050506; border:1px solid var(--line); border-radius:8px; padding:8px; height:220px; overflow:auto; white-space:pre-wrap; }
+  #log .e { color:var(--rec); } #log .w { color:var(--warn); } #log .s { color:var(--ok); }
+  details summary { cursor:pointer; color:var(--dim); font-size:12px; }
+  #tree { font:11px/1.5 ui-monospace, monospace; white-space:pre; overflow:auto; max-height:300px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Space Cam</h1><span class="tag">feasibility test</span>
+  <span id="status">not connected</span>
+</header>
+<main>
+  <div class="stage" id="stage">
+    <div class="empty" id="empty">Connect the camera to start the preview</div>
+    <img id="preview" alt="" hidden>
+    <div class="hud"><span id="fps">— fps</span><span id="frameMs">— ms/frame</span><span id="recBadge">● REC</span></div>
+  </div>
+  <aside>
+    <section>
+      <h2>1 · Connect</h2>
+      <div class="row">
+        <button class="primary" id="btnConnect">Connect camera</button>
+        <button id="btnPreview" disabled>Pause preview</button>
+      </div>
+      <p class="note">Chrome on Mac. Camera: USB Connection → PC Remote, mode dial on Movie. Keep the ptpcamerad loop running in Terminal.</p>
+    </section>
+
+    <section>
+      <h2>2 · What the camera exposes</h2>
+      <div class="found" id="found"><span class="n">—</span><span>connect first</span></div>
+    </section>
+
+    <section>
+      <h2>3 · Record</h2>
+      <div class="row">
+        <button class="rec" id="btnRec" disabled>● Start recording</button>
+      </div>
+      <p class="note">Watch the camera's own screen for the red REC, and check the card for a clip after stopping.</p>
+    </section>
+
+    <section>
+      <h2>4 · Focus</h2>
+      <div class="row">
+        <button id="btnAF" disabled>Hold for AF</button>
+        <button id="btnNear" disabled>◀ Near</button>
+        <button id="btnFar" disabled>Far ▶</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <label class="note" for="mfStep">Manual focus step</label>
+        <select id="mfStep" disabled></select>
+      </div>
+      <p class="note">AF needs the lens on AF. Near/Far needs the camera's focus mode on MF (DMF may also work).</p>
+    </section>
+
+    <section>
+      <h2>Log</h2>
+      <div id="log"></div>
+      <div class="row" style="margin-top:8px">
+        <button id="btnCopyLog">Copy log</button>
+        <button id="btnCopyTree" disabled>Copy full settings list</button>
+      </div>
+    </section>
+
+    <details>
+      <summary>Full settings tree</summary>
+      <div id="tree"></div>
+    </details>
+  </aside>
+</main>
+
+<script type="module">
+import { Camera } from '../lib/camera.js';
+
+const $ = id => document.getElementById(id);
+const logEl = $('log');
+function log(msg, cls = '') {
+  const t = new Date().toLocaleTimeString([], { hour12:false });
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = `${t}  ${msg}`;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function status(text, cls = '') { const s = $('status'); s.textContent = text; s.className = cls; }
+
+if (!('usb' in navigator)) { status('WebUSB not available — use Chrome or Edge', 'err'); log('navigator.usb missing: this browser has no WebUSB', 'e'); }
+if (!window.crossOriginIsolated) log('Page is not cross-origin isolated yet (the helper reloads once on first visit)', 'w');
+
+let camera = null;
+let leaves = [];       // flat list of { path, name, label, type, value, readonly, choices, min, max, step }
+let treeText = '';
+let previewOn = false;
+let recording = false;
+
+// ---- settings tree helpers ----
+function walk(node, path = '') {
+  const here = path ? `${path}/${node.name}` : node.name;
+  if (node.type === 'window' || node.type === 'section') {
+    for (const child of Object.values(node.children || {})) walk(child, here);
+  } else {
+    leaves.push({ path: here, ...node });
+  }
+}
+function describe(l) {
+  let v = '';
+  if ('value' in l) v = ` = ${JSON.stringify(l.value)}`;
+  if (l.type === 'range') v += `  [${l.min}..${l.max} step ${l.step}]`;
+  if (l.choices) v += `  {${l.choices.slice(0, 12).join(' | ')}${l.choices.length > 12 ? ' …' : ''}}`;
+  return `${l.path}  (${l.type}${l.readonly ? ', readonly' : ''})${v}  "${l.label}"`;
+}
+function find(names, labelRe) {
+  for (const n of names) { const hit = leaves.find(l => l.name === n); if (hit) return hit; }
+  return labelRe ? leaves.find(l => labelRe.test(l.label)) : null;
+}
+
+let W = {}; // the widgets we care about
+async function readConfig() {
+  const cfg = await camera.getConfig();
+  leaves = [];
+  walk(cfg);
+  treeText = leaves.map(describe).join('\n');
+  $('tree').textContent = treeText;
+  $('btnCopyTree').disabled = false;
+
+  W.movie  = find(['movie', 'moviecapture'], /movie\s*(capture|rec)/i);
+  W.af     = find(['autofocus', 'autofocusdrive'], /^auto-?focus$/i);
+  W.mf     = find(['manualfocus', 'manualfocusdrive'], /manual focus drive|^manual focus$/i);
+  W.fmode  = find(['focusmode'], /^focus mode$/i);
+
+  const ops = await camera.getSupportedOps();
+  const rows = [
+    ['Live preview', ops.capturePreview, ops.capturePreview ? 'supported' : 'not reported'],
+    ['Record (movie)', !!W.movie, W.movie ? `${W.movie.path} (${W.movie.type})` : 'not found'],
+    ['AF trigger', !!W.af, W.af ? `${W.af.path} (${W.af.type})` : 'not found'],
+    ['Manual focus drive', !!W.mf, W.mf ? `${W.mf.path} (${W.mf.type})` : 'not found'],
+    ['Focus mode', !!W.fmode, W.fmode ? `${W.fmode.value}${W.fmode.readonly ? ' (readonly)' : ''}` : 'not found'],
+  ];
+  $('found').innerHTML = rows.map(([k, ok, v]) => `<span class="${ok ? 'y' : 'n'}">${ok ? '✓' : '✗'} ${k}</span><span>${v}</span>`).join('');
+  rows.forEach(([k, ok, v]) => log(`${ok ? 'FOUND' : 'MISSING'}  ${k}: ${v}`, ok ? 's' : 'e'));
+  log(`supportedOps: ${JSON.stringify(ops)}`);
+  log(`${leaves.length} settings in total (open "Full settings tree" or copy it)`);
+
+  // wire controls to what exists
+  $('btnRec').disabled = !W.movie;
+  $('btnAF').disabled = !W.af;
+  const mfOk = !!W.mf;
+  $('btnNear').disabled = $('btnFar').disabled = $('mfStep').disabled = !mfOk;
+  const sel = $('mfStep'); sel.innerHTML = '';
+  if (W.mf && W.mf.type === 'range') {
+    const max = Math.max(Math.abs(W.mf.min), Math.abs(W.mf.max)) || 1;
+    for (let i = 1; i <= Math.min(max, 7); i++) sel.add(new Option(String(i), String(i)));
+  } else if (W.mf && W.mf.choices) {
+    W.mf.choices.forEach(c => sel.add(new Option(c, c)));
+  }
+}
+
+async function set(widget, value, label) {
+  const t0 = performance.now();
+  try {
+    await camera.setConfigValue(widget.name, value);
+    log(`${label}: set ${widget.name} = ${JSON.stringify(value)} OK (${Math.round(performance.now() - t0)} ms)`, 's');
+    return true;
+  } catch (e) {
+    log(`${label}: set ${widget.name} = ${JSON.stringify(value)} FAILED — ${e?.message || e}`, 'e');
+    return false;
+  }
+}
+
+// ---- connect ----
+$('btnConnect').onclick = async () => {
+  try {
+    status('choose the camera…');
+    await Camera.showPicker();
+    camera = new Camera();
+    status('connecting…');
+    await camera.connect();
+    status('connected', 'ok');
+    log('Connected', 's');
+    $('btnConnect').disabled = true;
+    $('btnPreview').disabled = false;
+    await readConfig();
+    startPreview();
+  } catch (e) {
+    status('connect failed', 'err');
+    log(`Connect failed — ${e?.message || e}`, 'e');
+    if (/claim|busy|access/i.test(String(e?.message))) log('macOS may still be holding the camera: check the ptpcamerad loop, then unplug/replug', 'w');
+    camera = null;
+  }
+};
+
+// ---- preview loop ----
+let frames = 0, lastFpsT = performance.now(), lastUrl = null, frameMsAvg = 0;
+async function previewLoop() {
+  while (previewOn && camera) {
+    const t0 = performance.now();
+    try {
+      const blob = await camera.capturePreviewAsBlob();
+      const url = URL.createObjectURL(blob);
+      const img = $('preview');
+      img.src = url; img.hidden = false; $('empty').hidden = true;
+      if (lastUrl) URL.revokeObjectURL(lastUrl);
+      lastUrl = url;
+      if (!img.dataset.sized) { img.onload = () => { log(`Preview frame size: ${img.naturalWidth}×${img.naturalHeight}`); img.onload = null; }; img.dataset.sized = 1; }
+      frames++;
+      const dt = performance.now() - t0;
+      frameMsAvg = frameMsAvg ? frameMsAvg * 0.9 + dt * 0.1 : dt;
+    } catch (e) {
+      log(`Preview frame failed — ${e?.message || e}`, 'e');
+      await new Promise(r => setTimeout(r, 500));
+    }
+    const now = performance.now();
+    if (now - lastFpsT > 1000) {
+      $('fps').textContent = `${(frames * 1000 / (now - lastFpsT)).toFixed(1)} fps`;
+      $('frameMs').textContent = `${Math.round(frameMsAvg)} ms/frame`;
+      frames = 0; lastFpsT = now;
+    }
+  }
+}
+function startPreview() { if (previewOn) return; previewOn = true; $('btnPreview').textContent = 'Pause preview'; previewLoop(); }
+function stopPreview() { previewOn = false; $('btnPreview').textContent = 'Resume preview'; }
+$('btnPreview').onclick = () => previewOn ? stopPreview() : startPreview();
+
+// ---- record ----
+$('btnRec').onclick = async () => {
+  const want = !recording;
+  $('btnRec').disabled = true;
+  const ok = await set(W.movie, want, want ? 'Record start' : 'Record stop');
+  if (ok) {
+    recording = want;
+    $('btnRec').classList.toggle('on', recording);
+    $('btnRec').textContent = recording ? '■ Stop recording' : '● Start recording';
+    $('recBadge').classList.toggle('on', recording);
+    if (recording) log('Is the preview still moving while recording? That is test 5.', 'w');
+  }
+  $('btnRec').disabled = false;
+};
+
+// ---- focus ----
+const afBtn = $('btnAF');
+async function afDown() { if (afBtn.disabled) return; afBtn.textContent = 'Focusing…'; await set(W.af, W.af.type === 'toggle' ? true : 1, 'AF press'); }
+async function afUp()   { if (afBtn.disabled) return; afBtn.textContent = 'Hold for AF'; await set(W.af, W.af.type === 'toggle' ? false : 0, 'AF release'); }
+afBtn.addEventListener('pointerdown', afDown);
+afBtn.addEventListener('pointerup', afUp);
+afBtn.addEventListener('pointerleave', e => { if (e.buttons) afUp(); });
+
+async function mf(dir) {
+  const w = W.mf;
+  if (w.type === 'range') {
+    const step = Number($('mfStep').value || 1) * dir;
+    const v = Math.max(w.min, Math.min(w.max, step));
+    await set(w, v, dir < 0 ? 'Focus near' : 'Focus far');
+  } else {
+    await set(w, $('mfStep').value, 'Focus drive');
+  }
+}
+$('btnNear').onclick = () => mf(-1);
+$('btnFar').onclick  = () => mf(1);
+
+// ---- copy helpers ----
+async function copy(text, what) {
+  try { await navigator.clipboard.writeText(text); log(`${what} copied — paste it to Claude`, 's'); }
+  catch { log(`Could not copy ${what}; select it manually`, 'e'); }
+}
+$('btnCopyLog').onclick = () => copy([...logEl.children].map(d => d.textContent).join('\n'), 'Log');
+$('btnCopyTree').onclick = () => copy(treeText, 'Settings list');
+
+window.addEventListener('beforeunload', () => { if (camera) camera.disconnect(); });
+</script>
+</body>
+</html>

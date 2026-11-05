@@ -68,29 +68,20 @@ function init() {
       <div class="sc-meter-label"><span id="scDb">−∞ dB</span><span class="sc-clip" id="scClip">CLIP</span></div>
     </div>
     <button type="button" class="sc-link" id="scMicOff" hidden>Disconnect mic</button>
-    <div class="sc-folder">
-      <div class="sc-folder-row"><span>Save to</span><b id="scFolderName">Not chosen</b></div>
-      <button type="button" class="tbtn sc-wide" id="scFolderBtn"><span>Choose folder</span></button>
-    </div>
-    <div class="caption">WAV, 24-bit at the mic's rate (usually 48 kHz). Kept safe in the browser while recording, then moved to your folder.</div>
+    <div class="caption">WAV, 24-bit at the mic's rate (usually 48 kHz). Kept safe in the browser while recording, then saved to Downloads (or your folder, bottom left) when you stop.</div>
   </div>`);
 
   const recBtn = h(`<button type="button" class="cap-side sc-rec" id="scRec" aria-label="Record camera and audio — key R"><i></i><span id="scRecLabel">Record</span></button>`);
   const takesSec = h(`
   <div class="sec sc-sec sc-takes" id="scTakesSec">
-    <div class="scripts-head"><div class="sec-title sc-takes-title">Takes<span class="sc-cur" id="scShootRail" role="button" tabindex="0" title="Change the take name"><i>·</i><span id="scShootRailName">Not named</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75z"/></svg></span></div><button type="button" class="sc-mini-btn" id="scSaveAll" hidden>Save all</button></div>
+    <div class="scripts-head"><div class="sec-title sc-takes-title">Takes</div><button type="button" class="sc-mini-btn" id="scSaveAll" hidden>Save all</button></div>
+    <div class="sc-takes-hint" id="scTakesHint" hidden>Click a take to play it</div>
     <div id="scTakeList"><div class="sc-none">No takes yet. Press <kbd>R</kbd> to record.</div></div>
-  </div>`);
-  const shootSec = h(`
-  <div class="sc-shoot-wrap">
-    <div class="sec-title">Take name</div>
-    <input class="sc-shoot-input" id="scShootInput" maxlength="60" spellcheck="false" placeholder="e.g. Studio Tour" aria-label="Take name">
-    <div class="sc-shoot-hint">Used for the script, every take and the audio file names (e.g. “Studio Tour - Take 01.wav”).</div>
   </div>`);
   const strip = h(`
   <div class="sc-strip-wrap">
     <div class="sec-title"><span>Connect Devices</span><button type="button" class="sc-mini-btn" id="scSample">Load sample data</button></div>
-    <div class="sc-strip">
+    <div class="sc-strip sc-strip-2">
       <div class="sc-card sc-card-big" id="scCardCam">
         <div class="sc-card-top"><span class="sc-card-title">Camera</span><span class="sc-status" id="scCardCamState">Off</span></div>
         <div class="sc-card-sub" id="scCardCamSub">USB · PC Remote · camera on</div>
@@ -103,22 +94,21 @@ function init() {
         <div class="sc-media sc-media-meter" id="scCardWaveBox"><div class="sc-bigmeter"><div class="sc-bigmeter-bar"><i id="scCardFill"></i><b id="scCardPeak"></b></div><div class="sc-bigmeter-scale"><span>−50</span><span>−24</span><span>−12</span><span>−6</span><span>0</span></div><div class="sc-bigmeter-read" id="scCardDb">Mic off</div></div><span id="scCardWaveMsg" hidden></span></div>
         <button type="button" class="sc-cbtn primary" id="scCardMicBtn"><span>Connect mic</span></button>
       </div>
-      <div class="sc-stack">
-        <div class="sc-card" id="scCardFolder">
-          <div class="sc-card-top"><span class="sc-card-title">Save folder</span><span class="sc-status" id="scCardFolderState">Not set</span></div>
-          <div class="sc-card-sub" id="scCardFolderSub">Where audio takes go</div>
-          <button type="button" class="sc-cbtn primary" id="scCardFolderBtn"><span>Choose folder</span></button>
-        </div>
-        <div class="sc-card" id="scCardPedal">
-          <div class="sc-card-top"><span class="sc-card-title">Pedal</span><span class="sc-status" id="scCardPedalState">Off</span></div>
-          <div class="sc-card-sub" id="scCardPedalSub">Bluetooth pedal for the prompter</div>
-          <button type="button" class="sc-cbtn primary pedal-trigger" id="scCardPedalBtn"><span>Set up pedal</span></button>
-        </div>
-      </div>
     </div>
     <div class="sc-problem" id="scProblem2" hidden></div>
     <details class="sc-help" id="scHelp2"></details>
   </div>`);
+  const pedalCard = h(`
+      <div class="sc-card sc-card-pedal" id="scCardPedal">
+        <div class="sc-card-top"><span class="sc-card-title">Pedal</span><span class="sc-status" id="scCardPedalState">Off</span></div>
+        <div class="sc-card-sub sc-wrap" id="scCardPedalSub">Bluetooth pedal for the prompter</div>
+        <button type="button" class="sc-cbtn primary pedal-trigger" id="scCardPedalBtn"><span>Set up pedal</span></button>
+      </div>`);
+  const goSec = h(`
+  <div class="sc-go">
+    <div class="sc-go-text"><b>Ready to shoot?</b><span>Spotlight shows the prompter, the camera and Record. The selected script is used; no script is fine too.</span></div>
+  </div>`);
+  const saveIn = h(`<div class="sc-savein"><span>Saving to</span><b id="scFolderName">Downloads</b><button type="button" id="scFolderBtn">Change</button><button type="button" id="scFolderReset" title="Save to Downloads again" aria-label="Save to Downloads again" hidden>×</button></div>`);
   const toastEl = h(`<div class="sc-toast" id="scToast" hidden></div>`);
 
   const rightRail = $('right-rail'), utility = $('utility');
@@ -127,10 +117,18 @@ function init() {
   play.after(recBtn); play.after(h(`<span class="cap-div"></span>`));
   const scriptsHead = document.querySelector('#left-rail .scripts-head');
   scriptsHead.before(takesSec);
-  const shootRail = $('scShootRail');
   document.body.append(toastEl);
   document.querySelector('#setup .brand')?.before(strip);
-  strip.before(shootSec);
+  // paste box + pedal side by side; Go to Spotlight gets its own section
+  {
+    const ta = $('script-input'), row = document.querySelector('#setup .setup-row');
+    const compose = h(`<div class="sc-compose"><div class="sc-compose-main"></div></div>`);
+    ta.before(compose); compose.firstElementChild.append(ta, row); compose.append(pedalCard);
+    compose.after(goSec);
+    goSec.append($('start-btn'), $('cancel-edit'));
+    $('save-script-btn').textContent = 'Save script';
+  }
+  document.querySelector('#left-rail .copyright')?.before(saveIn);
   const hint = $('shortcuts-hint');
   if (hint) [['R', 'record camera + audio'], ['A', 'hold to autofocus'], ['← →', 'focus near / far (MF)'], ['G', 'grid']]
     .forEach(([k, t]) => hint.append(h(`<span>${k.split(' ').map(x => `<kbd>${x}</kbd>`).join('')} ${t}</span>`)));
@@ -142,10 +140,10 @@ function init() {
     disconnect: $('scDisconnect'), problem: $('scProblem'), preview: $('scPreview'),
     micState: $('scMicState'), micOn: $('scMicOn'), mic: $('scMic'), meterWrap: $('scMeterWrap'), meterFill: $('scMeterFill'),
     meterPeak: $('scMeterPeak'), db: $('scDb'), clip: $('scClip'), folderName: $('scFolderName'), folderBtn: $('scFolderBtn'),
-    rec: recBtn, recLabel: $('scRecLabel'), takeList: $('scTakeList'), saveAll: $('scSaveAll'),
+    rec: recBtn, recLabel: $('scRecLabel'), takeList: $('scTakeList'), saveAll: $('scSaveAll'), takesHint: $('scTakesHint'), folderReset: $('scFolderReset'),
     cCamState: $('scCardCamState'), cCamSub: $('scCardCamSub'), cCamBtn: $('scCardCamBtn'), cPreview: $('scCardPreview'), cPreviewBox: $('scCardPreviewBox'), micOff: $('scMicOff'),
     cMicState: $('scCardMicState'), cMicSub: $('scCardMicSub'), cMicBtn: $('scCardMicBtn'), cFill: $('scCardFill'), cPeak: $('scCardPeak'), cWaveMsg: $('scCardWaveMsg'), cDb: $('scCardDb'), cPreviewMsg: $('scCardPreviewMsg'), cPedalState: $('scCardPedalState'), cPedalSub: $('scCardPedalSub'), cPedalBtn: $('scCardPedalBtn'),
-    cFolderState: $('scCardFolderState'), cFolderSub: $('scCardFolderSub'), cFolderBtn: $('scCardFolderBtn'), problem2: $('scProblem2'), help: $('scHelp'), help2: $('scHelp2'),
+    problem2: $('scProblem2'), help: $('scHelp'), help2: $('scHelp2'),
   };
 
   // ------------------------------------------------------------------ toast
@@ -406,12 +404,10 @@ function init() {
   }
   async function renderFolder() {
     const ok = await folderOk(false);
-    ui.folderName.textContent = folder ? folder.name + (ok ? '' : ' (click to allow)') : 'Not chosen — save after the shoot';
-    ui.folderBtn.querySelector('span').textContent = folder ? (ok ? 'Change folder' : 'Allow access') : 'Choose folder';
-    badge(ui.cFolderState, folder && ok ? 'on' : folder ? 'wait' : 'off', folder ? (ok ? 'Ready' : 'Needs access') : 'Not set');
-    ui.cFolderSub.textContent = folder ? folder.name : 'Where audio takes go';
-    ui.cFolderBtn.querySelector('span').textContent = folder ? (ok ? 'Change' : 'Allow access') : 'Choose folder';
-    ui.cFolderBtn.classList.toggle('primary', !(folder && ok));
+    ui.folderName.textContent = folder ? folder.name : 'Downloads';
+    ui.folderName.title = folder ? 'Takes are saved into this folder' : 'Takes download to your Downloads folder when you stop';
+    ui.folderBtn.textContent = folder && !ok ? 'Allow' : 'Change';
+    ui.folderReset.hidden = !folder;
   }
   ui.folderBtn.onclick = async () => {
     if (!window.showDirectoryPicker) return toast('Choosing a folder needs Chrome or Edge.', 'error');
@@ -420,39 +416,9 @@ function init() {
     catch (e) { if (e?.name !== 'AbortError') toast('Could not use that folder: ' + (e?.message || e), 'error'); }
     renderFolder(); flushWaiting();
   };
-  ui.cFolderBtn.onclick = () => ui.folderBtn.onclick();
+  ui.folderReset.onclick = async () => { folder = null; await idb.set('folder', null); renderFolder(); toast('New takes download to Downloads.'); };
   idb.get('folder').then(f => { folder = f || null; renderFolder(); }).catch(() => renderFolder());
 
-  // ------------------------------------------------------------------ shoot name
-  let shoot = store.get('shoot', '');
-  const todayStr = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  const shootOrDefault = () => shoot || `Untitled ${todayStr()}`;
-  const dirName = x => x.replace(/[\\/:*?"<>|]+/g, '-').trim().slice(0, 60) || 'Shoot';
-  window.spaceCamShoot = () => shoot;
-  const shootInput = $('scShootInput'), shootRailName = $('scShootRailName');
-  function setShoot(v) {
-    shoot = v.trim().slice(0, 60); store.set('shoot', shoot);
-    shootInput.value = shoot; shootRailName.textContent = shoot || 'Not named';
-    shootRail.classList.toggle('empty', !shoot);
-  }
-  shootInput.value = shoot; setShoot(shoot);
-  shootInput.addEventListener('change', () => setShoot(shootInput.value));
-  shootInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); shootInput.blur(); } });
-  const editShoot = () => {
-    if (!$('setup').classList.contains('hidden')) { shootInput.focus(); shootInput.select(); return; }
-    const m = modal(`
-      <div class="sc-modal-head"><div class="sc-modal-title">Take name</div><button type="button" class="sc-modal-x" data-close aria-label="Close">✕</button></div>
-      <input class="sc-modal-input" value="${esc(shoot)}" maxlength="60" spellcheck="false" placeholder="e.g. Studio Tour">
-      <div class="sc-modal-hint">New takes use this name. Takes already recorded keep theirs.</div>
-      <div class="sc-modal-row"><button type="button" class="btn ghost" data-close>Cancel</button><button type="button" class="btn primary sc-ok">Save</button></div>`);
-    const inp = m.wrap.querySelector('input'); inp.focus(); inp.select();
-    const ok = () => { setShoot(inp.value); m.close(); };
-    m.wrap.querySelector('.sc-ok').onclick = ok;
-    inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); ok(); } });
-  };
-  shootRail.onclick = editShoot;
-  shootRail.onkeydown = e => { if (e.key === 'Enter') editShoot(); };
-  async function shootDir(base) { return base; } // all takes go straight into the chosen folder
   // a file name not yet used in that folder: Name.wav, Name-2.wav, ...
   async function freeName(dir, name) {
     const exists = n => dir.getFileHandle(n).then(() => true, () => false);
@@ -467,9 +433,10 @@ function init() {
   let take = null, timer = null, wake = null, busy = false;
   const saveTakes = () => store.set('takes', takes.slice(-200));
 
-  function takeName(sh, no) { return `${dirName(sh)} - Take ${pad(no)}.wav`; }
-  function nextNo(sh) {
-    return takes.filter(t => !t.demo && (t.shoot || '') === sh).reduce((m, t) => Math.max(m, t.no || 0), 0) + 1;
+  // SpaceTake 05-11-26 01, 02 … (number restarts each day; the date keeps names unique)
+  const dayStr = (d = new Date()) => `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${String(d.getFullYear()).slice(2)}`;
+  function nextNo(day) {
+    return takes.filter(t => !t.demo && t.day === day).reduce((m, t) => Math.max(m, t.no || 0), 0) + 1;
   }
 
   const ICON = {
@@ -477,9 +444,11 @@ function init() {
     rename: '<svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75z"/></svg>',
     del: '<svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>',
     save: '<svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>',
+    download: '<svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>',
     pause: '<svg viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>',
   };
   const takeLabel = t => t.label || (t.recovered ? 'Recovered take' : (t.shoot ? `${t.shoot} · ` : '') + `Take ${pad(t.no)}`);
+  const hhmm = d => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
   const fullDate = d => d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) + ` · ${pad(d.getHours())}:${pad(d.getMinutes())}`;
   const safeFileName = (label, t) => {
     const base = label.replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 80) || `Take-${pad(t.no || 0)}`;
@@ -490,7 +459,7 @@ function init() {
 
   // Where a take's audio lives right now: { file } or { missing: true }
   async function takeFile(t) {
-    if (t.audio === 'browser' || t.audio === 'sample') { try { return { file: await audio.getStoredFile(t.name) }; } catch { return { missing: true }; } }
+    if (t.audio === 'browser' || t.audio === 'sample' || t.audio === 'kept') { try { return { file: await audio.getStoredFile(t.name) }; } catch { return { missing: true }; } }
     if (t.audio === 'folder') {
       const dir = (await idb.get('dir:' + t.id)) || folder;
       if (!dir) return { missing: true };
@@ -613,11 +582,23 @@ function init() {
     catch { /* not a WAV we can read: player still works without the waveform */ }
   }
 
+  // Download a take's WAV (from browser storage or the folder) under its current name.
+  async function downloadTake(t, quiet = false) {
+    const r = await takeFile(t);
+    if (r.denied) return toast('Allow access to the save folder first.', 'error'), false;
+    if (r.missing) return toast('This take’s audio is no longer available.', 'error'), false;
+    const url = URL.createObjectURL(r.file), a = document.createElement('a');
+    a.href = url; a.download = safeFileName(takeLabel(t), t); document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    if (!quiet) toast(`${a.download} downloaded.`, 'ok');
+    return true;
+  }
+
   async function renameTake(t) {
     const m = modal(`
       <div class="sc-modal-head"><div class="sc-modal-title">Rename take</div><button type="button" class="sc-modal-x" data-close aria-label="Close">✕</button></div>
       <input class="sc-modal-input" value="${esc(takeLabel(t))}" maxlength="80" spellcheck="false">
-      <div class="sc-modal-hint">${t.audio === 'folder' ? 'The WAV file in your folder is renamed too.' : 'The file gets this name when it is saved.'}</div>
+      <div class="sc-modal-hint">${t.audio === 'folder' ? 'The WAV file in your folder is renamed too.' : t.audio === 'kept' ? 'The copy already in Downloads keeps its old name. Download it again to get this name.' : 'The file gets this name when it is saved.'}</div>
       <div class="sc-modal-row"><button type="button" class="btn ghost" data-close>Cancel</button><button type="button" class="btn primary sc-ok">Rename</button></div>`);
     const inp = m.wrap.querySelector('input'); inp.focus(); inp.select();
     const ok = async () => {
@@ -650,51 +631,59 @@ function init() {
 
   function deleteTake(t) {
     const inFolder = t.audio === 'folder' || t.audio === 'saved';
-    const unsaved = t.audio === 'browser' || t.audio === 'sample';
+    const unsaved = t.audio === 'browser' || t.audio === 'sample', kept = t.audio === 'kept';
     const m = modal(`
       <div class="sc-modal-head"><div class="sc-modal-title">Delete “${esc(takeLabel(t))}”?</div><button type="button" class="sc-modal-x" data-close aria-label="Close">✕</button></div>
       <p class="sc-modal-p">${unsaved ? 'This audio was never saved to a folder. Deleting it removes it for good.' :
+        kept ? 'This removes it from Space Cam. The copy in your Downloads folder stays.' :
         inFolder ? 'This only removes it from the list. The WAV file stays in your folder.' : 'This removes it from the list.'}</p>
-      <div class="sc-modal-row"><button type="button" class="btn ghost" data-close>Cancel</button><button type="button" class="btn primary sc-ok${unsaved ? ' danger' : ''}">${unsaved ? 'Delete audio' : 'Remove from list'}</button></div>`);
+      <div class="sc-modal-row"><button type="button" class="btn ghost" data-close>Cancel</button><button type="button" class="btn primary sc-ok${unsaved ? ' danger' : ''}">${unsaved ? 'Delete audio' : kept ? 'Delete' : 'Remove from list'}</button></div>`);
     m.wrap.querySelector('.sc-ok').onclick = async () => {
-      if (unsaved) await audio.deleteStored(t.name).catch(() => {});
+      if (unsaved || kept) await audio.deleteStored(t.name).catch(() => {});
       if (openTakeId === t.id) { stopPlayer(); openTakeId = null; }
       takes = takes.filter(x => x !== t); saveTakes(); renderTakes(); m.close();
     };
   }
 
+  function whenLabel(ms) {
+    const d = new Date(ms), now = new Date(), y = new Date(now); y.setDate(now.getDate() - 1);
+    const same = (a, b) => a.toDateString() === b.toDateString();
+    const day = same(d, now) ? 'Today' : same(d, y) ? 'Yesterday' : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    return `${day} ${hhmm(d)}`;
+  }
   function renderTakes() {
     t_ids();
     const list = takes.slice().reverse();
-    ui.saveAll.hidden = !takes.some(t => t.audio === 'browser');
+    ui.saveAll.hidden = true;
     if (player && !takes.some(t => t.id === openTakeId)) { stopPlayer(); openTakeId = null; }
     if (player) stopPlayer();
+    ui.takesHint.hidden = !list.length;
     if (!list.length) { ui.takeList.innerHTML = '<div class="sc-none">No takes yet. Press <kbd>R</kbd> to record.</div>'; return; }
     ui.takeList.replaceChildren(...list.map(t => {
-      const when = new Date(t.startedAt);
-      const hasAudio = ['folder', 'browser', 'sample'].includes(t.audio);
-      const status = t.missing ? '<em>file moved</em>' : t.audio === 'folder' ? 'audio in ' + esc(t.folderName || 'folder')
-        : t.audio === 'saved' ? 'audio saved' : t.audio === 'browser' ? '<em>not saved yet</em>' : t.audio === 'sample' ? 'sample audio' : 'no audio';
+      const hasAudio = ['folder', 'browser', 'sample', 'kept'].includes(t.audio);
+      const note = t.missing ? 'file moved' : t.audio === 'browser' ? 'not saved' : !hasAudio && t.audio !== 'saved' ? 'no audio' : '';
       const open = t.id === openTakeId && hasAudio;
       const el = h(`<div class="script-tab sc-take${t.audio === 'browser' ? ' unsaved' : ''}${open ? ' open active' : ''}">
         <div class="sc-take-head" role="button" tabindex="0" aria-expanded="${open}">
           <span class="sc-take-main">
-            <span class="script-tab-name">${esc(takeLabel(t))}</span>
-            <span class="sc-take-sub">${esc(fullDate(when))}<br>${t.seconds != null ? fmt(t.seconds) + ' · ' : ''}${t.camera ? 'clip on card · ' : ''}${status}</span>
+            <span class="sc-take-title"><span class="script-tab-name">${esc(takeLabel(t))}</span></span>
+            <span class="sc-take-sub">${esc(whenLabel(t.startedAt))}${t.seconds != null ? ' · ' + fmt(t.seconds) : ''}${note ? ` · <em>${note}</em>` : ''}</span>
           </span>
           <span class="script-tab-actions"></span>
         </div>
         ${open ? '<div class="sc-tp"></div>' : ''}</div>`);
       const actions = el.querySelector('.script-tab-actions');
-      const act = (icon, title, fn) => { const b = h(`<span class="script-tab-act" role="button" title="${title}" aria-label="${title}">${ICON[icon]}</span>`); b.onclick = e => { e.stopPropagation(); fn(); }; actions.append(b); };
-      if (t.audio === 'browser') act('save', 'Save audio', () => saveTake(t));
-      act('rename', 'Rename', () => renameTake(t));
-      act('del', 'Delete', () => deleteTake(t));
+      const mk = (icon, title, fn) => { const b = h(`<span class="script-tab-act" role="button" title="${title}" aria-label="${title}">${ICON[icon]}</span>`); b.onclick = e => { e.stopPropagation(); fn(); }; return b; };
+      if (hasAudio) actions.append(mk('download', 'Download WAV', () => downloadTake(t).then(ok => { if (ok && t.audio === 'browser') { t.audio = 'kept'; delete t.recovered; saveTakes(); renderTakes(); } })));
+      actions.append(mk('del', 'Delete', () => deleteTake(t)));
+      // rename sits next to the name once the take is opened
+      const title = el.querySelector('.sc-take-title');
+      if (open || !hasAudio) { const r = mk('rename', 'Rename', () => renameTake(t)); r.classList.add('sc-take-rename'); title.append(r); }
       const head = el.querySelector('.sc-take-head');
       if (hasAudio) {
         head.onclick = () => toggleTakeOpen(t);
         head.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleTakeOpen(t); } };
-        head.title = open ? 'Close' : 'Open player';
+        head.title = open ? 'Close' : 'Play';
       }
       if (open) queueMicrotask(() => mountPlayer(t, el.querySelector('.sc-tp')));
       return el;
@@ -705,8 +694,8 @@ function init() {
     try {
       const dest = t.label ? safeFileName(t.label, t) : t.name;
       if (await folderOk(true)) {
-        const sub = await shootDir(folder, t.shoot || shootOrDefault()), fin = await freeName(sub, dest);
-        await audio.moveToFolder(t.name, sub, fin); t.name = fin; t.audio = 'folder'; t.folderName = folder.name; await idb.set('dir:' + t.id, sub);
+        const fin = await freeName(folder, dest);
+        await audio.moveToFolder(t.name, folder, fin); t.name = fin; t.audio = 'folder'; t.folderName = folder.name; await idb.set('dir:' + t.id, folder);
       }
       else { await audio.saveAs(t.name, dest); t.name = dest; t.audio = 'saved'; }
       delete t.recovered; delete t.missing; saveTakes(); renderTakes(); toast(`${t.name} saved.`, 'ok');
@@ -723,8 +712,8 @@ function init() {
     const known = new Set(takes.map(t => t.name));
     let added = 0;
     for (const f of files) if (!known.has(f.name)) { takes.push({ name: f.name, startedAt: f.modified, audio: 'browser', recovered: true, seconds: null }); added++; }
-    takes.forEach(t => { if (t.audio === 'browser' && !files.some(f => f.name === t.name)) t.audio = 'none'; });
-    if (added) toast(`${added} unsaved audio take${added > 1 ? 's' : ''} recovered. Save from the Takes list.`);
+    takes.forEach(t => { if ((t.audio === 'browser' || t.audio === 'kept') && !files.some(f => f.name === t.name)) t.audio = 'none'; });
+    if (added) toast(`${added} unsaved audio take${added > 1 ? 's' : ''} recovered. Download them from the Takes list.`);
     saveTakes(); renderTakes();
   }).catch(() => renderTakes()); else renderTakes();
 
@@ -823,15 +812,14 @@ function init() {
     const micOk = audio.state === 'ready';
     if (!camOk && !micOk) return toast('Connect the camera or enable a microphone first.', 'error');
     if (micOk && folder) await folderOk(true); // ask once while we still have the key press / click
-    if (!shoot) setShoot(shootOrDefault());
-    const sh = shoot, no = nextNo(sh), started = new Date();
-    let name = takeName(sh, no);
-    if (takes.some(t => t.name === name)) name = name.replace(/\.wav$/, ` (${pad(started.getHours())}${pad(started.getMinutes())}${pad(started.getSeconds())}).wav`);
+    const started = new Date(), day = dayStr(started), no = nextNo(day), label = `SpaceTake ${day} ${pad(no)}`;
+    let name = `${label}.wav`;
+    if (takes.some(t => t.name === name)) name = `${label} (${pad(started.getHours())}${pad(started.getMinutes())}${pad(started.getSeconds())}).wav`;
     const [a, c] = await Promise.all([micOk ? audio.startRecording(name) : false, camOk ? cam.startRecording() : false]);
     if (!a && !c) return toast('Recording did not start. Check the camera and microphone.', 'error');
     if (camOk && !c) toast('Camera did not start recording. Audio is recording.', 'error');
     if (micOk && !a) toast('Audio did not start. Camera is recording.', 'error');
-    take = { id: 't' + started.getTime().toString(36), shoot: sh, no, name: a ? name : null, startedAt: started.getTime(), camera: !!c, audio: a ? 'recording' : 'none' };
+    take = { id: 't' + started.getTime().toString(36), day, no, label, name: a ? name : null, startedAt: started.getTime(), camera: !!c, audio: a ? 'recording' : 'none' };
     try { wake = await navigator.wakeLock?.request('screen'); } catch {}
     timer = setInterval(tick, 250); tick();
   }
@@ -846,15 +834,17 @@ function init() {
       t.audio = a ? 'browser' : 'none';
       if (a && await folderOk(false)) {
         try {
-          const sub = await shootDir(folder, t.shoot || shootOrDefault()), fin = await freeName(sub, t.name);
-          await audio.moveToFolder(t.name, sub, fin); t.name = fin; t.audio = 'folder'; t.folderName = folder.name; await idb.set('dir:' + t.id, sub);
+          const fin = await freeName(folder, t.name);
+          await audio.moveToFolder(t.name, folder, fin); t.name = fin; t.audio = 'folder'; t.folderName = folder.name; await idb.set('dir:' + t.id, folder);
         }
-        catch (e) { toast('Audio kept in the browser — could not write to the folder: ' + (e?.message || e), 'error'); }
+        catch (e) { toast('Could not write to the folder, downloading instead: ' + (e?.message || e), 'error'); }
       }
+      // No folder chosen: keep a copy in the browser (for playback) and download the WAV to Downloads.
+      if (t.audio === 'browser') { t.audio = 'kept'; await downloadTake(t, true); }
     }
     takes.push(t); saveTakes(); renderTakes(); renderRec();
-    const parts = [t.camera && 'clip on the camera card', t.audio === 'folder' && `audio in “${t.folderName}”`, t.audio === 'browser' && 'audio waiting in Takes (choose a folder or Save)'].filter(Boolean);
-    toast(`${reason || `Take ${pad(t.no)} done`} — ${parts.join(', ') || 'nothing recorded'}.`, t.audio === 'browser' ? '' : 'ok');
+    const parts = [t.camera && 'clip on the camera card', t.audio === 'folder' && `audio in “${t.folderName}”`, t.audio === 'kept' && 'audio in Downloads'].filter(Boolean);
+    toast(`${reason || `${t.label || 'Take'} done`} — ${parts.join(', ') || 'nothing recorded'}.`, 'ok');
     setTimeout(() => cam.refreshInfo(), 800);
   }
 

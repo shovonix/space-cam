@@ -3294,7 +3294,7 @@ var qrcode = function() {
   }
   function activeScript(){ return findScript(state.activeScriptId); }
   function nextDefaultName(){
-    var shoot = (typeof window.spaceCamShoot === 'function') ? window.spaceCamShoot() : '';
+    var shoot = '';
     if(shoot){
       var nm = shoot, k = 2;
       while(state.scripts.some(function(s){ return s.name === nm; })){ nm = shoot + ' ' + k; k++; }
@@ -3701,8 +3701,6 @@ var qrcode = function() {
   function showSetup(editing){
     pause();
     if(editMode) setEditMode(false);
-    var activeS = activeScript();
-    input.value = activeS ? activeS.text : '';
     setup.classList.remove('hidden');
     stage.classList.add('hidden');
     cancelEdit.style.display = editing ? '' : 'none';
@@ -3717,8 +3715,7 @@ var qrcode = function() {
   // model the app already used for the single-script version, just now
   // aware of which named script is the one being edited.
   function hasUnsavedChanges(){
-    var activeS = activeScript();
-    return input.value !== (activeS ? activeS.text : '');
+    return false; // Space Cam: the paste box only adds new scripts; saved ones are edited in a popup
   }
   function confirmDiscard(){
     if(setup.classList.contains('hidden')) return true; // only the paste box can hold unsaved text
@@ -3756,8 +3753,6 @@ var qrcode = function() {
     pruneEmptyScripts(id);
     state.activeScriptId = id;
     save();
-    var activeS = activeScript();
-    input.value = activeS ? activeS.text : '';
     renderScriptTabs();
     if(!stage.classList.contains('hidden')){
       // Switching scripts from the rail while prompting: show it right away.
@@ -3788,12 +3783,14 @@ var qrcode = function() {
     var wrap = document.createElement('div');
     wrap.className = 'sc-modal';
     wrap.innerHTML = '<div class="sc-modal-card sc-modal-wide" role="dialog" aria-modal="true" aria-label="Edit script">' +
-      '<div class="sc-modal-head"><div><div class="sec-title" style="margin:0">Edit script</div><div class="sc-modal-name"></div></div>' +
+      '<div class="sc-modal-head"><div class="sec-title" style="margin:0">Edit script</div>' +
       '<button type="button" class="sc-modal-x" aria-label="Close">✕</button></div>' +
+      '<input class="sc-modal-input sc-modal-name-in" maxlength="80" spellcheck="false" placeholder="Script name">' +
       '<textarea class="sc-modal-text" spellcheck="false" placeholder="Paste or type your script here"></textarea>' +
       '<div class="sc-modal-row"><span class="sc-modal-hint"><kbd>⌘</kbd><kbd>Enter</kbd> save · <kbd>Esc</kbd> cancel</span>' +
       '<button type="button" class="btn ghost sc-cancel">Cancel</button><button type="button" class="btn primary sc-save">Save</button></div></div>';
-    wrap.querySelector('.sc-modal-name').textContent = s.name;
+    var nameIn = wrap.querySelector('.sc-modal-name-in');
+    nameIn.value = s.name;
     var ta = wrap.querySelector('textarea');
     ta.value = s.text || '';
     function close(){ wrap.remove(); document.removeEventListener('keydown', onKey, true); }
@@ -3801,9 +3798,9 @@ var qrcode = function() {
       var v = ta.value;
       if(!v.trim()){ ta.focus(); return; }
       s.text = v; s.updatedAt = Date.now();
+      if(nameIn.value.trim()) s.name = nameIn.value.trim();
       save();
       if(s.id === state.activeScriptId){
-        input.value = v;
         if(!stage.classList.contains('hidden')){ applyText(); updateProgress(); }
       }
       renderScriptTabs();
@@ -3819,7 +3816,8 @@ var qrcode = function() {
     wrap.querySelector('.sc-save').onclick = commit;
     document.addEventListener('keydown', onKey, true);
     document.body.appendChild(wrap);
-    ta.focus(); ta.setSelectionRange(0, 0); ta.scrollTop = 0;
+    nameIn.addEventListener('keydown', function(e){ if(e.key === 'Enter' && !e.metaKey && !e.ctrlKey){ e.preventDefault(); ta.focus(); } });
+    nameIn.focus(); nameIn.select();
   }
   function deleteScript(id, evt){
     if(evt) evt.stopPropagation();
@@ -3829,8 +3827,6 @@ var qrcode = function() {
     state.scripts = state.scripts.filter(function(x){ return x.id !== id; });
     if(state.activeScriptId === id){
       state.activeScriptId = state.scripts.length ? state.scripts[0].id : null;
-      var activeS = activeScript();
-      input.value = activeS ? activeS.text : '';
     }
     save();
     renderScriptTabs();
@@ -3857,7 +3853,8 @@ var qrcode = function() {
       editAct.setAttribute('aria-label', 'Rename ' + s.name);
       editAct.title = 'Rename';
       editAct.innerHTML = '<svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75z"/></svg>';
-      editAct.addEventListener('click', function(e){ renameScript(s.id, e); });
+      editAct.title = 'Edit name and text';
+      editAct.addEventListener('click', function(e){ openScriptEditor(s.id, e); });
       var delBtn = document.createElement('span');
       delBtn.className = 'script-tab-act';
       delBtn.setAttribute('role', 'button');
@@ -3873,7 +3870,6 @@ var qrcode = function() {
       textAct.innerHTML = '<svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>';
       textAct.addEventListener('click', function(e){ openScriptEditor(s.id, e); });
       actions.appendChild(editAct);
-      actions.appendChild(textAct);
       actions.appendChild(delBtn);
       tab.appendChild(nameSpan);
       tab.appendChild(actions);
@@ -3904,20 +3900,29 @@ var qrcode = function() {
     setTimeout(function(){ btn.textContent = orig; btn.disabled = false; }, 1100);
   }
 
-  startBtn.addEventListener('click', function(){
+  // Space Cam: the paste box always adds a NEW script card; saved scripts are edited from the rail (✎).
+  function addPastedScript(){
     var v = input.value;
-    // Space Cam: the script is optional — Spotlight also works for recording without a prompter.
-    if(!v.trim()){ state.activeScriptId = null; save(); applyText(); showStage(); scroller.scrollTop = 0; return; }
-    commitActiveScriptText(v);
+    if(!v.trim()) return false;
+    var s = { id: genId(), name: nextDefaultName(), text: v, updatedAt: Date.now() };
+    state.scripts.push(s);
+    state.activeScriptId = s.id;
+    input.value = '';
+    if(demoPrev !== null){ demoPrev = null; setDemoBtn(false); }
+    save();
+    renderScriptTabs();
+    return true;
+  }
+  startBtn.addEventListener('click', function(){
+    addPastedScript(); // anything left in the box becomes a script first
+    // No script selected is fine: Spotlight also works for recording without a prompter.
     applyText();
     showStage();
     scroller.scrollTop = 0;
   });
   saveScriptBtn.addEventListener('click', function(){
-    var v = input.value;
-    if(!v.trim()) return;
-    commitActiveScriptText(v);
-    flashButton(saveScriptBtn, 'Saved');
+    if(addPastedScript()) flashButton(saveScriptBtn, 'Saved');
+    else input.focus();
   });
   newScriptBtn.addEventListener('click', function(){
     if(!confirmDiscard()) return;
@@ -5233,7 +5238,7 @@ var qrcode = function() {
       state.scripts = state.scripts.filter(function(x){ return !x.demo; });
       if(!findScript(state.activeScriptId)){
         state.activeScriptId = state.scripts.length ? state.scripts[0].id : null;
-        var a = activeScript(); input.value = a ? a.text : '';
+        var a = activeScript();
         if(!stage.classList.contains('hidden') && (!a || !a.text.trim())) showSetup(false);
       }
       save(); renderScriptTabs();

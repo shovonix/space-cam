@@ -225,3 +225,39 @@ body.sc-big{margin:0;height:100vh;display:flex;flex-direction:column;background:
 .sc-bigmeter-scale span:nth-child(4){left:88%}
 .sc-bigmeter-scale span:nth-child(5){right:0;left:auto;transform:none}
 .sc-bigmeter-read{font:600 12px var(--mono);color:var(--fg-dim);text-align:center}
+
+/* ---- v1 layout: Camera | Mic, paste box + pedal, Go to Spotlight section ---- */
+.sc-strip.sc-strip-2{grid-template-columns:1fr 1fr}
+.sc-compose{display:grid;grid-template-columns:minmax(0,1fr) 230px;gap:12px;align-items:start}
+.sc-compose-main{display:flex;flex-direction:column;min-width:0}
+.sc-compose-main #script-input{width:100%}
+.sc-card-pedal{gap:4px}
+.sc-card-pedal .sc-cbtn{margin-top:12px}
+.sc-wrap{white-space:normal}
+.sc-go{display:flex;align-items:center;justify-content:space-between;gap:20px;margin:26px 0 8px;padding:18px 20px;border:1px solid var(--hair);border-radius:14px;background:var(--surface)}
+.sc-go-text{display:flex;flex-direction:column;gap:4px;min-width:0}
+.sc-go-text b{font-family:'Archivo',system-ui,sans-serif;font-size:16px}
+.sc-go-text span{font-size:12.5px;color:var(--fg-dim)}
+.sc-go .btn{flex:none}
+.sc-go #start-btn{padding-left:26px;padding-right:26px}
+@media (max-width:900px){.sc-compose{grid-template-columns:1fr}.sc-go{flex-direction:column;align-items:stretch}}
+
+/* ---- left rail: calm take cards; the list scrolls so Scripts stay on screen ---- */
+#scTakeList{max-height:38vh;overflow-y:auto;overscroll-behavior:contain;padding-right:2px;scrollbar-width:thin}
+.sc-takes-hint{font-size:11.5px;color:var(--fg-dim);margin:-6px 0 10px}
+.sc-take-head{align-items:center;padding:9px 8px 9px 12px}
+.sc-take-title{display:flex;align-items:center;gap:4px;min-width:0}
+.sc-take .script-tab-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px}
+.sc-take-sub{font:11px var(--mono);color:var(--fg-dim);line-height:1.4}
+.sc-take .script-tab-actions{opacity:.55;transition:opacity .15s}
+.sc-take:hover .script-tab-actions,.sc-take.open .script-tab-actions{opacity:1}
+.sc-take-rename{flex:none;width:22px;height:22px}
+.sc-take-rename svg{width:12px;height:12px}
+
+/* ---- "Saving to" line, bottom left ---- */
+.sc-savein{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--fg-dim);margin:14px 0 8px;min-width:0}
+.sc-savein b{color:var(--fg);font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.sc-savein button{background:none;border:0;padding:2px 4px;color:var(--fg-dim);font:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:2px;flex:none}
+.sc-savein button:hover{color:var(--fg)}
+#scFolderReset{text-decoration:none;font-size:14px;line-height:1}
+.sc-tp-dl{display:none}

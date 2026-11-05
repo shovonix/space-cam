@@ -165,7 +165,7 @@ function init() {
     ui.camState.className = 'sc-state' + (cam.recording ? ' rec' : on ? ' on' : '');
     if (!on) ui.fps.textContent = '';
     ui.cCamState.textContent = ui.camState.textContent; ui.cCamState.className = ui.camState.className;
-    ui.cCamSub.textContent = on ? 'Connected — preview in the right panel while prompting' : 'USB · PC Remote · camera on';
+    ui.cCamSub.textContent = on ? 'Connected — live preview in Spotlight' : 'USB · PC Remote · camera on';
     ui.cCamBtn.querySelector('span').textContent = on ? 'Disconnect' : ui.connect.textContent;
     ui.cCamBtn.disabled = ui.connect.disabled && !on;
     ui.cCamBtn.parentElement.classList.toggle('ready', on);
@@ -677,7 +677,7 @@ function init() {
       'Connect the camera over USB. Make sure it is set to PC Remote.',
       'Pick your microphone and watch the meter while you speak at your normal level.',
       'Choose the folder where your audio takes should go.',
-      'Paste your script, then press Start prompting.',
+      'Paste your script, then press Go to Spotlight.',
       'Connect the stage window and drag it to the teleprompter screen.',
       'Adjust the speed and the text size until it reads comfortably.',
       'Hold A to focus on your face, or use the arrows if the camera is on manual focus.',

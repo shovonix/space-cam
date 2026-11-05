@@ -744,7 +744,7 @@ body.touch #screen-note{order:5;margin-top:12px;padding:10px 12px;font-size:12px
     <textarea id="script-input" placeholder="Paste or type your script here&#10;&#10;Line breaks become paragraph breaks on the prompter."></textarea>
     <div class="setup-row">
       <button class="btn ghost" id="save-script-btn">Save</button>
-      <button class="btn primary" id="start-btn">Start prompting</button>
+      <button class="btn primary" id="start-btn">Go to Spotlight</button>
       <button class="btn ghost" id="cancel-edit" style="display:none">Back to stage</button>
     </div>
     <div id="screen-note">
@@ -3906,7 +3906,8 @@ var qrcode = function() {
 
   startBtn.addEventListener('click', function(){
     var v = input.value;
-    if(!v.trim()) return;
+    // Space Cam: the script is optional — Spotlight also works for recording without a prompter.
+    if(!v.trim()){ state.activeScriptId = null; save(); applyText(); showStage(); scroller.scrollTop = 0; return; }
     commitActiveScriptText(v);
     applyText();
     showStage();

@@ -433,10 +433,12 @@ function init() {
   let take = null, timer = null, wake = null, busy = false;
   const saveTakes = () => store.set('takes', takes.slice(-200));
 
-  // SpaceTake 05-11-26 01, 02 … (number restarts each day; the date keeps names unique)
-  const dayStr = (d = new Date()) => `${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${String(d.getFullYear()).slice(2)}`;
-  function nextNo(day) {
-    return takes.filter(t => !t.demo && t.day === day).reduce((m, t) => Math.max(m, t.no || 0), 0) + 1;
+  // SpaceTake_1, SpaceTake_2 … one counter that never goes back, so names never repeat in Downloads
+  function nextNo() {
+    const used = takes.filter(t => !t.demo && t.series === 'st').reduce((m, t) => Math.max(m, t.no || 0), 0);
+    const n = Math.max(used, store.get('takeCounter', 0)) + 1;
+    store.set('takeCounter', n);
+    return n;
   }
 
   const ICON = {
@@ -812,14 +814,14 @@ function init() {
     const micOk = audio.state === 'ready';
     if (!camOk && !micOk) return toast('Connect the camera or enable a microphone first.', 'error');
     if (micOk && folder) await folderOk(true); // ask once while we still have the key press / click
-    const started = new Date(), day = dayStr(started), no = nextNo(day), label = `SpaceTake ${day} ${pad(no)}`;
+    const started = new Date(), no = nextNo(), label = `SpaceTake_${no}`;
     let name = `${label}.wav`;
     if (takes.some(t => t.name === name)) name = `${label} (${pad(started.getHours())}${pad(started.getMinutes())}${pad(started.getSeconds())}).wav`;
     const [a, c] = await Promise.all([micOk ? audio.startRecording(name) : false, camOk ? cam.startRecording() : false]);
     if (!a && !c) return toast('Recording did not start. Check the camera and microphone.', 'error');
     if (camOk && !c) toast('Camera did not start recording. Audio is recording.', 'error');
     if (micOk && !a) toast('Audio did not start. Camera is recording.', 'error');
-    take = { id: 't' + started.getTime().toString(36), day, no, label, name: a ? name : null, startedAt: started.getTime(), camera: !!c, audio: a ? 'recording' : 'none' };
+    take = { id: 't' + started.getTime().toString(36), series: 'st', no, label, name: a ? name : null, startedAt: started.getTime(), camera: !!c, audio: a ? 'recording' : 'none' };
     try { wake = await navigator.wakeLock?.request('screen'); } catch {}
     timer = setInterval(tick, 250); tick();
   }

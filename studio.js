@@ -100,7 +100,7 @@ function init() {
       <div class="sc-card sc-card-big" id="scCardMic">
         <div class="sc-card-top"><span class="sc-card-title">Microphone</span><span class="sc-status" id="scCardMicState">Off</span></div>
         <div class="sc-card-sub" id="scCardMicSub">Any mic your Mac sees</div>
-        <div class="sc-media" id="scCardWaveBox"><span id="scCardWaveMsg">Mic off</span><canvas id="scCardWave"></canvas><b class="sc-media-db" id="scCardDb"></b></div>
+        <div class="sc-media sc-media-meter" id="scCardWaveBox"><div class="sc-bigmeter"><div class="sc-bigmeter-bar"><i id="scCardFill"></i><b id="scCardPeak"></b></div><div class="sc-bigmeter-scale"><span>−50</span><span>−24</span><span>−12</span><span>−6</span><span>0</span></div><div class="sc-bigmeter-read" id="scCardDb">Mic off</div></div><span id="scCardWaveMsg" hidden></span></div>
         <button type="button" class="sc-cbtn primary" id="scCardMicBtn"><span>Connect mic</span></button>
       </div>
       <div class="sc-stack">
@@ -144,7 +144,7 @@ function init() {
     meterPeak: $('scMeterPeak'), db: $('scDb'), clip: $('scClip'), folderName: $('scFolderName'), folderBtn: $('scFolderBtn'),
     rec: recBtn, recLabel: $('scRecLabel'), takeList: $('scTakeList'), saveAll: $('scSaveAll'),
     cCamState: $('scCardCamState'), cCamSub: $('scCardCamSub'), cCamBtn: $('scCardCamBtn'), cPreview: $('scCardPreview'), cPreviewBox: $('scCardPreviewBox'), micOff: $('scMicOff'),
-    cMicState: $('scCardMicState'), cMicSub: $('scCardMicSub'), cMicBtn: $('scCardMicBtn'), cWave: $('scCardWave'), cWaveMsg: $('scCardWaveMsg'), cDb: $('scCardDb'), cPreviewMsg: $('scCardPreviewMsg'), cPedalState: $('scCardPedalState'), cPedalSub: $('scCardPedalSub'), cPedalBtn: $('scCardPedalBtn'),
+    cMicState: $('scCardMicState'), cMicSub: $('scCardMicSub'), cMicBtn: $('scCardMicBtn'), cFill: $('scCardFill'), cPeak: $('scCardPeak'), cWaveMsg: $('scCardWaveMsg'), cDb: $('scCardDb'), cPreviewMsg: $('scCardPreviewMsg'), cPedalState: $('scCardPedalState'), cPedalSub: $('scCardPedalSub'), cPedalBtn: $('scCardPedalBtn'),
     cFolderState: $('scCardFolderState'), cFolderSub: $('scCardFolderSub'), cFolderBtn: $('scCardFolderBtn'), problem2: $('scProblem2'), help: $('scHelp'), help2: $('scHelp2'),
   };
 
@@ -254,26 +254,6 @@ function init() {
     return k ? `Sony ${SONY_NAMES[k]} · ${c}` : c;
   }
 
-  // live audio wave in the mic card: one bar per ~33 ms, newest on the right
-  const liveWave = new Array(72).fill(0); let waveTick = 0;
-  function pushWave(v) { if (++waveTick % 2) return; liveWave.shift(); liveWave.push(v); drawLiveWave(); }
-  function drawLiveWave() {
-    const c = ui.cWave; if (!c || !c.isConnected) return;
-    const dpr = devicePixelRatio || 1, w = c.clientWidth, hgt = c.clientHeight; if (!w || !hgt) return;
-    if (c.width !== Math.round(w * dpr) || c.height !== Math.round(hgt * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(hgt * dpr); }
-    const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, hgt);
-    const n = liveWave.length, step = w / n, bw = Math.max(1.5, step * 0.62), mid = hgt / 2;
-    g.fillStyle = 'rgba(255,255,255,.08)'; g.fillRect(0, mid - 0.5, w, 1);
-    for (let i = 0; i < n; i++) {
-      const v = liveWave[i]; if (v <= 0) continue;
-      const bh = Math.max(1.5, v * (hgt * 0.86));
-      g.fillStyle = v > 0.88 ? '#E8463A' : v > 0.76 ? '#FFD60A' : '#30D158';
-      g.globalAlpha = 0.35 + 0.65 * (i / n);
-      g.fillRect(i * step + (step - bw) / 2, mid - bh / 2, bw, bh);
-    }
-    g.globalAlpha = 1;
-  }
-
   // pedal card (keys live in the prompter's state; index.html exposes them)
   function renderPedal() {
     const n = window.spaceCamPedal?.count() || 0;
@@ -368,11 +348,11 @@ function init() {
     shownT = now0;
     const peakDb = shown;
     const pct = toPct(peakDb);
-    ui.meterFill.style.width = pct + '%'; pushWave(toPct(e.detail.peakDb) / 100);
+    ui.meterFill.style.width = pct + '%'; ui.cFill.style.clipPath = `inset(0 ${100 - pct}% 0 0)`;
     // The thin marker shows real peaks (held 1.5 s), so you still see how close you get to clipping.
     const now = performance.now(), p = e.detail.peakDb;
     if (p > peakHold || now - peakHoldT > 1500) { peakHold = p; peakHoldT = now; }
-    ui.meterPeak.style.left = toPct(peakHold) + '%';
+    ui.meterPeak.style.left = ui.cPeak.style.left = toPct(peakHold) + '%';
     ui.db.textContent = peakHold <= -119 ? "−∞ dB" : `peak ${peakHold.toFixed(0)} dB`;
     ui.cDb.textContent = ui.db.textContent;
     ui.clip.classList.toggle('on', clip);
@@ -386,7 +366,8 @@ function init() {
     badge(ui.cMicState, audio.state === 'recording' ? 'rec' : on ? 'on' : 'off', audio.state === 'recording' ? 'Recording' : on ? 'Ready' : 'Off');
     ui.cMicSub.textContent = on ? audio.deviceLabel : 'Any mic your Mac sees';
     ui.micOff.hidden = !on;
-    ui.cWaveMsg.hidden = on; if (!on) { liveWave.fill(0); drawLiveWave(); ui.cDb.textContent = ''; }
+    if (!on) { ui.cFill.style.clipPath = 'inset(0 100% 0 0)'; ui.cPeak.style.left = '0%'; ui.cDb.textContent = 'Mic off'; }
+    ui.cPeak.hidden = !on;
     ui.cMicBtn.querySelector('span').textContent = on ? 'Disconnect' : 'Connect mic';
     ui.cMicBtn.classList.toggle('primary', !on);
     ui.cMicBtn.disabled = audio.state === 'recording';

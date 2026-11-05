@@ -200,8 +200,6 @@ body.sc-big{margin:0;height:100vh;display:flex;flex-direction:column;background:
 .sc-media>span{font-size:12px;color:var(--fg-dim)}
 .sc-media img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none}
 .sc-media.live img{display:block}.sc-media.live>span{display:none}
-.sc-media canvas{position:absolute;inset:0;width:100%;height:100%}
-.sc-media-db{position:absolute;right:8px;bottom:6px;font:600 10.5px var(--mono);color:var(--fg-dim)}
 /* card buttons: Connect stands out, Disconnect stays quiet; always on the bottom row */
 .sc-cbtn{margin-top:auto;width:100%;height:38px;border-radius:9px;border:1px solid var(--hair);background:transparent;color:var(--fg-dim);font:600 13px 'Public Sans',system-ui,sans-serif;cursor:pointer;transition:background .15s,color .15s}
 .sc-card>.sc-media+.sc-cbtn,.sc-card>.sc-card-sub+.sc-cbtn{margin-top:auto}
@@ -212,3 +210,18 @@ body.sc-big{margin:0;height:100vh;display:flex;flex-direction:column;background:
 .sc-cbtn:disabled{opacity:.5;cursor:default}
 .sc-stack .sc-cbtn{margin-top:auto}
 .sc-stack .sc-card-sub{margin-bottom:10px}
+
+/* fat level meter in the mic card (same box height as the camera feed) */
+.sc-media-meter{background:#050506;place-items:stretch;padding:0 16px}
+.sc-bigmeter{align-self:center;display:flex;flex-direction:column;gap:8px}
+.sc-bigmeter-bar{position:relative;height:30px;border-radius:7px;background:#17171a;overflow:hidden}
+.sc-bigmeter-bar i{position:absolute;inset:0;background:linear-gradient(90deg,#30D158 0 76%,#FFD60A 76% 88%,#E8463A 88%);clip-path:inset(0 100% 0 0);transition:clip-path 60ms linear}
+.sc-bigmeter-bar b{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:#fff;left:0}
+.sc-bigmeter-scale{position:relative;height:12px;font:10px var(--mono);color:var(--fg-dim)}
+.sc-bigmeter-scale span{position:absolute;transform:translateX(-50%);white-space:nowrap}
+.sc-bigmeter-scale span:nth-child(1){left:0;transform:none}
+.sc-bigmeter-scale span:nth-child(2){left:52%}
+.sc-bigmeter-scale span:nth-child(3){left:76%}
+.sc-bigmeter-scale span:nth-child(4){left:88%}
+.sc-bigmeter-scale span:nth-child(5){right:0;left:auto;transform:none}
+.sc-bigmeter-read{font:600 12px var(--mono);color:var(--fg-dim);text-align:center}

@@ -223,7 +223,14 @@ function init() {
   // Reconnect by itself after a reload (or when the camera is plugged back in), unless you pressed Disconnect.
   async function autoConnect() {
     if (!store.get('camAuto', false) || cam.state === 'connected' || cam.state === 'connecting' || cam.state === 'unsupported') return;
-    if (await cam.hasPermittedDevice()) cam.connect({ pick: false });
+    if (!(await cam.hasPermittedDevice())) return;
+    // After a reload macOS's camera service often grabs the camera for a moment, so keep trying for ~20 s.
+    for (let i = 0; i < 10; i++) {
+      if (!store.get('camAuto', false) || cam.state === 'connected') return;
+      if (cam.state !== 'connecting') await cam.connect({ pick: false });
+      if (cam.state === 'connected') return;
+      await new Promise(r => setTimeout(r, 2000));
+    }
   }
   if (CamCore.supported) {
     autoConnect();

@@ -74,21 +74,44 @@
 .cap-side.sc-rec:hover{background:rgba(232,70,58,.14)}
 .cap-side.sc-rec.on:hover{background:var(--red)}
 
-/* takes (left rail) */
-.sc-takes{margin-top:22px}
-.sc-mini-btn{font-size:11px;background:transparent;border:1px dashed #3a3a3d;border-radius:7px;color:var(--fg-dim);padding:3px 8px;cursor:pointer}
-.sc-mini-btn:hover{color:var(--fg);border-color:#5a5a60}
+/* takes (left rail): above Scripts, same row style as scripts */
+#new-script-btn{display:none!important}          /* new scripts start from the main paste page */
+.sc-takes{margin-top:0}
+.sc-takes .scripts-head{margin-top:28px}
+#scTakeList{display:flex;flex-direction:column;gap:8px}
+.sc-mini-btn{font-family:'Archivo',system-ui,sans-serif;font-weight:600;font-size:12px;background:transparent;border:1px dashed var(--hair);border-radius:8px;color:var(--fg-dim);padding:5px 10px;cursor:pointer}
+.sc-mini-btn:hover{color:var(--fg);border-color:var(--fg-dim)}
 .sc-none{font-size:12px;color:var(--fg-dim);line-height:1.6}
-.sc-take{border:1px solid var(--hair);border-radius:10px;padding:9px 11px;margin-bottom:7px;background:var(--surface)}
-.sc-take.recovered{border-color:#4a3a12}
-.sc-take-top{display:flex;justify-content:space-between;font-size:13px}
-.sc-take-top span{font:12px var(--mono);color:var(--fg-dim)}
-.sc-take-sub{font-size:11px;color:var(--fg-dim);margin-top:3px;line-height:1.45}
+.script-tab.sc-take{align-items:flex-start;padding-top:10px;padding-bottom:10px}
+.sc-take-main{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+.sc-take-sub{font-family:'Public Sans',system-ui,sans-serif;font-weight:400;font-size:11px;line-height:1.45;color:var(--fg-dim)}
 .sc-take-sub em{font-style:normal;color:#FFD60A}
-.sc-take-actions{display:flex;gap:6px;margin-top:7px}
-.sc-take-actions:empty{display:none}
-.sc-take-actions button{font-size:11.5px;background:var(--raised);border:1px solid var(--hair);border-radius:7px;padding:4px 9px;color:var(--fg);cursor:pointer}
-.sc-take-actions button.danger{color:#ff8a80}
+.script-tab.sc-take.unsaved{border-color:#4a3a12}
+.script-tab.sc-take .script-tab-actions{padding-top:1px}
+#left-rail .scripts-head:not(.sc-takes .scripts-head){margin-top:30px}
+
+/* popups: play / rename / delete take, edit script text */
+.sc-modal{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:24px}
+.sc-modal-card{width:min(440px,100%);background:var(--panel);border:1px solid var(--hair);border-radius:16px;padding:20px;box-shadow:0 30px 80px rgba(0,0,0,.6);display:flex;flex-direction:column;gap:14px}
+.sc-modal-card.sc-modal-wide{width:min(860px,100%);height:min(80vh,760px)}
+.sc-modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.sc-modal-title{font-family:'Archivo',system-ui,sans-serif;font-weight:700;font-size:17px}
+.sc-modal-name{font-size:12.5px;color:var(--fg-dim);margin-top:4px}
+.sc-modal-x{background:none;border:0;color:var(--fg-dim);font-size:16px;cursor:pointer;padding:4px 6px;border-radius:8px}
+.sc-modal-x:hover{color:var(--fg);background:rgba(255,255,255,.08)}
+.sc-modal-text{flex:1;min-height:0;resize:none;background:var(--raised);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;color:var(--fg);font:15px/1.6 'Public Sans',system-ui,sans-serif;outline:none}
+.sc-modal-text:focus{border-color:rgba(255,255,255,.4)}
+.sc-modal-input{background:var(--raised);border:1px solid var(--hair);border-radius:10px;padding:11px 12px;color:var(--fg);font:14px 'Public Sans',system-ui,sans-serif;outline:none}
+.sc-modal-input:focus{border-color:rgba(255,255,255,.4)}
+.sc-modal-hint{font-size:12px;color:var(--fg-dim);margin-right:auto}
+.sc-modal-p{margin:0;font-size:13.5px;line-height:1.55;color:#cfcfd2}
+.sc-modal-meta{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--fg-dim)}
+.sc-modal-meta code{font:11.5px var(--mono);color:var(--fg);word-break:break-all}
+.sc-modal audio{width:100%}
+.sc-modal-row{display:flex;align-items:center;justify-content:flex-end;gap:10px}
+.sc-modal-row .btn{padding:10px 18px}
+.sc-modal-row .btn.primary{flex:none;min-width:0;box-shadow:none}
+.sc-modal-row .btn.primary.danger{background:var(--red);border-color:var(--red);color:#fff}
 
 /* toast */
 .sc-toast{position:fixed;left:50%;bottom:110px;transform:translateX(-50%);z-index:50;max-width:min(640px,80vw);background:rgba(20,20,22,.96);border:1px solid var(--hair);border-radius:12px;padding:10px 16px;font-size:13px;color:var(--fg);box-shadow:0 10px 40px rgba(0,0,0,.5)}

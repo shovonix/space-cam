@@ -188,9 +188,9 @@ export class AudioCore extends EventTarget {
   async deleteStored(name) { await this.#ask('delete', { name }); }
 
   /** Copies a stored take into a folder handle (File System Access). Deletes the stored copy on success. */
-  async moveToFolder(name, dirHandle) {
+  async moveToFolder(name, dirHandle, destName = name) {
     const file = await this.getStoredFile(name);
-    const dest = await dirHandle.getFileHandle(name, { create: true });
+    const dest = await dirHandle.getFileHandle(destName, { create: true });
     const w = await dest.createWritable();
     await file.stream().pipeTo(w);
     await this.deleteStored(name);
@@ -198,14 +198,14 @@ export class AudioCore extends EventTarget {
   }
 
   /** Asks where to save one take (Save dialog). */
-  async saveAs(name) {
+  async saveAs(name, destName = name) {
     const file = await this.getStoredFile(name);
     if (window.showSaveFilePicker) {
-      const h = await showSaveFilePicker({ suggestedName: name, types: [{ description: 'WAV audio', accept: { 'audio/wav': ['.wav'] } }] });
+      const h = await showSaveFilePicker({ suggestedName: destName, types: [{ description: 'WAV audio', accept: { 'audio/wav': ['.wav'] } }] });
       const w = await h.createWritable();
       await file.stream().pipeTo(w);
     } else {
-      const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = name; a.click();
+      const a = document.createElement('a'); a.href = URL.createObjectURL(file); a.download = destName; a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 10000);
     }
     await this.deleteStored(name);

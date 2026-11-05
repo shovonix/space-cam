@@ -104,8 +104,8 @@ function init() {
   utility.after(camSec); camSec.after(audioSec);
   const play = $('play');
   play.after(recBtn); play.after(h(`<span class="cap-div"></span>`));
-  const leftSpacer = document.querySelector('#left-rail .rail-spacer');
-  leftSpacer.before(takesSec);
+  const scriptsHead = document.querySelector('#left-rail .scripts-head');
+  scriptsHead.before(takesSec);
   document.body.append(toastEl);
   document.querySelector('#setup .brand')?.before(strip);
   const hint = $('shortcuts-hint');
@@ -347,37 +347,143 @@ function init() {
     return takes.filter(t => new Date(t.startedAt).toDateString() === today).reduce((m, t) => Math.max(m, t.no || 0), 0) + 1;
   }
 
+  const ICON = {
+    play: '<svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>',
+    rename: '<svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75z"/></svg>',
+    del: '<svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>',
+    save: '<svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>',
+  };
+  const takeLabel = t => t.label || (t.recovered ? 'Recovered take' : `Take ${pad(t.no)}`);
+  const fullDate = d => d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) + ` · ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const safeFileName = (label, t) => {
+    const base = label.replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 80) || `Take-${pad(t.no || 0)}`;
+    return /\.wav$/i.test(base) ? base : base + '.wav';
+  };
+  t_ids();
+  function t_ids() { takes.forEach(t => { if (!t.id) t.id = 't' + (t.startedAt || Date.now()).toString(36) + Math.random().toString(36).slice(2, 6); }); }
+
+  // Where a take's audio lives right now: { file } or { missing: true }
+  async function takeFile(t) {
+    if (t.audio === 'browser') return { file: await audio.getStoredFile(t.name) };
+    if (t.audio === 'folder') {
+      const dir = (await idb.get('dir:' + t.id)) || folder;
+      if (!dir) return { missing: true };
+      let p = await dir.queryPermission({ mode: 'readwrite' });
+      if (p === 'prompt') { try { p = await dir.requestPermission({ mode: 'readwrite' }); } catch {} }
+      if (p !== 'granted') return { denied: true };
+      try { return { file: await (await dir.getFileHandle(t.name)).getFile(), dir }; } catch { return { missing: true }; }
+    }
+    return { missing: true };
+  }
+
+  // small popup used for play / rename / delete
+  function modal(inner, { wide = false } = {}) {
+    const wrap = h(`<div class="sc-modal"><div class="sc-modal-card${wide ? ' sc-modal-wide' : ''}" role="dialog" aria-modal="true">${inner}</div></div>`);
+    const close = () => { wrap.querySelectorAll('audio').forEach(a => { a.pause(); if (a.src) URL.revokeObjectURL(a.src); }); wrap.remove(); document.removeEventListener('keydown', onKey, true); };
+    const onKey = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(); } };
+    wrap.addEventListener('mousedown', e => { if (e.target === wrap) close(); });
+    wrap.querySelectorAll('[data-close]').forEach(b => (b.onclick = close));
+    document.addEventListener('keydown', onKey, true);
+    document.body.append(wrap);
+    return { wrap, close };
+  }
+  const esc = x => String(x).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+  async function playTake(t) {
+    const r = await takeFile(t);
+    if (r.denied) return toast('Allow access to the save folder first (Audio panel → Allow access).', 'error');
+    if (r.missing || !r.file) { t.missing = true; saveTakes(); renderTakes(); return toast(`“${t.name}” was moved or deleted from the folder.`, 'error'); }
+    const url = URL.createObjectURL(r.file);
+    const where = t.audio === 'folder' ? `In folder “${esc(t.folderName || folder?.name || '')}”` : 'Waiting in the browser — not saved to a folder yet';
+    const m = modal(`
+      <div class="sc-modal-head"><div><div class="sc-modal-title">${esc(takeLabel(t))}</div><div class="sc-modal-name">${esc(fullDate(new Date(t.startedAt)))}${t.seconds != null ? ' · ' + fmt(t.seconds) : ''}</div></div>
+        <button type="button" class="sc-modal-x" data-close aria-label="Close">✕</button></div>
+      <audio controls autoplay src="${url}"></audio>
+      <div class="sc-modal-meta"><code>${esc(t.name)}</code><span>${where}</span></div>
+      <div class="sc-modal-row"><button type="button" class="btn ghost sc-dl">Download a copy</button><button type="button" class="btn primary" data-close>Done</button></div>`);
+    m.wrap.querySelector('.sc-dl').onclick = () => { const a = document.createElement('a'); a.href = url; a.download = t.name; a.click(); };
+  }
+
+  async function renameTake(t) {
+    const m = modal(`
+      <div class="sc-modal-head"><div class="sc-modal-title">Rename take</div><button type="button" class="sc-modal-x" data-close aria-label="Close">✕</button></div>
+      <input class="sc-modal-input" value="${esc(takeLabel(t))}" maxlength="80" spellcheck="false">
+      <div class="sc-modal-hint">${t.audio === 'folder' ? 'The WAV file in your folder is renamed too.' : 'The file gets this name when it is saved.'}</div>
+      <div class="sc-modal-row"><button type="button" class="btn ghost" data-close>Cancel</button><button type="button" class="btn primary sc-ok">Rename</button></div>`);
+    const inp = m.wrap.querySelector('input'); inp.focus(); inp.select();
+    const ok = async () => {
+      const label = inp.value.trim(); if (!label) return inp.focus();
+      if (t.audio === 'folder') {
+        const newName = safeFileName(label, t);
+        if (newName !== t.name) {
+          const r = await takeFile(t);
+          if (r.denied) return toast('Allow access to the save folder first.', 'error');
+          if (r.missing) return toast('The file was moved or deleted from the folder, so it can’t be renamed.', 'error');
+          try {
+            if (await r.dir.getFileHandle(newName).then(() => true, () => false)) return toast(`A file called “${newName}” already exists in that folder.`, 'error');
+            const fh = await r.dir.getFileHandle(t.name);
+            if (fh.move) { try { await fh.move(newName); } catch { await copyRename(r.dir, r.file, t.name, newName); } }
+            else await copyRename(r.dir, r.file, t.name, newName);
+            t.name = newName;
+          } catch (e) { return toast('Could not rename the file: ' + (e?.message || e), 'error'); }
+        }
+      }
+      t.label = label; saveTakes(); renderTakes(); m.close(); toast('Take renamed.', 'ok');
+    };
+    m.wrap.querySelector('.sc-ok').onclick = ok;
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); ok(); } });
+  }
+  async function copyRename(dir, file, oldName, newName) {
+    const w = await (await dir.getFileHandle(newName, { create: true })).createWritable();
+    await file.stream().pipeTo(w);
+    await dir.removeEntry(oldName);
+  }
+
+  function deleteTake(t) {
+    const inFolder = t.audio === 'folder' || t.audio === 'saved';
+    const unsaved = t.audio === 'browser';
+    const m = modal(`
+      <div class="sc-modal-head"><div class="sc-modal-title">Delete “${esc(takeLabel(t))}”?</div><button type="button" class="sc-modal-x" data-close aria-label="Close">✕</button></div>
+      <p class="sc-modal-p">${unsaved ? 'This audio was never saved to a folder. Deleting it removes it for good.' :
+        inFolder ? 'This only removes it from the list. The WAV file stays in your folder.' : 'This removes it from the list.'}</p>
+      <div class="sc-modal-row"><button type="button" class="btn ghost" data-close>Cancel</button><button type="button" class="btn primary sc-ok${unsaved ? ' danger' : ''}">${unsaved ? 'Delete audio' : 'Remove from list'}</button></div>`);
+    m.wrap.querySelector('.sc-ok').onclick = async () => {
+      if (unsaved) await audio.deleteStored(t.name).catch(() => {});
+      takes = takes.filter(x => x !== t); saveTakes(); renderTakes(); m.close();
+    };
+  }
+
   function renderTakes() {
+    t_ids();
     const list = takes.slice().reverse();
     ui.saveAll.hidden = !takes.some(t => t.audio === 'browser');
     if (!list.length) { ui.takeList.innerHTML = '<div class="sc-none">No takes yet. Press <kbd>R</kbd> to record.</div>'; return; }
     ui.takeList.replaceChildren(...list.map(t => {
       const when = new Date(t.startedAt);
-      const el = h(`<div class="sc-take${t.recovered ? ' recovered' : ''}">
-        <div class="sc-take-top"><b>${t.recovered ? 'Recovered' : 'Take ' + pad(t.no)}</b><span>${t.seconds != null ? fmt(t.seconds) : '—'}</span></div>
-        <div class="sc-take-sub">${pad(when.getHours())}:${pad(when.getMinutes())} · ${t.camera ? 'clip on camera card' : 'no camera'} · ${
-          t.audio === 'folder' ? 'audio in ' + (t.folderName || 'folder') : t.audio === 'saved' ? 'audio saved' : t.audio === 'browser' ? '<em>audio not saved yet</em>' : 'no audio'}</div>
-        <div class="sc-take-actions"></div></div>`);
-      const actions = el.querySelector('.sc-take-actions');
-      if (t.audio === 'browser') {
-        const save = h(`<button type="button">Save audio</button>`); save.onclick = () => saveTake(t); actions.append(save);
-        const del = h(`<button type="button" class="danger">Delete</button>`);
-        del.onclick = async () => {
-          if (del.dataset.armed !== '1') { del.dataset.armed = '1'; del.textContent = 'Sure?'; setTimeout(() => { del.dataset.armed = ''; del.textContent = 'Delete'; }, 3000); return; }
-          await audio.deleteStored(t.name).catch(() => {}); takes = takes.filter(x => x !== t); saveTakes(); renderTakes();
-        };
-        actions.append(del);
-      }
-      el.title = t.name || '';
+      const hasAudio = t.audio === 'folder' || t.audio === 'browser';
+      const status = t.missing ? '<em>file moved</em>' : t.audio === 'folder' ? 'audio in ' + esc(t.folderName || 'folder') : t.audio === 'saved' ? 'audio saved' : t.audio === 'browser' ? '<em>not saved yet</em>' : 'no audio';
+      const el = h(`<div class="script-tab sc-take${t.recovered || t.audio === 'browser' ? ' unsaved' : ''}" role="button" tabindex="0">
+        <span class="sc-take-main">
+          <span class="script-tab-name">${esc(takeLabel(t))}</span>
+          <span class="sc-take-sub">${esc(fullDate(when))}<br>${t.seconds != null ? fmt(t.seconds) + ' · ' : ''}${t.camera ? 'clip on card · ' : ''}${status}</span>
+        </span>
+        <span class="script-tab-actions"></span></div>`);
+      const actions = el.querySelector('.script-tab-actions');
+      const act = (icon, title, fn) => { const b = h(`<span class="script-tab-act" role="button" title="${title}" aria-label="${title}">${ICON[icon]}</span>`); b.onclick = e => { e.stopPropagation(); fn(); }; actions.append(b); };
+      if (t.audio === 'browser') act('save', 'Save audio', () => saveTake(t));
+      act('rename', 'Rename', () => renameTake(t));
+      act('del', 'Delete', () => deleteTake(t));
+      if (hasAudio) { el.onclick = () => playTake(t); el.title = 'Play ' + t.name; el.onkeydown = e => { if (e.key === 'Enter') playTake(t); }; }
       return el;
     }));
   }
 
   async function saveTake(t) {
     try {
-      if (await folderOk(true)) { await audio.moveToFolder(t.name, folder); t.audio = 'folder'; t.folderName = folder.name; }
-      else { await audio.saveAs(t.name); t.audio = 'saved'; }
-      delete t.recovered; saveTakes(); renderTakes(); toast(`${t.name} saved.`, 'ok');
+      const dest = t.label ? safeFileName(t.label, t) : t.name;
+      if (await folderOk(true)) { await audio.moveToFolder(t.name, folder, dest); t.name = dest; t.audio = 'folder'; t.folderName = folder.name; await idb.set('dir:' + t.id, folder); }
+      else { await audio.saveAs(t.name, dest); t.name = dest; t.audio = 'saved'; }
+      delete t.recovered; delete t.missing; saveTakes(); renderTakes(); toast(`${t.name} saved.`, 'ok');
     } catch (e) { if (e?.name !== 'AbortError') toast('Could not save: ' + (e?.message || e), 'error'); }
   }
   ui.saveAll.onclick = async () => { for (const t of takes.filter(t => t.audio === 'browser')) await saveTake(t); };
@@ -422,7 +528,7 @@ function init() {
     if (!a && !c) return toast('Recording did not start. Check the camera and microphone.', 'error');
     if (camOk && !c) toast('Camera did not start recording. Audio is recording.', 'error');
     if (micOk && !a) toast('Audio did not start. Camera is recording.', 'error');
-    take = { no, name: a ? name : null, startedAt: started.getTime(), camera: !!c, audio: a ? 'recording' : 'none' };
+    take = { id: 't' + started.getTime().toString(36), no, name: a ? name : null, startedAt: started.getTime(), camera: !!c, audio: a ? 'recording' : 'none' };
     try { wake = await navigator.wakeLock?.request('screen'); } catch {}
     timer = setInterval(tick, 250); tick();
   }
@@ -436,7 +542,7 @@ function init() {
     if (t.audio === 'recording') {
       t.audio = a ? 'browser' : 'none';
       if (a && await folderOk(false)) {
-        try { await audio.moveToFolder(t.name, folder); t.audio = 'folder'; t.folderName = folder.name; }
+        try { await audio.moveToFolder(t.name, folder); t.audio = 'folder'; t.folderName = folder.name; await idb.set('dir:' + t.id, folder); }
         catch (e) { toast('Audio kept in the browser — could not write to the folder: ' + (e?.message || e), 'error'); }
       }
     }

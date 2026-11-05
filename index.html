@@ -3771,6 +3771,47 @@ var qrcode = function() {
     save();
     renderScriptTabs();
   }
+  // Space Cam: edit a saved script's full text in a popup (re-paste the whole script).
+  function openScriptEditor(id, evt){
+    if(evt) evt.stopPropagation();
+    var s = findScript(id);
+    if(!s) return;
+    var wrap = document.createElement('div');
+    wrap.className = 'sc-modal';
+    wrap.innerHTML = '<div class="sc-modal-card sc-modal-wide" role="dialog" aria-modal="true" aria-label="Edit script">' +
+      '<div class="sc-modal-head"><div><div class="sec-title" style="margin:0">Edit script</div><div class="sc-modal-name"></div></div>' +
+      '<button type="button" class="sc-modal-x" aria-label="Close">✕</button></div>' +
+      '<textarea class="sc-modal-text" spellcheck="false" placeholder="Paste or type your script here"></textarea>' +
+      '<div class="sc-modal-row"><span class="sc-modal-hint"><kbd>⌘</kbd><kbd>Enter</kbd> save · <kbd>Esc</kbd> cancel</span>' +
+      '<button type="button" class="btn ghost sc-cancel">Cancel</button><button type="button" class="btn primary sc-save">Save</button></div></div>';
+    wrap.querySelector('.sc-modal-name').textContent = s.name;
+    var ta = wrap.querySelector('textarea');
+    ta.value = s.text || '';
+    function close(){ wrap.remove(); document.removeEventListener('keydown', onKey, true); }
+    function commit(){
+      var v = ta.value;
+      if(!v.trim()){ ta.focus(); return; }
+      s.text = v; s.updatedAt = Date.now();
+      save();
+      if(s.id === state.activeScriptId){
+        input.value = v;
+        if(!stage.classList.contains('hidden')){ applyText(); updateProgress(); }
+      }
+      renderScriptTabs();
+      close();
+    }
+    function onKey(e){
+      if(e.key === 'Escape'){ e.preventDefault(); e.stopPropagation(); close(); }
+      else if(e.key === 'Enter' && (e.metaKey || e.ctrlKey)){ e.preventDefault(); e.stopPropagation(); commit(); }
+    }
+    wrap.addEventListener('mousedown', function(e){ if(e.target === wrap) close(); });
+    wrap.querySelector('.sc-modal-x').onclick = close;
+    wrap.querySelector('.sc-cancel').onclick = close;
+    wrap.querySelector('.sc-save').onclick = commit;
+    document.addEventListener('keydown', onKey, true);
+    document.body.appendChild(wrap);
+    ta.focus(); ta.setSelectionRange(0, 0); ta.scrollTop = 0;
+  }
   function deleteScript(id, evt){
     if(evt) evt.stopPropagation();
     var s = findScript(id);
@@ -3815,7 +3856,15 @@ var qrcode = function() {
       delBtn.title = 'Delete';
       delBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>';
       delBtn.addEventListener('click', function(e){ deleteScript(s.id, e); });
+      var textAct = document.createElement('span');
+      textAct.className = 'script-tab-act';
+      textAct.setAttribute('role', 'button');
+      textAct.setAttribute('aria-label', 'Edit the text of ' + s.name);
+      textAct.title = 'Edit text';
+      textAct.innerHTML = '<svg viewBox="0 0 24 24"><path d="M14 2H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>';
+      textAct.addEventListener('click', function(e){ openScriptEditor(s.id, e); });
       actions.appendChild(editAct);
+      actions.appendChild(textAct);
       actions.appendChild(delBtn);
       tab.appendChild(nameSpan);
       tab.appendChild(actions);

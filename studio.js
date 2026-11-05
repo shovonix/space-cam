@@ -18,6 +18,10 @@ function init() {
   const fmt = s => `${pad(Math.floor(s / 60))}:${pad(s % 60)}`;
   const LIMIT = CamCore.RECORD_LIMIT_S, WARN_AT = 29 * 60;
 
+  // Hard reload (Cmd+Shift+R) = start fully disconnected. A normal reload reconnects camera and mic.
+  const hardReload = sessionStorage.getItem('spaceCamHardReload') === '1';
+  sessionStorage.removeItem('spaceCamHardReload');
+  if (hardReload) { store.set('camAuto', false); store.set('micAuto', false); }
   const cam = new CamCore();
   const audio = new AudioCore();
 
@@ -167,7 +171,7 @@ function init() {
     ui.cCamBtn.parentElement.classList.toggle('ready', on);
   }
   cam.addEventListener('state', e => {
-    if (e.detail.state === 'connected') { ui.problem.hidden = true; ui.problem2.hidden = true; delete ui.connect.dataset.retry; cam.startPreview(); }
+    if (e.detail.state === 'connected') { store.set('camAuto', true); ui.problem.hidden = true; ui.problem2.hidden = true; delete ui.connect.dataset.retry; cam.startPreview(); }
     if (e.detail.state === 'disconnected') { showCamProblem('nodevice', 'Camera unplugged or switched off.'); closeBig(); if (take) toast('Camera disconnected during the take.', 'error'); }
     renderCam(); renderRec();
   });
@@ -219,8 +223,18 @@ function init() {
   ui.cCamBtn.onclick = () => (cam.state === 'connected' ? ui.disconnect.onclick() : ui.connect.onclick());
   ui.disconnect.onclick = () => {
     if (cam.recording) return toast('Stop recording first.', 'error');
-    closeBig(); cam.disconnect(); toast('Camera released.');
+    store.set('camAuto', false); closeBig(); cam.disconnect(); toast('Camera released.');
   };
+
+  // Reconnect by itself after a reload (or when the camera is plugged back in), unless you pressed Disconnect.
+  async function autoConnect() {
+    if (!store.get('camAuto', false) || cam.state === 'connected' || cam.state === 'connecting' || cam.state === 'unsupported') return;
+    if (await cam.hasPermittedDevice()) cam.connect({ pick: false });
+  }
+  if (CamCore.supported) {
+    autoConnect();
+    navigator.usb.addEventListener('connect', () => setTimeout(autoConnect, 1200));
+  }
 
   // focus
   let afHeld = false;
@@ -304,7 +318,7 @@ function init() {
   }
   async function openMic(id) {
     const ok = await audio.open(id ?? store.get('micId', ''));
-    if (ok) { store.set('micId', audio.deviceId); await fillMics(); }
+    if (ok) { store.set('micId', audio.deviceId); store.set('micAuto', true); await fillMics(); }
     renderRec();
   }
   ui.micOn.onclick = () => openMic();
@@ -312,7 +326,7 @@ function init() {
   ui.mic.onchange = () => openMic(ui.mic.value);
   if (!AudioCore.supported) { ui.micOn.disabled = ui.cMicBtn.disabled = true; ui.micOn.querySelector('span').textContent = ui.cMicBtn.querySelector('span').textContent = 'Audio needs Chrome'; }
   // Re-open the mic automatically if permission was already given in an earlier visit.
-  navigator.permissions?.query({ name: 'microphone' }).then(p => { if (p.state === 'granted' && AudioCore.supported) openMic(); }).catch(() => {});
+  if (store.get('micAuto', false) && AudioCore.supported) navigator.permissions?.query({ name: 'microphone' }).then(p => { if (p.state === 'granted') openMic(); }).catch(() => {});
 
   // save folder (File System Access), remembered in IndexedDB
   const idb = {

@@ -1,4 +1,5 @@
 <meta charset="UTF-8">
+<script>/* Space Cam: a hard reload (Cmd+Shift+R) skips the service worker, so there is no controller. Remember it: that reload starts disconnected. */try{var nv=performance.getEntriesByType('navigation')[0];if(nv&&nv.type==='reload'&&navigator.serviceWorker&&!navigator.serviceWorker.controller)sessionStorage.setItem('spaceCamHardReload','1');}catch(e){}</script>
 <script>window.coi = { coepCredentialless: () => true };</script>
 <script src="coi-serviceworker.js"></script>
 <link rel="manifest" href="manifest.webmanifest">

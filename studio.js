@@ -61,13 +61,13 @@ function init() {
   const audioSec = h(`
   <div class="sec sc-sec" id="scAudioSec">
     <div class="sec-title"><span>Audio</span><span class="sc-state" id="scMicState">off</span></div>
-    <button type="button" class="tbtn sc-wide" id="scMicOn"><span>Enable microphone</span></button>
+    <button type="button" class="tbtn sc-wide" id="scMicOn"><span>Connect mic</span></button>
     <select class="sc-select" id="scMic" hidden aria-label="Microphone"></select>
     <div class="sc-meter" id="scMeterWrap" hidden>
       <div class="sc-meter-bar"><i id="scMeterFill"></i><b id="scMeterPeak"></b></div>
       <div class="sc-meter-label"><span id="scDb">−∞ dB</span><span class="sc-clip" id="scClip">CLIP</span></div>
     </div>
-    <button type="button" class="sc-link" id="scMicOff" hidden>Disable microphone</button>
+    <button type="button" class="sc-link" id="scMicOff" hidden>Disconnect mic</button>
     <div class="sc-folder">
       <div class="sc-folder-row"><span>Save to</span><b id="scFolderName">Not chosen</b></div>
       <button type="button" class="tbtn sc-wide" id="scFolderBtn"><span>Choose folder</span></button>
@@ -91,22 +91,29 @@ function init() {
   <div class="sc-strip-wrap">
     <div class="sec-title"><span>Connect Devices</span><button type="button" class="sc-mini-btn" id="scSample">Load sample data</button></div>
     <div class="sc-strip">
-      <div class="sc-card" id="scCardCam">
-        <div class="sc-card-top"><span class="sc-card-title">Camera</span><span class="sc-state" id="scCardCamState">off</span></div>
+      <div class="sc-card sc-card-big" id="scCardCam">
+        <div class="sc-card-top"><span class="sc-card-title">Camera</span><span class="sc-status" id="scCardCamState">Off</span></div>
         <div class="sc-card-sub" id="scCardCamSub">USB · PC Remote · camera on</div>
-        <div class="sc-card-preview" id="scCardPreviewBox" hidden><span>Waiting for preview…</span><img id="scCardPreview" alt=""></div>
-        <button type="button" class="tbtn sc-wide" id="scCardCamBtn"><span>Connect camera</span></button>
+        <div class="sc-media" id="scCardPreviewBox"><span id="scCardPreviewMsg">Camera off</span><img id="scCardPreview" alt=""></div>
+        <button type="button" class="sc-cbtn primary" id="scCardCamBtn"><span>Connect camera</span></button>
       </div>
-      <div class="sc-card" id="scCardMic">
-        <div class="sc-card-top"><span class="sc-card-title">Microphone</span><span class="sc-state" id="scCardMicState">off</span></div>
+      <div class="sc-card sc-card-big" id="scCardMic">
+        <div class="sc-card-top"><span class="sc-card-title">Microphone</span><span class="sc-status" id="scCardMicState">Off</span></div>
         <div class="sc-card-sub" id="scCardMicSub">Any mic your Mac sees</div>
-        <div class="sc-meter-bar sc-card-meter" id="scCardMeter" hidden><i id="scCardMeterFill"></i></div>
-        <button type="button" class="tbtn sc-wide" id="scCardMicBtn"><span>Enable microphone</span></button>
+        <div class="sc-media" id="scCardWaveBox"><span id="scCardWaveMsg">Mic off</span><canvas id="scCardWave"></canvas><b class="sc-media-db" id="scCardDb"></b></div>
+        <button type="button" class="sc-cbtn primary" id="scCardMicBtn"><span>Connect mic</span></button>
       </div>
-      <div class="sc-card" id="scCardFolder">
-        <div class="sc-card-top"><span class="sc-card-title">Save folder</span><span class="sc-state" id="scCardFolderState">not set</span></div>
-        <div class="sc-card-sub" id="scCardFolderSub">Where audio takes go</div>
-        <button type="button" class="tbtn sc-wide" id="scCardFolderBtn"><span>Choose folder</span></button>
+      <div class="sc-stack">
+        <div class="sc-card" id="scCardFolder">
+          <div class="sc-card-top"><span class="sc-card-title">Save folder</span><span class="sc-status" id="scCardFolderState">Not set</span></div>
+          <div class="sc-card-sub" id="scCardFolderSub">Where audio takes go</div>
+          <button type="button" class="sc-cbtn primary" id="scCardFolderBtn"><span>Choose folder</span></button>
+        </div>
+        <div class="sc-card" id="scCardPedal">
+          <div class="sc-card-top"><span class="sc-card-title">Pedal</span><span class="sc-status" id="scCardPedalState">Off</span></div>
+          <div class="sc-card-sub" id="scCardPedalSub">Bluetooth pedal for the prompter</div>
+          <button type="button" class="sc-cbtn primary pedal-trigger" id="scCardPedalBtn"><span>Set up pedal</span></button>
+        </div>
       </div>
     </div>
     <div class="sc-problem" id="scProblem2" hidden></div>
@@ -137,7 +144,7 @@ function init() {
     meterPeak: $('scMeterPeak'), db: $('scDb'), clip: $('scClip'), folderName: $('scFolderName'), folderBtn: $('scFolderBtn'),
     rec: recBtn, recLabel: $('scRecLabel'), takeList: $('scTakeList'), saveAll: $('scSaveAll'),
     cCamState: $('scCardCamState'), cCamSub: $('scCardCamSub'), cCamBtn: $('scCardCamBtn'), cPreview: $('scCardPreview'), cPreviewBox: $('scCardPreviewBox'), micOff: $('scMicOff'),
-    cMicState: $('scCardMicState'), cMicSub: $('scCardMicSub'), cMicBtn: $('scCardMicBtn'), cMeter: $('scCardMeter'), cMeterFill: $('scCardMeterFill'),
+    cMicState: $('scCardMicState'), cMicSub: $('scCardMicSub'), cMicBtn: $('scCardMicBtn'), cWave: $('scCardWave'), cWaveMsg: $('scCardWaveMsg'), cDb: $('scCardDb'), cPreviewMsg: $('scCardPreviewMsg'), cPedalState: $('scCardPedalState'), cPedalSub: $('scCardPedalSub'), cPedalBtn: $('scCardPedalBtn'),
     cFolderState: $('scCardFolderState'), cFolderSub: $('scCardFolderSub'), cFolderBtn: $('scCardFolderBtn'), problem2: $('scProblem2'), help: $('scHelp'), help2: $('scHelp2'),
   };
 
@@ -162,12 +169,14 @@ function init() {
     ui.camState.textContent = cam.recording ? 'recording' : on ? (cam.model || 'connected') : cam.state === 'connecting' ? 'connecting' : cam.state === 'unsupported' ? 'needs Chrome' : 'off';
     ui.camState.className = 'sc-state' + (cam.recording ? ' rec' : on ? ' on' : '');
     if (!on) ui.fps.textContent = '';
-    ui.cCamState.textContent = ui.camState.textContent; ui.cCamState.className = ui.camState.className;
-    ui.cCamSub.textContent = on ? 'Connected' : 'USB · PC Remote · camera on';
-    ui.cPreviewBox.hidden = !on; if (!on) { ui.cPreview.removeAttribute('src'); ui.cPreviewBox.classList.remove('live'); }
+    badge(ui.cCamState, cam.recording ? 'rec' : on ? 'on' : cam.state === 'connecting' ? 'wait' : 'off',
+      cam.recording ? 'Recording' : on ? 'Ready' : cam.state === 'connecting' ? 'Connecting' : cam.state === 'unsupported' ? 'Needs Chrome' : 'Off');
+    ui.cCamSub.textContent = on ? cameraName(cam.model) : 'USB · PC Remote · camera on';
+    if (!on) { ui.cPreview.removeAttribute('src'); ui.cPreviewBox.classList.remove('live'); }
+    ui.cPreviewMsg.textContent = on ? 'Waiting for preview…' : cam.state === 'connecting' ? 'Connecting…' : 'Camera off';
     ui.cCamBtn.querySelector('span').textContent = on ? 'Disconnect' : ui.connect.textContent;
+    ui.cCamBtn.classList.toggle('primary', !on);
     ui.cCamBtn.disabled = ui.connect.disabled && !on;
-    ui.cCamBtn.parentElement.classList.toggle('ready', on);
     ui.help.hidden = ui.help2.hidden = on || cam.state === 'unsupported';
   }
   cam.addEventListener('state', e => {
@@ -235,6 +244,47 @@ function init() {
     if (cam.recording) return toast('Stop recording first.', 'error');
     store.set('camAuto', false); closeBig(); cam.disconnect(); toast('Camera released.');
   };
+
+  function badge(el, kind, text) { el.textContent = text; el.className = 'sc-status' + (kind === 'off' ? '' : ' ' + kind); }
+  // Sony bodies report a model code (ILCE-7M3); show the name people know next to it.
+  const SONY_NAMES = { 'ILCE-7M3': 'α7 III', 'ILCE-7RM3': 'α7R III', 'ILCE-7RM3A': 'α7R IIIA', 'ILCE-7M4': 'α7 IV', 'ILCE-7RM4': 'α7R IV', 'ILCE-7RM4A': 'α7R IVA', 'ILCE-7RM5': 'α7R V', 'ILCE-7SM3': 'α7S III', 'ILCE-7C': 'α7C', 'ILCE-7CM2': 'α7C II', 'ILCE-7CR': 'α7CR', 'ILCE-9': 'α9', 'ILCE-9M2': 'α9 II', 'ILCE-1': 'α1', 'ILCE-6100': 'α6100', 'ILCE-6400': 'α6400', 'ILCE-6600': 'α6600', 'ILCE-6700': 'α6700', 'ZV-E10': 'ZV-E10', 'ZV-E1': 'ZV-E1', 'ILME-FX3': 'FX3', 'ILME-FX30': 'FX30' };
+  function cameraName(code) {
+    const c = String(code || '').trim(); if (!c) return 'Connected';
+    const k = Object.keys(SONY_NAMES).find(k => c.toUpperCase().startsWith(k) && !/[A-Z0-9]/.test(c.toUpperCase()[k.length] || ''));
+    return k ? `Sony ${SONY_NAMES[k]} · ${c}` : c;
+  }
+
+  // live audio wave in the mic card: one bar per ~33 ms, newest on the right
+  const liveWave = new Array(72).fill(0); let waveTick = 0;
+  function pushWave(v) { if (++waveTick % 2) return; liveWave.shift(); liveWave.push(v); drawLiveWave(); }
+  function drawLiveWave() {
+    const c = ui.cWave; if (!c || !c.isConnected) return;
+    const dpr = devicePixelRatio || 1, w = c.clientWidth, hgt = c.clientHeight; if (!w || !hgt) return;
+    if (c.width !== Math.round(w * dpr) || c.height !== Math.round(hgt * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(hgt * dpr); }
+    const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, hgt);
+    const n = liveWave.length, step = w / n, bw = Math.max(1.5, step * 0.62), mid = hgt / 2;
+    g.fillStyle = 'rgba(255,255,255,.08)'; g.fillRect(0, mid - 0.5, w, 1);
+    for (let i = 0; i < n; i++) {
+      const v = liveWave[i]; if (v <= 0) continue;
+      const bh = Math.max(1.5, v * (hgt * 0.86));
+      g.fillStyle = v > 0.88 ? '#E8463A' : v > 0.76 ? '#FFD60A' : '#30D158';
+      g.globalAlpha = 0.35 + 0.65 * (i / n);
+      g.fillRect(i * step + (step - bw) / 2, mid - bh / 2, bw, bh);
+    }
+    g.globalAlpha = 1;
+  }
+
+  // pedal card (keys live in the prompter's state; index.html exposes them)
+  function renderPedal() {
+    const n = window.spaceCamPedal?.count() || 0;
+    badge(ui.cPedalState, n ? 'on' : 'off', n ? 'Ready' : 'Off');
+    ui.cPedalSub.textContent = n ? `${n} pedal button${n > 1 ? 's' : ''} set` : 'Bluetooth pedal for the prompter';
+    ui.cPedalBtn.querySelector('span').textContent = n ? 'Edit pedal' : 'Set up pedal';
+    ui.cPedalBtn.classList.toggle('primary', !n);
+  }
+  ui.cPedalBtn.onclick = e => window.spaceCamPedal?.open(e.currentTarget);
+  window.addEventListener('spacecam-pedal', renderPedal);
+  renderPedal();
 
   // Reconnect by itself after a reload (or when the camera is plugged back in), unless you pressed Disconnect.
   async function autoConnect() {
@@ -318,12 +368,13 @@ function init() {
     shownT = now0;
     const peakDb = shown;
     const pct = toPct(peakDb);
-    ui.meterFill.style.width = pct + '%'; ui.cMeterFill.style.width = pct + '%';
+    ui.meterFill.style.width = pct + '%'; pushWave(toPct(e.detail.peakDb) / 100);
     // The thin marker shows real peaks (held 1.5 s), so you still see how close you get to clipping.
     const now = performance.now(), p = e.detail.peakDb;
     if (p > peakHold || now - peakHoldT > 1500) { peakHold = p; peakHoldT = now; }
     ui.meterPeak.style.left = toPct(peakHold) + '%';
     ui.db.textContent = peakHold <= -119 ? "−∞ dB" : `peak ${peakHold.toFixed(0)} dB`;
+    ui.cDb.textContent = ui.db.textContent;
     ui.clip.classList.toggle('on', clip);
   });
   function renderMic() {
@@ -332,12 +383,13 @@ function init() {
     ui.micState.textContent = audio.state === 'recording' ? 'recording' : on ? 'ready' : 'off';
     ui.micState.className = 'sc-state' + (audio.state === 'recording' ? ' rec' : on ? ' on' : '');
     ui.mic.disabled = audio.state === 'recording';
-    ui.cMicState.textContent = ui.micState.textContent; ui.cMicState.className = ui.micState.className;
+    badge(ui.cMicState, audio.state === 'recording' ? 'rec' : on ? 'on' : 'off', audio.state === 'recording' ? 'Recording' : on ? 'Ready' : 'Off');
     ui.cMicSub.textContent = on ? audio.deviceLabel : 'Any mic your Mac sees';
-    ui.cMeter.hidden = !on; ui.micOff.hidden = !on;
-    ui.cMicBtn.querySelector('span').textContent = on ? 'Disable' : 'Enable microphone';
+    ui.micOff.hidden = !on;
+    ui.cWaveMsg.hidden = on; if (!on) { liveWave.fill(0); drawLiveWave(); ui.cDb.textContent = ''; }
+    ui.cMicBtn.querySelector('span').textContent = on ? 'Disconnect' : 'Connect mic';
+    ui.cMicBtn.classList.toggle('primary', !on);
     ui.cMicBtn.disabled = audio.state === 'recording';
-    ui.cMicBtn.parentElement.classList.toggle('ready', on);
   }
   async function openMic(id) {
     const ok = await audio.open(id ?? store.get('micId', ''));
@@ -347,12 +399,13 @@ function init() {
   ui.micOn.onclick = () => openMic();
   async function closeMic() {
     if (take || audio.state === 'recording') return toast('Stop recording first.', 'error');
-    store.set('micAuto', false); await audio.close(); renderMic(); renderRec(); toast('Microphone off.');
+    store.set('micAuto', false); await audio.close(); renderMic(); renderRec(); toast('Mic disconnected.');
   }
   ui.cMicBtn.onclick = () => (audio.state !== 'off' ? closeMic() : openMic());
   ui.micOff.onclick = closeMic;
   ui.mic.onchange = () => openMic(ui.mic.value);
   if (!AudioCore.supported) { ui.micOn.disabled = ui.cMicBtn.disabled = true; ui.micOn.querySelector('span').textContent = ui.cMicBtn.querySelector('span').textContent = 'Audio needs Chrome'; }
+  renderMic();
   // Re-open the mic automatically if permission was already given in an earlier visit.
   if (store.get('micAuto', false) && AudioCore.supported) navigator.permissions?.query({ name: 'microphone' }).then(p => { if (p.state === 'granted') openMic(); }).catch(() => {});
 
@@ -374,11 +427,10 @@ function init() {
     const ok = await folderOk(false);
     ui.folderName.textContent = folder ? folder.name + (ok ? '' : ' (click to allow)') : 'Not chosen — save after the shoot';
     ui.folderBtn.querySelector('span').textContent = folder ? (ok ? 'Change folder' : 'Allow access') : 'Choose folder';
-    ui.cFolderState.textContent = folder ? (ok ? 'ready' : 'needs access') : 'not set';
-    ui.cFolderState.className = 'sc-state' + (folder && ok ? ' on' : '');
+    badge(ui.cFolderState, folder && ok ? 'on' : folder ? 'wait' : 'off', folder ? (ok ? 'Ready' : 'Needs access') : 'Not set');
     ui.cFolderSub.textContent = folder ? folder.name : 'Where audio takes go';
-    ui.cFolderBtn.querySelector('span').textContent = ui.folderBtn.querySelector('span').textContent;
-    ui.cFolderBtn.parentElement.classList.toggle('ready', !!(folder && ok));
+    ui.cFolderBtn.querySelector('span').textContent = folder ? (ok ? 'Change' : 'Allow access') : 'Choose folder';
+    ui.cFolderBtn.classList.toggle('primary', !(folder && ok));
   }
   ui.folderBtn.onclick = async () => {
     if (!window.showDirectoryPicker) return toast('Choosing a folder needs Chrome or Edge.', 'error');

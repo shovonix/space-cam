@@ -4228,17 +4228,21 @@ var qrcode = function() {
         state.pedalKeys.splice(idx, 1);
         save();
         renderPedalKeys();
+        pedalChanged();
       });
       chip.appendChild(rm);
       pedalKeysList.appendChild(chip);
     });
   }
 
+  function pedalChanged(){ try{ window.dispatchEvent(new Event('spacecam-pedal')); }catch(e){} }
+  window.spaceCamPedal = { count: function(){ return state.pedalKeys.length; }, open: function(el){ togglePedalPanel({ currentTarget: el }); } };
   function endPedalCapture(added){
     pedalCaptureActive = false;
     addPedalBtn.textContent = '+ Add pedal button';
     addPedalBtn.classList.remove('capturing');
     if(added) renderPedalKeys();
+    pedalChanged();
   }
 
   function capturePedalKey(e){

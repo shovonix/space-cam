@@ -5209,6 +5209,24 @@ var qrcode = function() {
   })();
 
 
+  // Space Cam: lets studio.js add/remove sample scripts for quick checks (marked demo:true).
+  if(!isStageWindow) window.spaceCamScripts = {
+    addDemo: function(list){
+      list.forEach(function(x){ state.scripts.push({ id: genId(), name: x.name, text: x.text, updatedAt: Date.now(), demo: true }); });
+      save(); renderScriptTabs();
+    },
+    removeDemo: function(){
+      state.scripts = state.scripts.filter(function(x){ return !x.demo; });
+      if(!findScript(state.activeScriptId)){
+        state.activeScriptId = state.scripts.length ? state.scripts[0].id : null;
+        var a = activeScript(); input.value = a ? a.text : '';
+        if(!stage.classList.contains('hidden') && (!a || !a.text.trim())) showSetup(false);
+      }
+      save(); renderScriptTabs();
+    },
+    hasDemo: function(){ return state.scripts.some(function(x){ return x.demo; }); }
+  };
+
   window.claude = window.claude || {};
   if(window.claude.hot){
     window.claude.hot.snapshot(function(){ return { state: state }; });

@@ -77,7 +77,7 @@ function init() {
   </div>`);
   const strip = h(`
   <div class="sc-strip-wrap">
-    <div class="sec-title">Before you shoot</div>
+    <div class="sec-title"><span>Before you shoot</span><button type="button" class="sc-mini-btn" id="scSample">Load sample data</button></div>
     <div class="sc-strip">
       <div class="sc-card" id="scCardCam">
         <div class="sc-card-top"><span class="sc-card-title">Camera</span><span class="sc-state" id="scCardCamState">off</span></div>
@@ -344,7 +344,7 @@ function init() {
   }
   function nextNo() {
     const today = new Date().toDateString();
-    return takes.filter(t => new Date(t.startedAt).toDateString() === today).reduce((m, t) => Math.max(m, t.no || 0), 0) + 1;
+    return takes.filter(t => !t.demo && new Date(t.startedAt).toDateString() === today).reduce((m, t) => Math.max(m, t.no || 0), 0) + 1;
   }
 
   const ICON = {
@@ -352,6 +352,7 @@ function init() {
     rename: '<svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75z"/></svg>',
     del: '<svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>',
     save: '<svg viewBox="0 0 24 24"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>',
+    pause: '<svg viewBox="0 0 24 24"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg>',
   };
   const takeLabel = t => t.label || (t.recovered ? 'Recovered take' : `Take ${pad(t.no)}`);
   const fullDate = d => d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) + ` · ${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -364,7 +365,7 @@ function init() {
 
   // Where a take's audio lives right now: { file } or { missing: true }
   async function takeFile(t) {
-    if (t.audio === 'browser') return { file: await audio.getStoredFile(t.name) };
+    if (t.audio === 'browser' || t.audio === 'sample') { try { return { file: await audio.getStoredFile(t.name) }; } catch { return { missing: true }; } }
     if (t.audio === 'folder') {
       const dir = (await idb.get('dir:' + t.id)) || folder;
       if (!dir) return { missing: true };
@@ -389,19 +390,102 @@ function init() {
   }
   const esc = x => String(x).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
-  async function playTake(t) {
+  // ---- inline player inside an opened take card: waveform + play/pause + seek ----
+  let openTakeId = null, player = null;
+  function stopPlayer() {
+    if (!player) return;
+    player.audio.pause(); URL.revokeObjectURL(player.url); cancelAnimationFrame(player.raf);
+    player = null;
+  }
+  function toggleTakeOpen(t) {
+    if (openTakeId === t.id) { openTakeId = null; stopPlayer(); renderTakes(); return; }
+    stopPlayer(); openTakeId = t.id; renderTakes();
+  }
+
+  // WAV peaks without loading a whole long file: read sample windows spread across it.
+  async function wavPeaks(file, buckets) {
+    const head = new DataView(await file.slice(0, Math.min(file.size, 4096)).arrayBuffer());
+    let off = 12, fmt = null, dataOff = 44, dataLen = file.size - 44;
+    while (off + 8 <= head.byteLength) {
+      const id = String.fromCharCode(head.getUint8(off), head.getUint8(off + 1), head.getUint8(off + 2), head.getUint8(off + 3));
+      const len = head.getUint32(off + 4, true);
+      if (id === 'fmt ') fmt = { format: head.getUint16(off + 8, true), channels: head.getUint16(off + 10, true), rate: head.getUint32(off + 12, true), bits: head.getUint16(off + 22, true) };
+      if (id === 'data') { dataOff = off + 8; dataLen = Math.min(len || file.size, file.size - dataOff); break; }
+      off += 8 + len + (len & 1);
+    }
+    if (!fmt) throw new Error('Not a WAV file');
+    const bps = fmt.bits / 8, frame = bps * fmt.channels, frames = Math.floor(dataLen / frame);
+    const read = (dv, i) => {
+      if (fmt.format === 3) return dv.getFloat32(i, true);
+      if (bps === 2) return dv.getInt16(i, true) / 32768;
+      if (bps === 3) { let v = dv.getUint8(i) | (dv.getUint8(i + 1) << 8) | (dv.getInt8(i + 2) << 16); return v / 8388608; }
+      if (bps === 4) return dv.getInt32(i, true) / 2147483648;
+      return (dv.getUint8(i) - 128) / 128;
+    };
+    const per = frames / buckets, win = Math.max(1, Math.min(Math.floor(per), 2048));
+    const whole = file.size < 40e6 ? new DataView(await file.slice(dataOff, dataOff + frames * frame).arrayBuffer()) : null;
+    const peaks = new Float32Array(buckets);
+    for (let b = 0; b < buckets; b++) {
+      const f0 = Math.floor(b * per);
+      let dv, base;
+      if (whole) { dv = whole; base = f0 * frame; }
+      else { dv = new DataView(await file.slice(dataOff + f0 * frame, dataOff + (f0 + win) * frame).arrayBuffer()); base = 0; }
+      let m = 0;
+      const n = whole ? Math.max(1, Math.floor(per)) : win;
+      const step = Math.max(1, Math.floor(n / 512));
+      for (let k = 0; k < n && base + (k + 1) * frame <= dv.byteLength; k += step) { const a = Math.abs(read(dv, base + k * frame)); if (a > m) m = a; }
+      peaks[b] = m;
+    }
+    return { peaks, seconds: frames / fmt.rate };
+  }
+
+  function drawWave(cv, peaks, progress) {
+    const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, hgt = cv.clientHeight;
+    if (cv.width !== w * dpr) { cv.width = w * dpr; cv.height = hgt * dpr; }
+    const g = cv.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, hgt);
+    const n = peaks.length, bw = w / n, mid = hgt / 2;
+    for (let i = 0; i < n; i++) {
+      const v = Math.max(1, Math.min(1, peaks[i] * 1.15) * (mid - 1));
+      g.fillStyle = i / n <= progress ? '#F0F0EE' : '#4a4a50';
+      g.fillRect(i * bw, mid - v, Math.max(1, bw - 0.6), v * 2);
+    }
+    g.fillStyle = '#E8463A'; g.fillRect(Math.min(w - 1.5, progress * w), 0, 1.5, hgt);
+  }
+
+  async function mountPlayer(t, box) {
+    box.innerHTML = '<div class="sc-tp-loading">Loading…</div>';
     const r = await takeFile(t);
-    if (r.denied) return toast('Allow access to the save folder first (Audio panel → Allow access).', 'error');
-    if (r.missing || !r.file) { t.missing = true; saveTakes(); renderTakes(); return toast(`“${t.name}” was moved or deleted from the folder.`, 'error'); }
+    if (r.denied) { box.innerHTML = '<div class="sc-tp-msg">Allow access to the save folder (Audio panel → Allow access), then open this take again.</div>'; return; }
+    if (r.missing || !r.file) { t.missing = true; saveTakes(); box.innerHTML = `<div class="sc-tp-msg">“${esc(t.name)}” was moved or deleted from the folder.</div>`; return; }
+    delete t.missing;
     const url = URL.createObjectURL(r.file);
-    const where = t.audio === 'folder' ? `In folder “${esc(t.folderName || folder?.name || '')}”` : 'Waiting in the browser — not saved to a folder yet';
-    const m = modal(`
-      <div class="sc-modal-head"><div><div class="sc-modal-title">${esc(takeLabel(t))}</div><div class="sc-modal-name">${esc(fullDate(new Date(t.startedAt)))}${t.seconds != null ? ' · ' + fmt(t.seconds) : ''}</div></div>
-        <button type="button" class="sc-modal-x" data-close aria-label="Close">✕</button></div>
-      <audio controls autoplay src="${url}"></audio>
-      <div class="sc-modal-meta"><code>${esc(t.name)}</code><span>${where}</span></div>
-      <div class="sc-modal-row"><button type="button" class="btn ghost sc-dl">Download a copy</button><button type="button" class="btn primary" data-close>Done</button></div>`);
-    m.wrap.querySelector('.sc-dl').onclick = () => { const a = document.createElement('a'); a.href = url; a.download = t.name; a.click(); };
+    const a = new Audio(url); a.preload = 'auto';
+    box.innerHTML = `
+      <canvas class="sc-tp-wave" aria-label="Waveform — click to jump"></canvas>
+      <div class="sc-tp-row">
+        <button type="button" class="sc-tp-play" aria-label="Play">${ICON.play}</button>
+        <span class="sc-tp-time">0:00 / –:––</span>
+        <a class="sc-tp-dl" title="Download a copy" aria-label="Download a copy" download="${esc(t.name)}" href="${url}">${ICON.save}</a>
+      </div>
+      <div class="sc-tp-file" title="${esc(t.name)}">${esc(t.name)}</div>`;
+    const cv = box.querySelector('canvas'), btn = box.querySelector('.sc-tp-play'), time = box.querySelector('.sc-tp-time');
+    const p = player = { audio: a, url, raf: 0, peaks: new Float32Array(160) };
+    const m = s => `${Math.floor(s / 60)}:${pad(Math.floor(s % 60))}`;
+    const paint = () => {
+      const d = a.duration || p.seconds || 0;
+      drawWave(cv, p.peaks, d ? a.currentTime / d : 0);
+      time.textContent = `${m(a.currentTime)} / ${d ? m(d) : '–:––'}`;
+      btn.innerHTML = a.paused ? ICON.play : ICON.pause; btn.setAttribute('aria-label', a.paused ? 'Play' : 'Pause');
+    };
+    const loop = () => { paint(); if (!a.paused) p.raf = requestAnimationFrame(loop); };
+    btn.onclick = e => { e.stopPropagation(); a.paused ? a.play() : a.pause(); };
+    a.onplay = () => { cancelAnimationFrame(p.raf); loop(); };
+    a.onpause = a.onended = a.onloadedmetadata = paint;
+    cv.onclick = e => { e.stopPropagation(); const d = a.duration || p.seconds; if (!d) return; const rc = cv.getBoundingClientRect(); a.currentTime = Math.max(0, Math.min(d, (e.clientX - rc.left) / rc.width * d)); paint(); };
+    box.querySelector('.sc-tp-dl').onclick = e => e.stopPropagation();
+    paint();
+    try { const wp = await wavPeaks(r.file, Math.max(60, Math.floor((cv.clientWidth || 220) / 2.5))); if (player === p) { p.peaks = wp.peaks; p.seconds = wp.seconds; paint(); } }
+    catch { /* not a WAV we can read: player still works without the waveform */ }
   }
 
   async function renameTake(t) {
@@ -441,7 +525,7 @@ function init() {
 
   function deleteTake(t) {
     const inFolder = t.audio === 'folder' || t.audio === 'saved';
-    const unsaved = t.audio === 'browser';
+    const unsaved = t.audio === 'browser' || t.audio === 'sample';
     const m = modal(`
       <div class="sc-modal-head"><div class="sc-modal-title">Delete “${esc(takeLabel(t))}”?</div><button type="button" class="sc-modal-x" data-close aria-label="Close">✕</button></div>
       <p class="sc-modal-p">${unsaved ? 'This audio was never saved to a folder. Deleting it removes it for good.' :
@@ -449,6 +533,7 @@ function init() {
       <div class="sc-modal-row"><button type="button" class="btn ghost" data-close>Cancel</button><button type="button" class="btn primary sc-ok${unsaved ? ' danger' : ''}">${unsaved ? 'Delete audio' : 'Remove from list'}</button></div>`);
     m.wrap.querySelector('.sc-ok').onclick = async () => {
       if (unsaved) await audio.deleteStored(t.name).catch(() => {});
+      if (openTakeId === t.id) { stopPlayer(); openTakeId = null; }
       takes = takes.filter(x => x !== t); saveTakes(); renderTakes(); m.close();
     };
   }
@@ -457,23 +542,36 @@ function init() {
     t_ids();
     const list = takes.slice().reverse();
     ui.saveAll.hidden = !takes.some(t => t.audio === 'browser');
+    if (player && !takes.some(t => t.id === openTakeId)) { stopPlayer(); openTakeId = null; }
+    if (player) stopPlayer();
     if (!list.length) { ui.takeList.innerHTML = '<div class="sc-none">No takes yet. Press <kbd>R</kbd> to record.</div>'; return; }
     ui.takeList.replaceChildren(...list.map(t => {
       const when = new Date(t.startedAt);
-      const hasAudio = t.audio === 'folder' || t.audio === 'browser';
-      const status = t.missing ? '<em>file moved</em>' : t.audio === 'folder' ? 'audio in ' + esc(t.folderName || 'folder') : t.audio === 'saved' ? 'audio saved' : t.audio === 'browser' ? '<em>not saved yet</em>' : 'no audio';
-      const el = h(`<div class="script-tab sc-take${t.recovered || t.audio === 'browser' ? ' unsaved' : ''}" role="button" tabindex="0">
-        <span class="sc-take-main">
-          <span class="script-tab-name">${esc(takeLabel(t))}</span>
-          <span class="sc-take-sub">${esc(fullDate(when))}<br>${t.seconds != null ? fmt(t.seconds) + ' · ' : ''}${t.camera ? 'clip on card · ' : ''}${status}</span>
-        </span>
-        <span class="script-tab-actions"></span></div>`);
+      const hasAudio = ['folder', 'browser', 'sample'].includes(t.audio);
+      const status = t.missing ? '<em>file moved</em>' : t.audio === 'folder' ? 'audio in ' + esc(t.folderName || 'folder')
+        : t.audio === 'saved' ? 'audio saved' : t.audio === 'browser' ? '<em>not saved yet</em>' : t.audio === 'sample' ? 'sample audio' : 'no audio';
+      const open = t.id === openTakeId && hasAudio;
+      const el = h(`<div class="script-tab sc-take${t.audio === 'browser' ? ' unsaved' : ''}${open ? ' open active' : ''}">
+        <div class="sc-take-head" role="button" tabindex="0" aria-expanded="${open}">
+          <span class="sc-take-main">
+            <span class="script-tab-name">${esc(takeLabel(t))}</span>
+            <span class="sc-take-sub">${esc(fullDate(when))}<br>${t.seconds != null ? fmt(t.seconds) + ' · ' : ''}${t.camera ? 'clip on card · ' : ''}${status}</span>
+          </span>
+          <span class="script-tab-actions"></span>
+        </div>
+        ${open ? '<div class="sc-tp"></div>' : ''}</div>`);
       const actions = el.querySelector('.script-tab-actions');
       const act = (icon, title, fn) => { const b = h(`<span class="script-tab-act" role="button" title="${title}" aria-label="${title}">${ICON[icon]}</span>`); b.onclick = e => { e.stopPropagation(); fn(); }; actions.append(b); };
       if (t.audio === 'browser') act('save', 'Save audio', () => saveTake(t));
       act('rename', 'Rename', () => renameTake(t));
       act('del', 'Delete', () => deleteTake(t));
-      if (hasAudio) { el.onclick = () => playTake(t); el.title = 'Play ' + t.name; el.onkeydown = e => { if (e.key === 'Enter') playTake(t); }; }
+      const head = el.querySelector('.sc-take-head');
+      if (hasAudio) {
+        head.onclick = () => toggleTakeOpen(t);
+        head.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleTakeOpen(t); } };
+        head.title = open ? 'Close' : 'Open player';
+      }
+      if (open) queueMicrotask(() => mountPlayer(t, el.querySelector('.sc-tp')));
       return el;
     }));
   }
@@ -501,6 +599,80 @@ function init() {
     if (added) toast(`${added} unsaved audio take${added > 1 ? 's' : ''} recovered. Save from the Takes list.`);
     saveTakes(); renderTakes();
   }).catch(() => renderTakes()); else renderTakes();
+
+  // ------------------------------------------------------------------ sample data (quick check; remove before launch)
+  const sampleBtn = $('scSample');
+  const SAMPLE_SCRIPTS = [
+    { name: 'Sample · Quick hello', text: "Hi, I'm testing Space Cam.\n\nThis is a short script to check the prompter, the camera and the microphone together.\n\nIf you can read this on the glass, everything works." },
+    { name: 'Sample · Product intro', text: "Welcome back to the channel.\n\nToday I'm going to show you a tool that changed how I record my videos.\n\nIt runs in the browser. No install, no account.\n\nIt controls my camera, records my voice and scrolls my script, all from one window.\n\nLet me show you how it works, step by step.\n\nIf this helps you, you know what to do. See you in the next one." },
+    { name: 'Sample · Long tutorial', text: Array.from({ length: 14 }, (_, i) => `Step ${i + 1}. ` + [
+      'Open the app and check the three cards at the top: camera, microphone and save folder.',
+      'Connect the camera over USB. Make sure it is set to PC Remote.',
+      'Pick your microphone and watch the meter while you speak at your normal level.',
+      'Choose the folder where your audio takes should go.',
+      'Paste your script, then press Start prompting.',
+      'Connect the stage window and drag it to the teleprompter screen.',
+      'Adjust the speed and the text size until it reads comfortably.',
+      'Hold A to focus on your face, or use the arrows if the camera is on manual focus.',
+      'Press R to start recording. The camera and the audio start together.',
+      'Press Space to start the prompter. Read at your own pace.',
+      'Press R again to stop. The take appears in the Takes list.',
+      'Open the take to listen back and check the sound.',
+      'Rename the take so you can find it later in Premiere.',
+      'In Premiere, sync the camera clip and the audio with Synchronize, then Audio.'][i]).join('\n\n') },
+  ];
+
+  // speech-like test audio: bursts of tone + breath noise with pauses (48 kHz, 24-bit mono WAV)
+  function makeSampleWav(seconds, seed) {
+    const rate = 48000, n = Math.floor(seconds * rate), data = new Uint8Array(44 + n * 3), v = new DataView(data.buffer);
+    const str = (o, x) => { for (let i = 0; i < x.length; i++) v.setUint8(o + i, x.charCodeAt(i)); };
+    str(0, 'RIFF'); v.setUint32(4, 36 + n * 3, true); str(8, 'WAVE'); str(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true);
+    v.setUint16(22, 1, true); v.setUint32(24, rate, true); v.setUint32(28, rate * 3, true); v.setUint16(32, 3, true); v.setUint16(34, 24, true);
+    str(36, 'data'); v.setUint32(40, n * 3, true);
+    let r = seed * 9301 + 49297; const rnd = () => ((r = (r * 9301 + 49297) % 233280) / 233280);
+    let o = 44, env = 0, target = 0, nextSwitch = 0, f0 = 140 + seed * 30;
+    for (let i = 0; i < n; i++) {
+      if (i >= nextSwitch) { const talking = rnd() > 0.3; target = talking ? 0.25 + rnd() * 0.45 : 0; nextSwitch = i + Math.floor(rate * (talking ? 0.12 + rnd() * 0.35 : 0.08 + rnd() * 0.5)); f0 = 110 + rnd() * 120; }
+      env += (target - env) * 0.0025;
+      const t = i / rate;
+      const x = env * (0.55 * Math.sin(2 * Math.PI * f0 * t) + 0.25 * Math.sin(2 * Math.PI * f0 * 2.01 * t) + 0.12 * Math.sin(2 * Math.PI * f0 * 3.02 * t) + 0.08 * (rnd() * 2 - 1));
+      const q = Math.round(Math.max(-1, Math.min(1, x)) * 0x7fffff);
+      data[o++] = q & 255; data[o++] = (q >> 8) & 255; data[o++] = (q >> 16) & 255;
+    }
+    return new Blob([data], { type: 'audio/wav' });
+  }
+  async function writeStored(name, blob) {
+    const dir = await (await navigator.storage.getDirectory()).getDirectoryHandle('takes', { create: true });
+    const w = await (await dir.getFileHandle(name, { create: true })).createWritable();
+    await w.write(blob); await w.close();
+  }
+  const hasSample = () => takes.some(t => t.demo) || !!window.spaceCamScripts?.hasDemo();
+  function renderSampleBtn() { sampleBtn.textContent = hasSample() ? 'Remove sample data' : 'Load sample data'; }
+  sampleBtn.onclick = async () => {
+    sampleBtn.disabled = true;
+    try {
+      if (hasSample()) {
+        for (const t of takes.filter(t => t.demo)) await audio.deleteStored(t.name).catch(() => {});
+        if (takes.some(t => t.demo && t.id === openTakeId)) { stopPlayer(); openTakeId = null; }
+        takes = takes.filter(t => !t.demo); saveTakes(); renderTakes();
+        window.spaceCamScripts?.removeDemo();
+        toast('Sample data removed. Your own takes and scripts are untouched.', 'ok');
+      } else {
+        window.spaceCamScripts?.addDemo(SAMPLE_SCRIPTS);
+        const now = Date.now(), day = 86400000;
+        const specs = [{ secs: 9, ago: 2 * day + 3600e3, label: 'Sample · Quick hello' }, { secs: 24, ago: day, label: 'Sample · Product intro' }, { secs: 48, ago: 25 * 60e3, label: 'Sample · Long tutorial' }];
+        for (let i = 0; i < specs.length; i++) {
+          const sp = specs[i], startedAt = now - sp.ago, name = `Sample-Take-${pad(i + 1)}_${startedAt}.wav`;
+          await writeStored(name, makeSampleWav(sp.secs, i + 1));
+          takes.push({ id: 'demo' + i + startedAt.toString(36), no: i + 1, label: sp.label, name, startedAt, seconds: sp.secs, camera: true, audio: 'sample', demo: true });
+        }
+        takes.sort((a, b) => a.startedAt - b.startedAt); saveTakes(); renderTakes();
+        toast('Sample data loaded: 3 scripts and 3 takes. Open a take to play it.', 'ok');
+      }
+    } catch (e) { toast('Sample data failed: ' + (e?.message || e), 'error'); }
+    sampleBtn.disabled = false; renderSampleBtn();
+  };
+  setTimeout(renderSampleBtn, 0);
 
   // ------------------------------------------------------------------ record (camera + audio together)
   function renderRec() {

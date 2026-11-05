@@ -186,3 +186,4 @@ body.sc-big{margin:0;height:100vh;display:flex;flex-direction:column;background:
 .sc-help li{margin:6px 0}
 .sc-help small{display:block;color:var(--fg-dim);margin-top:4px}
 .sc-help small code{font:10.5px var(--mono)}
+.sc-help .sc-agent{margin:2px 0 4px}

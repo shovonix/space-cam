@@ -191,25 +191,27 @@ function init() {
     lastUrl = url;
   });
 
+  const FIX_CMD = `launchctl disable gui/$UID/com.apple.ptpcamerad; (nohup sh -c 'while true; do killall -9 ptpcamerad 2>/dev/null; sleep 1; done' >/dev/null 2>&1 &)`;
+  const UNDO_CMD = `launchctl enable gui/$UID/com.apple.ptpcamerad; pkill -f "killall -9 ptpcamerad"`;
+  const AGENT_PROMPT = `On my Mac, macOS's camera service (ptpcamerad) grabs my USB camera so Chrome (Space Cam, WebUSB) can't use it. Run this once in Terminal:\n\n${FIX_CMD}\n\nIt disables the service from the next restart and keeps it stopped in the background until then. Confirm the background loop is running with: pgrep -f "killall -9 ptpcamerad". If I ask to undo it later, run: ${UNDO_CMD}`;
+  const escA = t => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   const SETUP_FIX = `
     <summary>First time on a Mac? One-time setup</summary>
     <ol>
       <li>Camera: <b>USB Connection → PC Remote</b>, Ctrl w/ Smartphone → Off. Use a data cable, not charge-only.</li>
-      <li>macOS grabs cameras for Photos and Image Capture, which blocks Space Cam. Paste this in Terminal once, then <b>restart the Mac</b>:
-        <div class="sc-cmd"><code>launchctl disable gui/$UID/com.apple.ptpcamerad</code><button type="button" data-copy="launchctl disable gui/$UID/com.apple.ptpcamerad">Copy</button></div>
-        <small>Card-reader imports keep working. Only USB-cable photo import from cameras and iPhones stops. Undo: <code>launchctl enable gui/$UID/com.apple.ptpcamerad</code> and restart.</small>
+      <li>macOS grabs cameras for Photos and Image Capture, which blocks Space Cam. Paste this in Terminal <b>once</b>, then close Terminal. No restart needed:
+        <div class="sc-cmd"><code>${escA(FIX_CMD)}</code><button type="button" data-copy="${escA(FIX_CMD)}">Copy</button></div>
+        <button type="button" class="sc-mini-btn sc-agent" data-copy="${escA(AGENT_PROMPT)}" data-done="Prompt copied">Copy fix for your AI agent</button>
+        <small>Card-reader imports keep working. Only USB-cable photo import from cameras and iPhones stops. Undo: <code>${escA(UNDO_CMD)}</code></small>
       </li>
-      <li>Quit Imaging Edge and close other tabs using the camera, then <b>Connect camera</b>.</li>
-      <li>Don't want to change macOS? Run this instead and keep that Terminal window open while you shoot (<kbd>Ctrl</kbd>+<kbd>C</kbd> to stop):
-        <div class="sc-cmd"><code>while true; do killall -9 ptpcamerad 2&gt;/dev/null; sleep 0.5; done</code><button type="button" data-copy="while true; do killall -9 ptpcamerad 2>/dev/null; sleep 0.5; done">Copy</button></div>
-      </li>
+      <li>Quit Imaging Edge and close other tabs using the camera, unplug and replug the camera, then <b>Connect camera</b>.</li>
     </ol>`;
   for (const box of [ui.help, ui.help2]) {
     box.innerHTML = SETUP_FIX;
     box.open = !store.get('camEverConnected', false);
     box.querySelectorAll('[data-copy]').forEach(b => b.onclick = async e => {
       e.preventDefault();
-      try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = 'Copied'; setTimeout(() => (b.textContent = 'Copy'), 1500); } catch { toast('Could not copy.', 'error'); }
+      const label = b.textContent; try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = b.dataset.done || 'Copied'; setTimeout(() => (b.textContent = label), 1500); } catch { toast('Could not copy.', 'error'); }
     });
   }
   function showCamProblem(kind, title, detail = '') {
@@ -238,8 +240,8 @@ function init() {
     // After a reload macOS's camera service often grabs the camera for a moment, so keep trying for ~20 s.
     for (let i = 0; i < 10; i++) {
       if (!store.get('camAuto', false) || cam.state === 'connected') return;
-      if (cam.state !== 'connecting') await cam.connect({ pick: false });
-      if (cam.state === 'connected') return;
+      if (cam.state !== 'connecting') await cam.connect({ pick: false, reset: i === 0 });
+      if (cam.state === 'connected' || cam.lastErrorKind !== 'busy') return; // only 'busy' is worth retrying
       await new Promise(r => setTimeout(r, 2000));
     }
   }

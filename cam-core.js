@@ -60,7 +60,7 @@ export const CamCore = class CamCore extends EventTarget {
     return devices.length > 0;
   }
 
-  async connect({ pick = false } = {}) {
+  async connect({ pick = false, reset = false } = {}) {
     if (!CamCore.supported) return this.#fail('unsupported', 'This browser has no WebUSB. Use Chrome or Edge on a Mac.');
     if (this.state === 'connecting' || this.state === 'connected') return true;
     this.#setState('connecting');
@@ -71,9 +71,13 @@ export const CamCore = class CamCore extends EventTarget {
       }
       const devices = await navigator.usb.getDevices();
       this.#usbDevice = devices[0] || null;
+      // After a reload the camera can still hold the old page's session and never answer. A USB reset clears it.
+      if (reset && this.#usbDevice) await this.#usbReset(this.#usbDevice);
       this.#camera = new Camera();
-      await this.#camera.connect();
-      await this.#readWidgets();
+      let timer;
+      const timeout = new Promise((_, rej) => (timer = setTimeout(() => rej(new Error('timeout: camera did not answer')), 15000)));
+      try { await Promise.race([(async () => { await this.#camera.connect(); await this.#readWidgets(); })(), timeout]); }
+      finally { clearTimeout(timer); }
       this.#setState('connected');
       this.#log(`Connected: ${this.model || 'camera'}`, 'ok');
       return true;
@@ -82,6 +86,16 @@ export const CamCore = class CamCore extends EventTarget {
       this.#setState('idle');
       return this.#fail(...this.#classify(e));
     }
+  }
+
+  async #usbReset(d) {
+    try {
+      if (!d.opened) await d.open();
+      await d.reset();
+      this.#log('USB reset before reconnect');
+    } catch (e) { this.#log(`USB reset skipped: ${e?.message || e}`, 'warn'); }
+    try { if (d.opened) await d.close(); } catch {}
+    await new Promise(r => setTimeout(r, 1500));
   }
 
   async disconnect() {
@@ -104,6 +118,8 @@ export const CamCore = class CamCore extends EventTarget {
       return ['busy', 'Something else is holding the camera.', msg];
     if (/unknown model|could not find|no camera|not found|no device/i.test(msg))
       return ['nodevice', 'No camera answered. Check the cable, power and PC Remote mode.', msg];
+    if (/^timeout/.test(msg))
+      return ['timeout', 'The camera did not answer. Unplug and replug it, then Try again.', msg];
     return ['failed', 'The camera did not respond.', msg];
   }
 
@@ -251,6 +267,7 @@ export const CamCore = class CamCore extends EventTarget {
     this.#emit('state', { state, model: this.model, recording: this.recording, recordStartedAt: this.recordStartedAt });
   }
   #fail(kind, message, detail = '') {
+    this.lastErrorKind = kind;
     if (kind !== 'cancelled') this.#log(`${message}${detail ? ' — ' + detail : ''}`, 'error');
     this.#emit('error', { kind, message, detail });
     return false;

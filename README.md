@@ -1,37 +1,37 @@
 # Space Cam
 
-Control your camera from the browser over USB: live preview, record start/stop, autofocus and manual focus. Nothing to install.
-
-**Built and tested on Sony A7 III (ILCE-7M3), Chrome on macOS.** Other cameras may work through gPhoto2, untested.
+One page to run a solo recording: **camera control + audio recording + teleprompter** (Dual Monitor).
+Built on the Space Prompter design. Chrome or Edge on a Mac. Built and tested with a Sony A7 III.
 
 - App: https://cam.shovonix.dev (staging: https://shovonix.dev/cam/)
-- Diagnostics page: `/test/` lists every setting and action the camera exposes
+- Camera diagnostics: `/test/` lists every setting and action the camera exposes
 
-## Features (v1)
-- Live preview (~24 fps, 1024×576, for framing)
-- Record start/stop with timer, warning from 29:00, A7 III clip limit at 29:59
-- Hold-to-autofocus, manual focus near/far with step size (camera on MF)
-- Rule-of-thirds grid
-- Floating mini window (Chrome Document Picture-in-Picture) to sit next to other apps such as Space Prompter
-- Exposure / battery readout (ISO, shutter, aperture, focus mode, battery)
-- Setup help when connecting fails, with copyable fixes
+## What it does
+- **Prompter** (from Space Prompter, Dual Monitor only): scripts, control window on the Mac, stage window on the prompter screen, speed, size, flip, rotate, fade, guide line, Bluetooth pedal.
+- **Camera** (right rail): live preview (~24 fps, for framing), exposure/battery readout, hold-to-autofocus, manual focus near/far with step size, grid, big floating preview window.
+- **Audio** (right rail): pick any mic, level meter with clip light, WAV 24-bit at the mic's rate. Browser processing (echo cancel, noise suppression, auto gain) is off.
+- **Record** (bottom bar): one press starts the camera clip and the audio file together. Timer, warning from 29:00, A7 III clip limit 29:59.
+- **Takes** (left rail): each take with its time, where the audio went, Save / Delete. Audio is written into the browser's private storage while recording (survives a crash) and moved into your chosen folder when you stop. No folder? Save each take after the shoot. Unsaved takes are recovered on the next visit.
+
+File name: `Take-03_2026-11-05_110438.wav`. Sync in Premiere with the camera's own audio: Synchronize → Audio.
 
 ## Shortcuts
-`R` record · hold `F` autofocus · `←` `→` focus near/far · `G` grid · `M` mini window · `?` help
+Prompter: `Space` play/pause (double-tap previous paragraph, hold back to top) · `F` full screen · `E` edit
+Space Cam: `R` record camera + audio · hold `A` autofocus · `←` `→` focus near/far (camera on MF) · `G` grid
 
 ## Camera setup
 1. MENU → Network → Ctrl w/ Smartphone → Off
 2. MENU → Setup → USB Connection → PC Remote
 3. Quit Imaging Edge, Photos and Image Capture, plug in USB-C
 
-macOS's `ptpcamerad` service can grab the camera first. If connecting fails, the app shows two fixes:
-- Quick: `while true; do killall -9 ptpcamerad 2>/dev/null; sleep 0.5; done` in Terminal while connecting
-- Permanent (try once, then restart): `launchctl disable gui/$UID/com.apple.ptpcamerad` · undo with `enable`
+If connecting fails, the app shows the fixes for macOS's `ptpcamerad`, which can grab the camera first.
 
-## Architecture
-- `cam-core.js` — the engine. No UI. Emits `state`, `frame`, `stats`, `info`, `error`, `log` events. Meant to be reused by future Space apps (e.g. Space Studio).
-- `app.js`, `index.html`, `app.css` — the Space Cam interface.
-- `lib/` — [web-gphoto2](https://github.com/GoogleChromeLabs/web-gphoto2) 0.4.1 (LGPL-2.1), unmodified except `.mjs` renamed to `.js` so static hosts serve the right MIME type.
-- `coi-serviceworker.js` — [coi-serviceworker](https://github.com/gzuidhof/coi-serviceworker) (MIT); enables cross-origin isolation (needed by the engine) on a plain static host. Reloads the page once on first visit.
+## Files
+- `index.html` — the prompter page (forked from Space Prompter v3.5, Dual Monitor only)
+- `studio.js`, `studio.css` — camera, audio, record and takes panels
+- `cam-core.js` — camera engine (no UI)
+- `audio-core.js`, `audio-writer.worker.js` — audio engine and WAV writer (no UI)
+- `lib/` — [web-gphoto2](https://github.com/GoogleChromeLabs/web-gphoto2) 0.4.1 (LGPL-2.1), `.mjs` renamed to `.js` for static hosting
+- `coi-serviceworker.js` — [coi-serviceworker](https://github.com/gzuidhof/coi-serviceworker) (MIT), cross-origin isolation on a static host
 
 Only one tab or app can hold the camera at a time.

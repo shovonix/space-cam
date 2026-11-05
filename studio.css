@@ -176,3 +176,13 @@ body.sc-big{margin:0;height:100vh;display:flex;flex-direction:column;background:
 .sc-shoot-rail.empty,.sc-cur.empty span{color:var(--fg-dim);font-weight:600}
 .sc-takes .scripts-head{gap:8px}
 .sc-head-btns{display:flex;gap:6px}
+
+.sc-help{margin-top:12px;border:1px solid var(--hair);border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.5;color:#dcdcde;background:#0d0d0f}
+.sc-help summary{cursor:pointer;font-weight:600;color:var(--fg);list-style:none;display:flex;align-items:center;gap:6px}
+.sc-help summary::-webkit-details-marker{display:none}
+.sc-help summary::before{content:'▸';color:var(--fg-dim);transition:transform .15s}
+.sc-help[open] summary::before{transform:rotate(90deg)}
+.sc-help ol{margin:8px 0 0;padding-left:18px}
+.sc-help li{margin:6px 0}
+.sc-help small{display:block;color:var(--fg-dim);margin-top:4px}
+.sc-help small code{font:10.5px var(--mono)}

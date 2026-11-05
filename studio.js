@@ -55,6 +55,7 @@ function init() {
     </div>
     <button type="button" class="sc-link" id="scDisconnect" hidden>Disconnect camera</button>
     <div class="sc-problem" id="scProblem" hidden></div>
+    <details class="sc-help" id="scHelp"></details>
   </div>`);
 
   const audioSec = h(`
@@ -107,6 +108,7 @@ function init() {
       </div>
     </div>
     <div class="sc-problem" id="scProblem2" hidden></div>
+    <details class="sc-help" id="scHelp2"></details>
   </div>`);
   const toastEl = h(`<div class="sc-toast" id="scToast" hidden></div>`);
 
@@ -134,7 +136,7 @@ function init() {
     rec: recBtn, recLabel: $('scRecLabel'), takeList: $('scTakeList'), saveAll: $('scSaveAll'),
     cCamState: $('scCardCamState'), cCamSub: $('scCardCamSub'), cCamBtn: $('scCardCamBtn'),
     cMicState: $('scCardMicState'), cMicSub: $('scCardMicSub'), cMicBtn: $('scCardMicBtn'), cMeter: $('scCardMeter'), cMeterFill: $('scCardMeterFill'),
-    cFolderState: $('scCardFolderState'), cFolderSub: $('scCardFolderSub'), cFolderBtn: $('scCardFolderBtn'), problem2: $('scProblem2'),
+    cFolderState: $('scCardFolderState'), cFolderSub: $('scCardFolderSub'), cFolderBtn: $('scCardFolderBtn'), problem2: $('scProblem2'), help: $('scHelp'), help2: $('scHelp2'),
   };
 
   // ------------------------------------------------------------------ toast
@@ -163,9 +165,10 @@ function init() {
     ui.cCamBtn.querySelector('span').textContent = on ? 'Disconnect' : ui.connect.textContent;
     ui.cCamBtn.disabled = ui.connect.disabled && !on;
     ui.cCamBtn.parentElement.classList.toggle('ready', on);
+    ui.help.hidden = ui.help2.hidden = on || cam.state === 'unsupported';
   }
   cam.addEventListener('state', e => {
-    if (e.detail.state === 'connected') { store.set('camAuto', true); ui.problem.hidden = true; ui.problem2.hidden = true; delete ui.connect.dataset.retry; cam.startPreview(); }
+    if (e.detail.state === 'connected') { store.set('camAuto', true); store.set('camEverConnected', true); ui.help.open = ui.help2.open = false; ui.problem.hidden = true; ui.problem2.hidden = true; delete ui.connect.dataset.retry; cam.startPreview(); }
     if (e.detail.state === 'disconnected') { showCamProblem('nodevice', 'Camera unplugged or switched off.'); closeBig(); if (take) toast('Camera disconnected during the take.', 'error'); }
     renderCam(); renderRec();
   });
@@ -189,16 +192,26 @@ function init() {
   });
 
   const SETUP_FIX = `
+    <summary>First time on a Mac? One-time setup</summary>
     <ol>
-      <li>Close other tabs that use the camera. Quit Imaging Edge, Photos and Image Capture.</li>
-      <li>Unplug the camera, turn it off and on, plug it back in, then <b>Try again</b>.</li>
-      <li>Still stuck? macOS's camera service grabs it first. Paste in Terminal, keep it open while connecting, stop with <kbd>Ctrl</kbd>+<kbd>C</kbd> once connected:
-        <div class="sc-cmd"><code>while true; do killall -9 ptpcamerad 2&gt;/dev/null; sleep 0.5; done</code><button type="button" data-copy="while true; do killall -9 ptpcamerad 2>/dev/null; sleep 0.5; done">Copy</button></div>
-        Permanent (try once, then restart the Mac; Photos/Image Capture can't import from cameras while off):
+      <li>Camera: <b>USB Connection → PC Remote</b>, Ctrl w/ Smartphone → Off. Use a data cable, not charge-only.</li>
+      <li>macOS grabs cameras for Photos and Image Capture, which blocks Space Cam. Paste this in Terminal once, then <b>restart the Mac</b>:
         <div class="sc-cmd"><code>launchctl disable gui/$UID/com.apple.ptpcamerad</code><button type="button" data-copy="launchctl disable gui/$UID/com.apple.ptpcamerad">Copy</button></div>
-        <small>Undo: <code>launchctl enable gui/$UID/com.apple.ptpcamerad</code></small>
+        <small>Card-reader imports keep working. Only USB-cable photo import from cameras and iPhones stops. Undo: <code>launchctl enable gui/$UID/com.apple.ptpcamerad</code> and restart.</small>
+      </li>
+      <li>Quit Imaging Edge and close other tabs using the camera, then <b>Connect camera</b>.</li>
+      <li>Don't want to change macOS? Run this instead and keep that Terminal window open while you shoot (<kbd>Ctrl</kbd>+<kbd>C</kbd> to stop):
+        <div class="sc-cmd"><code>while true; do killall -9 ptpcamerad 2&gt;/dev/null; sleep 0.5; done</code><button type="button" data-copy="while true; do killall -9 ptpcamerad 2>/dev/null; sleep 0.5; done">Copy</button></div>
       </li>
     </ol>`;
+  for (const box of [ui.help, ui.help2]) {
+    box.innerHTML = SETUP_FIX;
+    box.open = !store.get('camEverConnected', false);
+    box.querySelectorAll('[data-copy]').forEach(b => b.onclick = async e => {
+      e.preventDefault();
+      try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = 'Copied'; setTimeout(() => (b.textContent = 'Copy'), 1500); } catch { toast('Could not copy.', 'error'); }
+    });
+  }
   function showCamProblem(kind, title, detail = '') {
     fillCamProblem(ui.problem, kind, title, detail);
     fillCamProblem(ui.problem2, kind, title, detail);
@@ -206,10 +219,8 @@ function init() {
   function fillCamProblem(box, kind, title, detail = '') {
     box.hidden = false;
     if (kind === 'unsupported') { box.innerHTML = `<b>${title}</b><p>Open Space Cam in Chrome or Edge on a Mac to control the camera.</p>`; return; }
-    box.innerHTML = `<b>${title}</b>${kind === 'nodevice' ? '<p>Camera on, data cable (not charge-only), USB Connection → <b>PC Remote</b>, Ctrl w/ Smartphone → Off.</p>' : ''}${SETUP_FIX}${detail ? `<small>Camera said: ${detail.replace(/</g, '&lt;')}</small>` : ''}`;
-    box.querySelectorAll('[data-copy]').forEach(b => b.onclick = async () => {
-      try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = 'Copied'; setTimeout(() => (b.textContent = 'Copy'), 1500); } catch { toast('Could not copy.', 'error'); }
-    });
+    box.innerHTML = `<b>${title}</b><p>Follow the setup steps below, then try again.</p>${detail ? `<small>Camera said: ${detail.replace(/</g, '&lt;')}</small>` : ''}`;
+    ui.help.open = ui.help2.open = true;
   }
   if (cam.state === 'unsupported') showCamProblem('unsupported', "This browser can't control USB cameras.");
 

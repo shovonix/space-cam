@@ -15,7 +15,7 @@
 
 /* camera preview */
 .sc-preview{position:relative;aspect-ratio:16/9;background:#000;border:1px solid var(--hair);border-radius:12px;overflow:hidden;margin-bottom:10px}
-.sc-preview img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+.sc-preview img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .sc-grid{position:absolute;inset:0;pointer-events:none}
 .sc-grid i{position:absolute;background:rgba(255,255,255,.35)}
 .sc-grid i:nth-child(1){left:33.333%;top:0;bottom:0;width:1px}
@@ -135,8 +135,10 @@
 
 /* big floating preview (Document Picture-in-Picture window) */
 body.sc-big{margin:0;height:100vh;display:flex;flex-direction:column;background:#000;color:#F0F0EE;font:13px 'Public Sans',system-ui,sans-serif;--red:#E8463A;--mono:ui-monospace,Menlo,monospace}
-.sc-big-stage{position:relative;flex:1;min-height:0}
-.sc-big-stage img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+.sc-big-stage{position:relative;flex:1;min-height:0;container-type:size}
+/* 16:9 box, the framing the video records (A7 III live view is 3:2, so top and bottom are cropped) */
+.sc-big-stage>img,.sc-big-stage>.sc-grid{position:absolute;inset:0;margin:auto;width:min(100cqw,calc(100cqh*16/9));height:auto;aspect-ratio:16/9}
+.sc-big-stage>img{object-fit:cover}
 .sc-big-bar{display:flex;gap:6px;padding:8px;background:#0E0E0F;border-top:1px solid #2A2A2C}
 .sc-big-bar button{flex:1;background:#1A1A1B;border:1px solid #2A2A2C;border-radius:9px;color:#F0F0EE;padding:9px 6px;font:600 13px 'Archivo',system-ui,sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
 .sc-big-bar button.held{background:#F0F0EE;color:#070707}
@@ -187,7 +189,7 @@ body.sc-big{margin:0;height:100vh;display:flex;flex-direction:column;background:
 .sc-help small{display:block;color:var(--fg-dim);margin-top:4px}
 .sc-help small code{font:10.5px var(--mono)}
 .sc-help .sc-agent{margin:2px 0 4px}
-.sc-card-preview{position:relative;width:100%;aspect-ratio:3/2;border-radius:8px;background:#000;overflow:hidden;margin-top:4px;display:grid;place-items:center}
+.sc-card-preview{position:relative;width:100%;aspect-ratio:16/9;border-radius:8px;background:#000;overflow:hidden;margin-top:4px;display:grid;place-items:center}
 .sc-card-preview span{font-size:12px;color:var(--fg-dim)}
 .sc-card-preview img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none}
 .sc-card-preview.live img{display:block}

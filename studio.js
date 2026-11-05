@@ -72,14 +72,14 @@ function init() {
   const recBtn = h(`<button type="button" class="cap-side sc-rec" id="scRec" aria-label="Record camera and audio — key R"><i></i><span id="scRecLabel">Record</span></button>`);
   const takesSec = h(`
   <div class="sec sc-sec sc-takes" id="scTakesSec">
-    <div class="scripts-head"><div class="sec-title">Takes</div><span class="sc-head-btns"><button type="button" class="sc-mini-btn" id="scImport" title="Copy the camera clips from the card and name them after their takes">Import clips</button><button type="button" class="sc-mini-btn" id="scSaveAll" hidden>Save all</button></span></div>
+    <div class="scripts-head"><div class="sec-title">Takes</div><button type="button" class="sc-mini-btn" id="scSaveAll" hidden>Save all</button></div>
     <div id="scTakeList"><div class="sc-none">No takes yet. Press <kbd>R</kbd> to record.</div></div>
   </div>`);
   const shootSec = h(`
   <div class="sc-shoot-wrap">
     <div class="sec-title">Name this shoot</div>
     <input class="sc-shoot-input" id="scShootInput" maxlength="60" spellcheck="false" placeholder="e.g. FluentCRM Intro" aria-label="Shoot name">
-    <div class="sc-shoot-hint">Used for the script, every take and the file names. Audio goes into a folder with this name.</div>
+    <div class="sc-shoot-hint">Used for the script, every take and the audio file names (e.g. “FluentCRM Intro - Take 01.wav”).</div>
   </div>`);
   const shootRail = h(`
   <div class="sc-shoot-rail" id="scShootRail" role="button" tabindex="0" title="Change the shoot name">
@@ -352,7 +352,6 @@ function init() {
   let shoot = store.get('shoot', '');
   const todayStr = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   const shootOrDefault = () => shoot || `Shoot ${todayStr()}`;
-  const slug = x => x.replace(/[\\/:*?"<>|]+/g, '-').replace(/\s+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'Shoot';
   const dirName = x => x.replace(/[\\/:*?"<>|]+/g, '-').trim().slice(0, 60) || 'Shoot';
   window.spaceCamShoot = () => shoot;
   const shootInput = $('scShootInput'), shootRailName = $('scShootRailName');
@@ -378,7 +377,7 @@ function init() {
   };
   shootRail.onclick = editShoot;
   shootRail.onkeydown = e => { if (e.key === 'Enter') editShoot(); };
-  async function shootDir(base, name) { return base.getDirectoryHandle(dirName(name), { create: true }); }
+  async function shootDir(base) { return base; } // all takes go straight into the chosen folder
   // a file name not yet used in that folder: Name.wav, Name-2.wav, ...
   async function freeName(dir, name) {
     const exists = n => dir.getFileHandle(n).then(() => true, () => false);
@@ -393,7 +392,7 @@ function init() {
   let take = null, timer = null, wake = null, busy = false;
   const saveTakes = () => store.set('takes', takes.slice(-200));
 
-  function takeName(sh, no) { return `${slug(sh)}_Take-${pad(no)}.wav`; }
+  function takeName(sh, no) { return `${dirName(sh)} - Take ${pad(no)}.wav`; }
   function nextNo(sh) {
     return takes.filter(t => !t.demo && (t.shoot || '') === sh).reduce((m, t) => Math.max(m, t.no || 0), 0) + 1;
   }
@@ -606,7 +605,7 @@ function init() {
         <div class="sc-take-head" role="button" tabindex="0" aria-expanded="${open}">
           <span class="sc-take-main">
             <span class="script-tab-name">${esc(takeLabel(t))}</span>
-            <span class="sc-take-sub">${esc(fullDate(when))}<br>${t.seconds != null ? fmt(t.seconds) + ' · ' : ''}${t.camera ? (t.clipName ? 'clip copied · ' : 'clip on card · ') : ''}${status}</span>
+            <span class="sc-take-sub">${esc(fullDate(when))}<br>${t.seconds != null ? fmt(t.seconds) + ' · ' : ''}${t.camera ? 'clip on card · ' : ''}${status}</span>
           </span>
           <span class="script-tab-actions"></span>
         </div>
@@ -632,7 +631,7 @@ function init() {
       const dest = t.label ? safeFileName(t.label, t) : t.name;
       if (await folderOk(true)) {
         const sub = await shootDir(folder, t.shoot || shootOrDefault()), fin = await freeName(sub, dest);
-        await audio.moveToFolder(t.name, sub, fin); t.name = fin; t.audio = 'folder'; t.folderName = `${folder.name}/${sub.name}`; await idb.set('dir:' + t.id, sub);
+        await audio.moveToFolder(t.name, sub, fin); t.name = fin; t.audio = 'folder'; t.folderName = folder.name; await idb.set('dir:' + t.id, sub);
       }
       else { await audio.saveAs(t.name, dest); t.name = dest; t.audio = 'saved'; }
       delete t.recovered; delete t.missing; saveTakes(); renderTakes(); toast(`${t.name} saved.`, 'ok');
@@ -653,97 +652,6 @@ function init() {
     if (added) toast(`${added} unsaved audio take${added > 1 ? 's' : ''} recovered. Save from the Takes list.`);
     saveTakes(); renderTakes();
   }).catch(() => renderTakes()); else renderTakes();
-
-  // ------------------------------------------------------------------ import clips from the card
-  // Sony writes C0001.MP4 + C0001M01.XML (with the recording start time). We match each clip to the take
-  // that started at the same moment, then COPY it next to the take's audio with the same name.
-  async function walk(dir, depth, out) {
-    for await (const [name, hd] of dir.entries()) {
-      if (hd.kind === 'directory' && depth < 5 && !name.startsWith('.')) await walk(hd, depth + 1, out);
-      else if (hd.kind === 'file') out.push({ name, hd, dir });
-    }
-    return out;
-  }
-  async function readClips(src) {
-    const files = await walk(src, 0, []);
-    const xml = new Map(files.filter(f => /\.xml$/i.test(f.name)).map(f => [f.name.replace(/M\d\d\.xml$/i, '').replace(/\.xml$/i, '').toUpperCase(), f]));
-    const clips = [];
-    for (const f of files.filter(f => /\.(mp4|mov|mxf)$/i.test(f.name) && !f.name.startsWith('.'))) {
-      const file = await f.hd.getFile();
-      let start = null, exact = false;
-      const x = xml.get(f.name.replace(/\.[^.]+$/, '').toUpperCase());
-      if (x) {
-        const txt = await (await x.hd.getFile()).text();
-        const m = txt.match(/CreationDate\s+value="([^"]+)"/i);
-        if (m && !isNaN(Date.parse(m[1]))) { start = Date.parse(m[1]); exact = true; }
-      }
-      clips.push({ name: f.name, file, start, end: file.lastModified, exact, size: file.size });
-    }
-    return clips;
-  }
-  const gb = b => b >= 1e9 ? (b / 1e9).toFixed(1) + ' GB' : (b / 1e6).toFixed(0) + ' MB';
-
-  async function importClips() {
-    if (!window.showDirectoryPicker) return toast('Importing clips needs Chrome or Edge.', 'error');
-    if (!(await folderOk(true))) return toast('Choose the save folder first — the clips are copied there, next to the audio.', 'error');
-    let src;
-    try { src = await showDirectoryPicker({ id: 'spacecam-card', mode: 'read' }); }
-    catch (e) { if (e?.name !== 'AbortError') toast('Could not open that folder: ' + (e?.message || e), 'error'); return; }
-    toast('Reading the clips…');
-    let clips;
-    try { clips = await readClips(src); } catch (e) { return toast('Could not read the card: ' + (e?.message || e), 'error'); }
-    if (!clips.length) return toast('No video clips found there. Pick the card itself (or its PRIVATE/M4ROOT/CLIP folder).', 'error');
-
-    const pending = takes.filter(t => t.camera && !t.demo && !t.clipName);
-    if (!pending.length) return toast('No takes are waiting for a camera clip.', 'error');
-    const TOL = 20000, used = new Set(), pairs = [];
-    for (const t of pending.slice().sort((a, b) => a.startedAt - b.startedAt)) {
-      let best = null, bestD = Infinity;
-      for (const c of clips) {
-        if (used.has(c)) continue;
-        const d = c.exact ? Math.abs(c.start - t.startedAt) : Math.abs(c.end - (t.startedAt + (t.seconds || 0) * 1000));
-        if (d < bestD) { bestD = d; best = c; }
-      }
-      if (best && bestD <= TOL) { used.add(best); pairs.push({ t, c: best, off: bestD }); }
-    }
-    const unmatchedTakes = pending.length - pairs.length;
-    if (!pairs.length) return toast(`None of the ${clips.length} clips matched a take by time. Check that the camera clock matches the Mac.`, 'error');
-
-    const rows = pairs.map((p, i) => `<label class="sc-imp-row"><input type="checkbox" checked data-i="${i}">
-      <span><b>${esc(takeLabel(p.t))}</b><small>${esc(p.c.name)} · ${gb(p.c.size)} · ${p.c.exact ? (p.off / 1000).toFixed(1) + ' s apart' : 'matched by end time'}</small></span></label>`).join('');
-    const m = modal(`
-      <div class="sc-modal-head"><div><div class="sc-modal-title">Import camera clips</div>
-        <div class="sc-modal-name">${pairs.length} matched · ${clips.length - pairs.length} other clips on the card left alone${unmatchedTakes ? ` · ${unmatchedTakes} take(s) without a clip` : ''}</div></div>
-        <button type="button" class="sc-modal-x" data-close aria-label="Close">✕</button></div>
-      <div class="sc-imp-list">${rows}</div>
-      <div class="sc-modal-hint">Clips are <b>copied</b> into each shoot's folder with the take's name. The card is not changed.</div>
-      <div class="sc-imp-progress" hidden><div class="sc-imp-bar"><i></i></div><span></span></div>
-      <div class="sc-modal-row"><button type="button" class="btn ghost" data-close>Cancel</button><button type="button" class="btn primary sc-ok">Copy clips</button></div>`, { wide: false });
-    m.wrap.querySelector('.sc-modal-card').classList.add('sc-imp');
-    const okBtn = m.wrap.querySelector('.sc-ok'), prog = m.wrap.querySelector('.sc-imp-progress'), bar = prog.querySelector('i'), lbl = prog.querySelector('span');
-    okBtn.onclick = async () => {
-      const chosen = [...m.wrap.querySelectorAll('input[type=checkbox]')].filter(x => x.checked).map(x => pairs[+x.dataset.i]);
-      if (!chosen.length) return;
-      okBtn.disabled = true; m.wrap.querySelectorAll('[data-close]').forEach(b => (b.disabled = true));
-      prog.hidden = false;
-      const total = chosen.reduce((n, p) => n + p.c.size, 0); let done = 0, ok = 0;
-      for (const [i, p] of chosen.entries()) {
-        try {
-          const sub = await shootDir(folder, p.t.shoot || shootOrDefault());
-          const base = (p.t.audio === 'folder' && p.t.name ? p.t.name : takeName(p.t.shoot || shootOrDefault(), p.t.no)).replace(/\.[^.]+$/, '');
-          const dest = await freeName(sub, base + p.c.name.slice(p.c.name.lastIndexOf('.')).toUpperCase());
-          const w = await (await sub.getFileHandle(dest, { create: true })).createWritable();
-          const count = new TransformStream({ transform(chunk, ctl) { done += chunk.byteLength; bar.style.width = (done / total * 100).toFixed(1) + '%'; lbl.textContent = `Copying ${i + 1} of ${chosen.length} · ${Math.round(done / total * 100)}%`; ctl.enqueue(chunk); } });
-          await p.c.file.stream().pipeThrough(count).pipeTo(w);
-          p.t.clipName = dest; p.t.clipFolder = `${folder.name}/${sub.name}`; ok++;
-          saveTakes();
-        } catch (e) { toast(`Could not copy ${p.c.name}: ${e?.message || e}`, 'error'); }
-      }
-      renderTakes(); m.close();
-      toast(`${ok} clip${ok === 1 ? '' : 's'} copied and named after their takes.`, ok ? 'ok' : 'error');
-    };
-  }
-  $('scImport').onclick = importClips;
 
   // ------------------------------------------------------------------ sample data (quick check; remove before launch)
   const sampleBtn = $('scSample');
@@ -843,7 +751,7 @@ function init() {
     if (!shoot) setShoot(shootOrDefault());
     const sh = shoot, no = nextNo(sh), started = new Date();
     let name = takeName(sh, no);
-    if (takes.some(t => t.name === name)) name = name.replace(/\.wav$/, `_${pad(started.getHours())}${pad(started.getMinutes())}${pad(started.getSeconds())}.wav`);
+    if (takes.some(t => t.name === name)) name = name.replace(/\.wav$/, ` (${pad(started.getHours())}${pad(started.getMinutes())}${pad(started.getSeconds())}).wav`);
     const [a, c] = await Promise.all([micOk ? audio.startRecording(name) : false, camOk ? cam.startRecording() : false]);
     if (!a && !c) return toast('Recording did not start. Check the camera and microphone.', 'error');
     if (camOk && !c) toast('Camera did not start recording. Audio is recording.', 'error');
@@ -864,7 +772,7 @@ function init() {
       if (a && await folderOk(false)) {
         try {
           const sub = await shootDir(folder, t.shoot || shootOrDefault()), fin = await freeName(sub, t.name);
-          await audio.moveToFolder(t.name, sub, fin); t.name = fin; t.audio = 'folder'; t.folderName = `${folder.name}/${sub.name}`; await idb.set('dir:' + t.id, sub);
+          await audio.moveToFolder(t.name, sub, fin); t.name = fin; t.audio = 'folder'; t.folderName = folder.name; await idb.set('dir:' + t.id, sub);
         }
         catch (e) { toast('Audio kept in the browser — could not write to the folder: ' + (e?.message || e), 'error'); }
       }

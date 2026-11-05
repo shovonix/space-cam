@@ -5,7 +5,7 @@
 .device-picker,
 #right-rail .sec:has(> .device-picker),
 #left-rail .left-device,
-#pair-btn, #pair-pill, #install-rail, #install-setup{display:none!important}
+#pair-btn, #pair-pill{display:none!important}
 
 .sc-sec .sec-title .sc-state{font-family:var(--mono);font-size:10px;letter-spacing:.04em;text-transform:none;color:var(--fg-dim);display:inline-flex;align-items:center;gap:6px}
 .sc-state::before{content:"";width:7px;height:7px;border-radius:50%;background:#4a4a50}
@@ -106,3 +106,16 @@ body.sc-big{margin:0;height:100vh;display:flex;flex-direction:column;background:
 .sc-big-bar button.rec.on{background:#E8463A;color:#fff;font-family:ui-monospace,Menlo,monospace}
 .sc-big-bar button.rec.on i{background:#fff;border-radius:2px}
 .sc-big-bar button:disabled{opacity:.4}
+
+/* "Before you shoot" strip on the first (paste) screen */
+.sc-strip-wrap{margin:0 0 26px}
+.sc-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.sc-card{border:1px solid var(--hair);border-radius:12px;background:var(--surface);padding:12px 12px 10px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.sc-card.ready{border-color:rgba(48,209,88,.45)}
+.sc-card-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.sc-card-title{font-family:'Archivo',system-ui,sans-serif;font-weight:700;font-size:14px}
+.sc-card .sc-state{font-family:var(--mono);font-size:10.5px;color:var(--fg-dim);display:inline-flex;align-items:center;gap:6px}
+.sc-card-sub{font-size:12px;color:var(--fg-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-height:18px}
+.sc-card .tbtn{margin:4px 0 0}
+.sc-card-meter{margin:10px 0 6px}
+#scProblem2{margin-top:10px}

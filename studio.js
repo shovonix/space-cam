@@ -75,6 +75,29 @@ function init() {
     <div class="scripts-head"><div class="sec-title">Takes</div><button type="button" class="sc-mini-btn" id="scSaveAll" hidden>Save all</button></div>
     <div id="scTakeList"><div class="sc-none">No takes yet. Press <kbd>R</kbd> to record.</div></div>
   </div>`);
+  const strip = h(`
+  <div class="sc-strip-wrap">
+    <div class="sec-title">Before you shoot</div>
+    <div class="sc-strip">
+      <div class="sc-card" id="scCardCam">
+        <div class="sc-card-top"><span class="sc-card-title">Camera</span><span class="sc-state" id="scCardCamState">off</span></div>
+        <div class="sc-card-sub" id="scCardCamSub">USB · PC Remote · camera on</div>
+        <button type="button" class="tbtn sc-wide" id="scCardCamBtn"><span>Connect camera</span></button>
+      </div>
+      <div class="sc-card" id="scCardMic">
+        <div class="sc-card-top"><span class="sc-card-title">Microphone</span><span class="sc-state" id="scCardMicState">off</span></div>
+        <div class="sc-card-sub" id="scCardMicSub">Any mic your Mac sees</div>
+        <div class="sc-meter-bar sc-card-meter" id="scCardMeter" hidden><i id="scCardMeterFill"></i></div>
+        <button type="button" class="tbtn sc-wide" id="scCardMicBtn"><span>Enable microphone</span></button>
+      </div>
+      <div class="sc-card" id="scCardFolder">
+        <div class="sc-card-top"><span class="sc-card-title">Save folder</span><span class="sc-state" id="scCardFolderState">not set</span></div>
+        <div class="sc-card-sub" id="scCardFolderSub">Where audio takes go</div>
+        <button type="button" class="tbtn sc-wide" id="scCardFolderBtn"><span>Choose folder</span></button>
+      </div>
+    </div>
+    <div class="sc-problem" id="scProblem2" hidden></div>
+  </div>`);
   const toastEl = h(`<div class="sc-toast" id="scToast" hidden></div>`);
 
   const rightRail = $('right-rail'), utility = $('utility');
@@ -84,6 +107,7 @@ function init() {
   const leftSpacer = document.querySelector('#left-rail .rail-spacer');
   leftSpacer.before(takesSec);
   document.body.append(toastEl);
+  document.querySelector('#setup .brand')?.before(strip);
   const hint = $('shortcuts-hint');
   if (hint) [['R', 'record camera + audio'], ['A', 'hold to autofocus'], ['← →', 'focus near / far (MF)'], ['G', 'grid']]
     .forEach(([k, t]) => hint.append(h(`<span>${k.split(' ').map(x => `<kbd>${x}</kbd>`).join('')} ${t}</span>`)));
@@ -96,6 +120,9 @@ function init() {
     micState: $('scMicState'), micOn: $('scMicOn'), mic: $('scMic'), meterWrap: $('scMeterWrap'), meterFill: $('scMeterFill'),
     meterPeak: $('scMeterPeak'), db: $('scDb'), clip: $('scClip'), folderName: $('scFolderName'), folderBtn: $('scFolderBtn'),
     rec: recBtn, recLabel: $('scRecLabel'), takeList: $('scTakeList'), saveAll: $('scSaveAll'),
+    cCamState: $('scCardCamState'), cCamSub: $('scCardCamSub'), cCamBtn: $('scCardCamBtn'),
+    cMicState: $('scCardMicState'), cMicSub: $('scCardMicSub'), cMicBtn: $('scCardMicBtn'), cMeter: $('scCardMeter'), cMeterFill: $('scCardMeterFill'),
+    cFolderState: $('scCardFolderState'), cFolderSub: $('scCardFolderSub'), cFolderBtn: $('scCardFolderBtn'), problem2: $('scProblem2'),
   };
 
   // ------------------------------------------------------------------ toast
@@ -119,9 +146,14 @@ function init() {
     ui.camState.textContent = cam.recording ? 'recording' : on ? (cam.model || 'connected') : cam.state === 'connecting' ? 'connecting' : cam.state === 'unsupported' ? 'needs Chrome' : 'off';
     ui.camState.className = 'sc-state' + (cam.recording ? ' rec' : on ? ' on' : '');
     if (!on) ui.fps.textContent = '';
+    ui.cCamState.textContent = ui.camState.textContent; ui.cCamState.className = ui.camState.className;
+    ui.cCamSub.textContent = on ? 'Connected — preview in the right panel while prompting' : 'USB · PC Remote · camera on';
+    ui.cCamBtn.querySelector('span').textContent = on ? 'Disconnect' : ui.connect.textContent;
+    ui.cCamBtn.disabled = ui.connect.disabled && !on;
+    ui.cCamBtn.parentElement.classList.toggle('ready', on);
   }
   cam.addEventListener('state', e => {
-    if (e.detail.state === 'connected') { ui.problem.hidden = true; delete ui.connect.dataset.retry; cam.startPreview(); }
+    if (e.detail.state === 'connected') { ui.problem.hidden = true; ui.problem2.hidden = true; delete ui.connect.dataset.retry; cam.startPreview(); }
     if (e.detail.state === 'disconnected') { showCamProblem('nodevice', 'Camera unplugged or switched off.'); closeBig(); if (take) toast('Camera disconnected during the take.', 'error'); }
     renderCam(); renderRec();
   });
@@ -156,16 +188,21 @@ function init() {
       </li>
     </ol>`;
   function showCamProblem(kind, title, detail = '') {
-    ui.problem.hidden = false;
-    if (kind === 'unsupported') { ui.problem.innerHTML = `<b>${title}</b><p>Open Space Cam in Chrome or Edge on a Mac to control the camera.</p>`; return; }
-    ui.problem.innerHTML = `<b>${title}</b>${kind === 'nodevice' ? '<p>Camera on, data cable (not charge-only), USB Connection → <b>PC Remote</b>, Ctrl w/ Smartphone → Off.</p>' : ''}${SETUP_FIX}${detail ? `<small>Camera said: ${detail.replace(/</g, '&lt;')}</small>` : ''}`;
-    ui.problem.querySelectorAll('[data-copy]').forEach(b => b.onclick = async () => {
+    fillCamProblem(ui.problem, kind, title, detail);
+    fillCamProblem(ui.problem2, kind, title, detail);
+  }
+  function fillCamProblem(box, kind, title, detail = '') {
+    box.hidden = false;
+    if (kind === 'unsupported') { box.innerHTML = `<b>${title}</b><p>Open Space Cam in Chrome or Edge on a Mac to control the camera.</p>`; return; }
+    box.innerHTML = `<b>${title}</b>${kind === 'nodevice' ? '<p>Camera on, data cable (not charge-only), USB Connection → <b>PC Remote</b>, Ctrl w/ Smartphone → Off.</p>' : ''}${SETUP_FIX}${detail ? `<small>Camera said: ${detail.replace(/</g, '&lt;')}</small>` : ''}`;
+    box.querySelectorAll('[data-copy]').forEach(b => b.onclick = async () => {
       try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = 'Copied'; setTimeout(() => (b.textContent = 'Copy'), 1500); } catch { toast('Could not copy.', 'error'); }
     });
   }
   if (cam.state === 'unsupported') showCamProblem('unsupported', "This browser can't control USB cameras.");
 
   ui.connect.onclick = async () => cam.connect({ pick: !(await cam.hasPermittedDevice()) });
+  ui.cCamBtn.onclick = () => (cam.state === 'connected' ? ui.disconnect.onclick() : ui.connect.onclick());
   ui.disconnect.onclick = () => {
     if (cam.recording) return toast('Stop recording first.', 'error');
     closeBig(); cam.disconnect(); toast('Camera released.');
@@ -233,7 +270,7 @@ function init() {
     shown = Math.max(e.detail.peakDb, fall, -120); shownT = now0;
     const peakDb = shown;
     const pct = Math.max(0, Math.min(100, (peakDb + 60) / 60 * 100));
-    ui.meterFill.style.width = pct + '%';
+    ui.meterFill.style.width = pct + '%'; ui.cMeterFill.style.width = pct + '%';
     const now = performance.now();
     if (peakDb > peakHold || now - peakHoldT > 1500) { peakHold = peakDb; peakHoldT = now; }
     ui.meterPeak.style.left = Math.max(0, Math.min(100, (peakHold + 60) / 60 * 100)) + '%';
@@ -246,6 +283,10 @@ function init() {
     ui.micState.textContent = audio.state === 'recording' ? 'recording' : on ? 'ready' : 'off';
     ui.micState.className = 'sc-state' + (audio.state === 'recording' ? ' rec' : on ? ' on' : '');
     ui.mic.disabled = audio.state === 'recording';
+    ui.cMicState.textContent = ui.micState.textContent; ui.cMicState.className = ui.micState.className;
+    ui.cMicSub.textContent = on ? audio.deviceLabel : 'Any mic your Mac sees';
+    ui.cMicBtn.hidden = on; ui.cMeter.hidden = !on;
+    ui.cMicBtn.parentElement.classList.toggle('ready', on);
   }
   async function openMic(id) {
     const ok = await audio.open(id ?? store.get('micId', ''));
@@ -253,8 +294,9 @@ function init() {
     renderRec();
   }
   ui.micOn.onclick = () => openMic();
+  ui.cMicBtn.onclick = () => openMic();
   ui.mic.onchange = () => openMic(ui.mic.value);
-  if (!AudioCore.supported) { ui.micOn.disabled = true; ui.micOn.querySelector('span').textContent = 'Audio needs Chrome'; }
+  if (!AudioCore.supported) { ui.micOn.disabled = ui.cMicBtn.disabled = true; ui.micOn.querySelector('span').textContent = ui.cMicBtn.querySelector('span').textContent = 'Audio needs Chrome'; }
   // Re-open the mic automatically if permission was already given in an earlier visit.
   navigator.permissions?.query({ name: 'microphone' }).then(p => { if (p.state === 'granted' && AudioCore.supported) openMic(); }).catch(() => {});
 
@@ -276,6 +318,11 @@ function init() {
     const ok = await folderOk(false);
     ui.folderName.textContent = folder ? folder.name + (ok ? '' : ' (click to allow)') : 'Not chosen — save after the shoot';
     ui.folderBtn.querySelector('span').textContent = folder ? (ok ? 'Change folder' : 'Allow access') : 'Choose folder';
+    ui.cFolderState.textContent = folder ? (ok ? 'ready' : 'needs access') : 'not set';
+    ui.cFolderState.className = 'sc-state' + (folder && ok ? ' on' : '');
+    ui.cFolderSub.textContent = folder ? folder.name : 'Where audio takes go';
+    ui.cFolderBtn.querySelector('span').textContent = ui.folderBtn.querySelector('span').textContent;
+    ui.cFolderBtn.parentElement.classList.toggle('ready', !!(folder && ok));
   }
   ui.folderBtn.onclick = async () => {
     if (!window.showDirectoryPicker) return toast('Choosing a folder needs Chrome or Edge.', 'error');
@@ -284,6 +331,7 @@ function init() {
     catch (e) { if (e?.name !== 'AbortError') toast('Could not use that folder: ' + (e?.message || e), 'error'); }
     renderFolder(); flushWaiting();
   };
+  ui.cFolderBtn.onclick = () => ui.folderBtn.onclick();
   idb.get('folder').then(f => { folder = f || null; renderFolder(); }).catch(() => renderFolder());
 
   // ------------------------------------------------------------------ takes

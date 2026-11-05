@@ -81,18 +81,12 @@ function init() {
   const strip = h(`
   <div class="sc-strip-wrap">
     <div class="sec-title"><span>Get ready</span><button type="button" class="sc-mini-btn" id="scSample">Load sample data</button></div>
-    <div class="sc-strip sc-strip-3">
+    <div class="sc-strip sc-strip-cs">
       <div class="sc-card sc-card-big" id="scCardCam">
         <div class="sc-card-top"><span class="sc-card-title">Camera</span><span class="sc-status" id="scCardCamState">Off</span></div>
         <div class="sc-card-sub" id="scCardCamSub">USB · PC Remote · camera on</div>
         <div class="sc-media" id="scCardPreviewBox"><span id="scCardPreviewMsg">Camera off</span><img id="scCardPreview" alt=""></div>
         <button type="button" class="sc-cbtn primary" id="scCardCamBtn"><span>Connect camera</span></button>
-      </div>
-      <div class="sc-card sc-card-big" id="scCardMic">
-        <div class="sc-card-top"><span class="sc-card-title">Microphone</span><span class="sc-status" id="scCardMicState">Off</span></div>
-        <div class="sc-card-sub" id="scCardMicSub">Any mic your Mac sees</div>
-        <div class="sc-media sc-media-meter" id="scCardWaveBox"><div class="sc-bigmeter"><div class="sc-bigmeter-bar"><i id="scCardFill"></i><b id="scCardPeak"></b></div><div class="sc-bigmeter-scale"><span>−50</span><span>−24</span><span>−12</span><span>−6</span><span>0</span></div><div class="sc-bigmeter-read" id="scCardDb">Mic off</div></div><span id="scCardWaveMsg" hidden></span></div>
-        <button type="button" class="sc-cbtn primary" id="scCardMicBtn"><span>Connect mic</span></button>
       </div>
       <div class="sc-card sc-card-big sc-card-script" id="scCardScript">
         <div class="sc-card-top"><span class="sc-card-title">Script</span><span class="sc-card-tools" id="scScriptTools"></span></div>
@@ -101,14 +95,21 @@ function init() {
         <button type="button" class="sc-cbtn primary" id="scScriptSave"><span>Save script</span></button>
       </div>
       <div class="sc-note"><div class="sc-problem" id="scProblem2" hidden></div><details class="sc-help" id="scHelp2"></details></div>
-      <div class="sc-note"><p>WAV 24-bit at the mic's rate (usually 48 kHz), no browser processing. Set the level on your interface; aim for peaks around −12 dB.</p></div>
       <div class="sc-note" id="scScriptNote"><p>Saved scripts appear on the left. Click one to use it; ✎ edits it. <kbd>⌘S</kbd> saves.</p></div>
     </div>
   </div>`);
   const setupRail = h(`
   <aside class="rail sc-setup-rail" id="scSetupRail" aria-label="Setup options">
+    <div class="sec sc-sec" id="scCardMic">
+      <div class="sec-title"><span>Microphone</span><span class="sc-status" id="scCardMicState">Off</span></div>
+      <div class="sc-rail-row"><span class="sc-rail-ico"><svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 003-3V5a3 3 0 00-6 0v6a3 3 0 003 3zm5-3a5 5 0 01-10 0H5a7 7 0 006 6.92V21h2v-3.08A7 7 0 0019 11h-2z"/></svg></span><span id="scCardMicSub">Any mic your Mac sees</span></div>
+      <div class="sc-media sc-media-meter sc-rail-meter" id="scCardWaveBox"><div class="sc-bigmeter"><div class="sc-bigmeter-bar"><i id="scCardFill"></i><b id="scCardPeak"></b></div><div class="sc-bigmeter-scale"><span>−50</span><span>−24</span><span>−12</span><span>−6</span><span>0</span></div><div class="sc-bigmeter-read" id="scCardDb">Mic off</div></div><span id="scCardWaveMsg" hidden></span></div>
+      <button type="button" class="tbtn sc-wide" id="scCardMicBtn"><span>Connect mic</span></button>
+      <div class="caption" id="scMicNote">No mic here? That's fine if your camera or an external recorder records the sound. Make sure one of them is recording.</div>
+      <div class="caption" id="scMicTip" hidden>WAV 24-bit, no browser processing. Set the level on your interface; aim for peaks around −12 dB.</div>
+    </div>
     <div class="sec sc-sec">
-      <div class="sec-title"><span>Save folder</span></div>
+      <div class="sec-title"><span>Audio save location</span></div>
       <div class="sc-rail-row"><span class="sc-rail-ico">${'<svg viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>'}</span><b id="scFolderName">Downloads</b></div>
       <button type="button" class="tbtn sc-wide" id="scFolderBtn"><span>Choose folder</span></button>
       <button type="button" class="sc-link" id="scFolderReset" hidden>Save to Downloads instead</button>
@@ -389,6 +390,7 @@ function init() {
     if (!on) { ui.cFill.style.clipPath = 'inset(0 100% 0 0)'; ui.cPeak.style.left = '0%'; ui.cDb.textContent = 'Mic off'; }
     ui.cPeak.hidden = !on;
     ui.cMicBtn.querySelector('span').textContent = on ? 'Disconnect' : 'Connect mic';
+    $('scMicNote').hidden = on; $('scMicTip').hidden = !on;
     ui.cMicBtn.classList.toggle('primary', !on);
     ui.cMicBtn.disabled = audio.state === 'recording';
   }
@@ -836,6 +838,7 @@ function init() {
     const micOk = audio.state === 'ready';
     if (!camOk && !micOk) return toast('Connect the camera or enable a microphone first.', 'error');
     if (micOk && folder) await folderOk(true); // ask once while we still have the key press / click
+    if (!micOk) toast('No mic in Space Cam — make sure the camera or an external recorder is recording the sound.');
     const started = new Date(), no = nextNo(), label = `SpaceTake_${no}`;
     let name = `${label}.wav`;
     if (takes.some(t => t.name === name)) name = `${label} (${pad(started.getHours())}${pad(started.getMinutes())}${pad(started.getSeconds())}).wav`;

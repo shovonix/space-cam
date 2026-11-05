@@ -294,3 +294,11 @@ body:not(.prompting):not(.stage-window):not(.touch) #setup{right:var(--rail)}
 .sc-rail-ico svg{width:16px;height:16px;fill:var(--fg-dim)}
 .sc-setup-rail .caption{margin-top:8px}
 @media (max-width:1100px){.sc-strip.sc-strip-3{grid-template-columns:1fr 1fr}}
+/* Camera | Script in the middle; the mic lives in the setup sidebar */
+.sc-strip.sc-strip-cs{grid-template-columns:repeat(2,minmax(0,1fr));row-gap:12px;align-items:stretch}
+.sc-strip-cs>.sc-card .sc-cbtn{margin-top:auto}
+.sc-strip-cs>.sc-card .sc-media,.sc-strip-cs .sc-script-slot{margin-bottom:12px}
+.sc-rail-meter{aspect-ratio:auto;padding:12px 12px 10px;margin:0 0 10px}
+.sc-rail-meter .sc-bigmeter-bar{height:18px;border-radius:5px}
+.sc-rail-meter .sc-bigmeter{gap:6px}
+#scCardMic .caption{margin-top:8px}

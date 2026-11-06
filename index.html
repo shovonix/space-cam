@@ -258,7 +258,12 @@ body:not(.stage-window) #script-text{cursor:text}
 }
 #guide.off{opacity:0}
 
-.para{margin-bottom:1.1em;transition:opacity .3s ease}
+.para{margin-bottom:var(--para-gap,1.1em);transition:opacity .3s ease}
+/* Space Cam: pause marks at paragraph breaks */
+#script-text.pause-marks .para:not(:last-child)::after{content:"";display:block;width:.3em;height:.3em;margin-top:.4em;border-radius:50%;background:var(--red);opacity:.7}
+#script-text.pause-marks[style*="text-align: center"] .para:not(:last-child)::after{margin-left:auto;margin-right:auto}
+#script-text.pause-marks[style*="text-align: right"] .para:not(:last-child)::after{margin-left:auto}
+body:not(.stage-window) #stage:not(.editing) #script-text{cursor:pointer}
 .para.dim{opacity:var(--dimop,.45)}
 .para:last-child{margin-bottom:0}
 
@@ -870,6 +875,18 @@ body.touch #screen-note{order:5;margin-top:12px;padding:10px 12px;font-size:12px
       <div class="slider-label"><span>Text size</span><span id="size-val">—</span></div>
       <input type="range" id="size" min="22" max="110" step="2">
     </div>
+    <div class="slider-group" id="linesp-group">
+      <div class="slider-label"><span>Line spacing</span><span id="linesp-val">—</span></div>
+      <input type="range" id="linesp" min="1.1" max="2.2" step="0.05">
+    </div>
+    <div class="slider-group" id="parasp-group">
+      <div class="slider-label"><span>Paragraph gap</span><span id="parasp-val">—</span></div>
+      <input type="range" id="parasp" min="0" max="3" step="0.1">
+    </div>
+    <div class="slider-group" id="guidepos-group">
+      <div class="slider-label"><span>Reading line</span><span id="guidepos-val">—</span></div>
+      <input type="range" id="guidepos" min="20" max="60" step="1">
+    </div>
     <div class="slider-group" id="align-group">
       <div class="slider-label"><span>Alignment</span><span></span></div>
       <div class="seg" id="align-seg" role="group" aria-label="Text alignment">
@@ -882,6 +899,10 @@ body.touch #screen-note{order:5;margin-top:12px;padding:10px 12px;font-size:12px
       <button class="tbtn guide" id="guide-btn" aria-pressed="true" aria-label="Guide line" title="Reading guide line">
         <span>Guide line</span>
         <svg viewBox="0 0 24 24"><path fill-rule="evenodd" clip-rule="evenodd" d="M3 5h18v14H3V5zm2 2v10h14V7H5z"/><rect x="5" y="11" width="14" height="2"/></svg>
+      </button>
+      <button class="tbtn" id="pausemarks-btn" aria-pressed="true" aria-label="Pause marks" title="Small red marks at paragraph breaks — a cue to pause">
+        <span>Pause marks</span>
+        <svg viewBox="0 0 24 24"><path d="M3 5h18v2H3zM3 9h12v2H3z"/><rect x="3" y="14" width="5" height="5" rx="1"/></svg>
       </button>
       <button class="tbtn" id="fade-btn" aria-pressed="true" aria-label="Fade other lines" title="On: lines away from the guide fade to grey. Off: all text stays white.">
         <span>Fade text</span>
@@ -3282,6 +3303,10 @@ var qrcode = function() {
     bgOpacity: 100,    // stage background darkness, 100 = solid black
     pedalKeys: [],     // [{code,key}] — any of these behave exactly like Space
     guideVisible: true, // red reading-guide line across the middle of the stage
+    lineSpacing: 1.5,   // Space Cam: line height (× text size)
+    paraSpacing: 1.1,   // Space Cam: gap between paragraphs (em)
+    guidePos: 0.5,      // Space Cam: reading line position, fraction of the screen height from the top
+    pauseMarks: true,   // Space Cam: small marks at paragraph breaks
     previewVisible: true, // mini stage preview in the control bar — open by default
     stageWidth: null, // real external stage window's reported width, px — null until one ever connects
     deviceType: null, // 'mobile' | 'tablet' | 'single' | 'dual' — null until first detected
@@ -3474,8 +3499,20 @@ var qrcode = function() {
   });
   var viewK = 1;
   function textPadTop(){ return parseFloat(getComputedStyle(scriptText).paddingTop) || 0; }
-  function getG(){ return (scroller.scrollTop + scroller.clientHeight / 2) / viewK - textPadTop(); }
-  function setG(g){ scroller.scrollTop = (g + textPadTop()) * viewK - scroller.clientHeight / 2; }
+  // Space Cam: the reading line can sit anywhere from 20% to 60% down the screen.
+  var guideFrac = 0.5, flipSideways = false;
+  function applyGuidePos(keep){
+    var g = (keep && !stage.classList.contains('hidden')) ? getG() : null;
+    var f = Math.max(0.2, Math.min(0.6, state.guidePos == null ? 0.5 : Number(state.guidePos)));
+    guideFrac = flipSideways ? 0.5 : f;
+    if(!flipSideways) guideEl.style.top = (guideFrac * 100) + '%';
+    var gs = document.getElementById('guidepos'), gv = document.getElementById('guidepos-val');
+    if(gs){ gs.value = Math.round(f * 100); gv.textContent = Math.round(f * 100) + '% from top'; }
+    if(g !== null && isFinite(g)) setG(g);
+    if(typeof scheduleDim === 'function') scheduleDim();
+  }
+  function getG(){ return (scroller.scrollTop + scroller.clientHeight * guideFrac) / viewK - textPadTop(); }
+  function setG(g){ scroller.scrollTop = (g + textPadTop()) * viewK - scroller.clientHeight * guideFrac; }
   function applyViewScale(){
     if(isStageWindow) return;
     var col = scroller.clientWidth;
@@ -3540,6 +3577,7 @@ var qrcode = function() {
       // Transform the scroll viewport (not the text block): it flips around
       // the viewport's own centre, which is exactly where the guide line
       // sits, so the line being read stays on the guide in every mode.
+      flipSideways = sideways;
       if(sideways){
         var stW = stage.clientWidth, stH = stage.clientHeight;
         scroller.style.inset = 'auto';
@@ -3558,7 +3596,9 @@ var qrcode = function() {
       scriptText.style.transform = 'none';
     }else{
       scroller.style.transform = 'none';
+      flipSideways = false;
     }
+    applyGuidePos(false);
     rotDeg.textContent = (state.rotation || 0) + '°';
     var rotSvg = rotateBtn.querySelector('svg'); if(rotSvg) rotSvg.style.transform = 'rotate(' + (state.rotation || 0) + 'deg)';
     rotateBtn.title = 'Rotate 90° — now ' + (state.rotation || 0) + '° (stage window in dual mode)';
@@ -3640,7 +3680,7 @@ var qrcode = function() {
     var off = !paras.length || state.dimOn === false || !(state.dimPct > 0) || (typeof editMode !== 'undefined' && editMode);
     var cur = -1;
     if(!off){
-      var y = (scroller.scrollTop + scroller.clientHeight / 2) / viewK;
+      var y = (scroller.scrollTop + scroller.clientHeight * guideFrac) / viewK;
       for(var i = 0; i < paras.length; i++){ if(paras[i].offsetTop <= y + 8) cur = i; else break; }
       if(cur < 0) cur = 0;
     }
@@ -3662,7 +3702,15 @@ var qrcode = function() {
   function applySize(){
     scriptText.style.fontSize = state.fontSize + 'px';
     scheduleDim();
-    scriptText.style.lineHeight = '1.5';
+    scriptText.style.lineHeight = String(state.lineSpacing || 1.5);
+    scriptText.style.setProperty('--para-gap', (state.paraSpacing == null ? 1.1 : state.paraSpacing) + 'em');
+    scriptText.classList.toggle('pause-marks', state.pauseMarks !== false);
+    var ls = document.getElementById('linesp'), lv = document.getElementById('linesp-val');
+    if(ls){ ls.value = state.lineSpacing || 1.5; lv.textContent = (state.lineSpacing || 1.5).toFixed(2) + '×'; }
+    var ps = document.getElementById('parasp'), pv = document.getElementById('parasp-val');
+    if(ps){ var pg = state.paraSpacing == null ? 1.1 : state.paraSpacing; ps.value = pg; pv.textContent = pg.toFixed(1) + ' em'; }
+    var pm = document.getElementById('pausemarks-btn');
+    if(pm) pm.setAttribute('aria-pressed', state.pauseMarks !== false ? 'true' : 'false');
     sizeSlider.value = state.fontSize;
     sizeVal.textContent = state.fontSize + 'px';
   }
@@ -4147,6 +4195,32 @@ var qrcode = function() {
     scriptText.style.fontSize = state.fontSize + 'px';
     sizeVal.textContent = state.fontSize + 'px';
     save();
+  });
+  // Space Cam: spacing, reading line and pause marks (all synced to the Stage window via state)
+  (function(){
+    // keep the same line under the reading line, then tell the Stage window where we are
+    var keepLine = function(fn){
+      var live = !stage.classList.contains('hidden'), pos = live ? getPos() : null;
+      fn(); applySize(); applyViewScale(); save();
+      if(live){ setPos(pos); seekTo(scroller.scrollTop); }
+    };
+    var ls = document.getElementById('linesp'), ps = document.getElementById('parasp'), gp = document.getElementById('guidepos'), pm = document.getElementById('pausemarks-btn');
+    if(ls) ls.addEventListener('input', function(){ keepLine(function(){ state.lineSpacing = Number(ls.value); }); });
+    if(ps) ps.addEventListener('input', function(){ keepLine(function(){ state.paraSpacing = Number(ps.value); }); });
+    if(pm) pm.addEventListener('click', function(){ keepLine(function(){ state.pauseMarks = state.pauseMarks === false; }); });
+    if(gp) gp.addEventListener('input', function(){ state.guidePos = Number(gp.value) / 100; applyGuidePos(true); save(); if(!stage.classList.contains('hidden')) seekTo(scroller.scrollTop); });
+  })();
+  // Space Cam: tap (click) any word on the control view to continue reading from there.
+  scriptText.addEventListener('click', function(e){
+    if(isStageWindow || editMode || isEditingScript() || stage.classList.contains('hidden')) return;
+    if(window.getSelection && String(window.getSelection()).length) return; // don't fight text selection
+    var r = null;
+    if(document.caretRangeFromPoint){ var cr = document.caretRangeFromPoint(e.clientX, e.clientY); if(cr){ cr.expand && cr.expand('word'); r = cr.getBoundingClientRect(); } }
+    if(!r || !r.height){ r = { top: e.clientY - 10, bottom: e.clientY + 10 }; }
+    var sTop = scroller.getBoundingClientRect().top;
+    var y = (r.top + r.bottom) / 2 - sTop + scroller.scrollTop;
+    seekTo(y - scroller.clientHeight * guideFrac);
+    scheduleDim();
   });
   marginSlider.addEventListener('input', function(){
     state.marginPx = Number(marginSlider.value);
@@ -4697,7 +4771,7 @@ var qrcode = function() {
   function paraList(){ return scriptText.querySelectorAll('.para'); }
   function getPos(){
     var ps = paraList(); if(!ps.length) return 0;
-    var y = scroller.scrollTop + scroller.clientHeight / 2;
+    var y = scroller.scrollTop + scroller.clientHeight * guideFrac;
     var pick = 0;
     for(var i = 0; i < ps.length; i++){ if(ps[i].offsetTop * viewK <= y) pick = i; else break; }
     var top = ps[pick].offsetTop * viewK, h = Math.max(1, ps[pick].offsetHeight * viewK);
@@ -4713,7 +4787,7 @@ var qrcode = function() {
     suppressScrollSync = true;
     clearTimeout(suppressScrollSyncTimer);
     suppressScrollSyncTimer = setTimeout(function(){ suppressScrollSync = false; }, 120);
-    scroller.scrollTop = posToY(pos) - scroller.clientHeight / 2;
+    scroller.scrollTop = posToY(pos) - scroller.clientHeight * guideFrac;
   }
   var pairPillEl = null, pairPillTimer = null;
   function pairPill(msg, kind){
@@ -4823,7 +4897,7 @@ var qrcode = function() {
         pair.prevY = y; pair.prevT = now;
         suppressScrollSync = true; clearTimeout(suppressScrollSyncTimer);
         suppressScrollSyncTimer = setTimeout(function(){ suppressScrollSync = false; }, 120);
-        scroller.scrollTop = y - scroller.clientHeight / 2;
+        scroller.scrollTop = y - scroller.clientHeight * guideFrac;
       }
       pairRefreshUi();
     }

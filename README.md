@@ -3,7 +3,7 @@
 One page to run a solo recording: **camera control + audio recording + teleprompter** (Dual Monitor).
 Built on the Space Prompter design. Chrome or Edge on a Mac. Built and tested with a Sony A7 III.
 
-- App: https://cam.shovonix.dev (shovonix.dev/cam redirects here)
+- App: https://spacecam.shovonix.dev (cam.shovonix.dev redirects here)
 - Camera diagnostics: `/test/` lists every setting and action the camera exposes
 
 ## What it does

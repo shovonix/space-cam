@@ -34,5 +34,6 @@ No build step.
 ## Workflow
 - Work on the Mac in `~/Sites/space/space-cam`. Commit small, push to `main`.
 - Live files: `/home/cam/htdocs/cam.shovonix.dev` (CloudPanel site user `cam`). There's no separate spacecam site folder, so spacecam.shovonix.dev is presumably served from this one; check the nginx vhost before changing domains.
-- That folder is NOT a git checkout yet, and this repo is private, so the server can't fetch it without a deploy key. Until one is set up (like Space Balance), ask Shovon before deploying. Files must stay owned by user `cam`.
+- Deploy: push to `main`, then on the VPS run `deploy-space cam` as root. It pulls `main` as user `cam` over SSH with the read-only deploy key `~cam/.ssh/spacecam_deploy`, fast-forward only.
+- Git data lives outside the web root at `/home/cam/space-cam.git`. `CLAUDE.md` is excluded from the live folder via sparse-checkout.
 - Never edit the live files on the VPS directly.

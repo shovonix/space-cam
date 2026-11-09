@@ -58,6 +58,14 @@ function init() {
     <details class="sc-help" id="scHelp"></details>
   </div>`);
 
+  // Live camera view in the center panel (top right of the prompter). Click opens Big preview.
+  const centerCam = h(`
+  <div class="sc-center-cam" id="scCenterCam" hidden title="Live camera — click for Big preview">
+    <img id="scCenterImg" alt="Live camera preview">
+    <div class="sc-grid" id="scCenterGrid" hidden><i></i><i></i><i></i><i></i></div>
+    <span class="sc-badge" id="scCenterBadge" hidden><i></i><span id="scCenterTime">00:00</span></span>
+  </div>`);
+
   const audioSec = h(`
   <div class="sec sc-sec" id="scAudioSec">
     <div class="sec-title"><span>Audio</span><span class="sc-state" id="scMicState">off</span></div>
@@ -68,7 +76,7 @@ function init() {
       <div class="sc-meter-label"><span id="scDb">−∞ dB</span><span class="sc-clip" id="scClip">CLIP</span></div>
     </div>
     <button type="button" class="sc-link" id="scMicOff" hidden>Disconnect mic</button>
-    <div class="caption">WAV, 24-bit at the mic's rate (usually 48 kHz). Kept safe in the browser while recording, then saved to Downloads (or your folder, bottom left) when you stop.</div>
+    <div class="caption">WAV, 24-bit at the mic's rate (usually 48 kHz). Kept safe in the browser while recording, then saved to Downloads (or the folder below) when you stop.</div>
   </div>`);
 
   const recBtn = h(`<button type="button" class="cap-side sc-rec" id="scRec" aria-label="Record camera and audio — key R"><i></i><span id="scRecLabel">Record</span></button>`);
@@ -130,6 +138,7 @@ function init() {
 
   const rightRail = $('right-rail'), utility = $('utility');
   utility.after(camSec); camSec.after(audioSec);
+  $('stage').append(centerCam);
   const play = $('play');
   play.after(recBtn); play.after(h(`<span class="cap-div"></span>`));
   const scriptsHead = document.querySelector('#left-rail .scripts-head');
@@ -152,6 +161,8 @@ function init() {
     strip.after(goSec);
     goSec.append($('start-btn'), $('cancel-edit'));
     document.body.append(setupRail);
+    // Spotlight is the only page: the save-folder section lives in its right rail, under Audio.
+    audioSec.after($('scFolderBtn').closest('.sec'));
   }
   const hint = $('shortcuts-hint');
   if (hint) [['R', 'record camera + audio'], ['A', 'hold to autofocus'], ['← →', 'focus near / far (MF)'], ['G', 'grid']]
@@ -168,7 +179,9 @@ function init() {
     cCamState: $('scCardCamState'), cCamSub: $('scCardCamSub'), cCamBtn: $('scCardCamBtn'), cPreview: $('scCardPreview'), cPreviewBox: $('scCardPreviewBox'), micOff: $('scMicOff'),
     cMicState: $('scCardMicState'), cMicSub: $('scCardMicSub'), cMicBtn: $('scCardMicBtn'), cFill: $('scCardFill'), cPeak: $('scCardPeak'), cWaveMsg: $('scCardWaveMsg'), cDb: $('scCardDb'), cPreviewMsg: $('scCardPreviewMsg'), cPedalState: $('scCardPedalState'), cPedalSub: $('scCardPedalSub'), cPedalBtn: $('scCardPedalBtn'),
     problem2: $('scProblem2'), help: $('scHelp'), help2: $('scHelp2'),
+    ccImg: $('scCenterImg'), ccGrid: $('scCenterGrid'), ccBadge: $('scCenterBadge'), ccTime: $('scCenterTime'),
   };
+  centerCam.onclick = () => { if (!ui.big.disabled) openBig(); };
 
   // ------------------------------------------------------------------ toast
   let toastT;
@@ -182,6 +195,7 @@ function init() {
   function renderCam() {
     const on = cam.state === 'connected';
     ui.empty.hidden = on; ui.img.hidden = !on; ui.info.hidden = !on; ui.disconnect.hidden = !on;
+    centerCam.hidden = !on; if (!on) ui.ccImg.removeAttribute('src');
     ui.connect.disabled = cam.state === 'connecting' || cam.state === 'unsupported';
     ui.connect.textContent = cam.state === 'connecting' ? 'Connecting…' : ui.connect.dataset.retry ? 'Try again' : 'Connect camera';
     ui.af.disabled = !on || !cam.has('af');
@@ -220,7 +234,7 @@ function init() {
   });
   cam.addEventListener('frame', e => {
     const url = URL.createObjectURL(e.detail.blob);
-    ui.img.src = url; ui.cPreview.src = url; ui.cPreviewBox.classList.add('live'); if (big) big.img.src = url;
+    ui.img.src = url; ui.cPreview.src = url; ui.ccImg.src = url; ui.cPreviewBox.classList.add('live'); if (big) big.img.src = url;
     if (lastUrl) URL.revokeObjectURL(lastUrl);
     lastUrl = url;
   });
@@ -315,7 +329,7 @@ function init() {
   ui.near.onclick = () => focusBy(-1); ui.far.onclick = () => focusBy(1);
 
   // grid
-  function setGrid(on) { ui.grid.hidden = !on; ui.gridBtn.setAttribute('aria-pressed', String(on)); store.set('grid', on); if (big) big.grid.hidden = !on; }
+  function setGrid(on) { ui.grid.hidden = !on; ui.ccGrid.hidden = !on; ui.gridBtn.setAttribute('aria-pressed', String(on)); store.set('grid', on); if (big) big.grid.hidden = !on; }
   ui.gridBtn.onclick = () => setGrid(ui.grid.hidden);
   setGrid(store.get('grid', false));
 
@@ -745,15 +759,16 @@ function init() {
 
   // ------------------------------------------------------------------ sample data (quick check; remove before launch)
   const sampleBtn = $('scSample');
+  $('scSaveAll').before(sampleBtn); // Spotlight is the only page: sample data lives in the Takes header
   const SAMPLE_SCRIPTS = [
     { name: 'Sample · Quick hello', text: "Hi, I'm testing Space Cam.\n\nThis is a short script to check the prompter, the camera and the microphone together.\n\nIf you can read this on the glass, everything works." },
     { name: 'Sample · Product intro', text: "Welcome back to the channel.\n\nToday I'm going to show you a tool that changed how I record my videos.\n\nIt runs in the browser. No install, no account.\n\nIt controls my camera, records my voice and scrolls my script, all from one window.\n\nLet me show you how it works, step by step.\n\nIf this helps you, you know what to do. See you in the next one." },
     { name: 'Sample · Long tutorial', text: Array.from({ length: 14 }, (_, i) => `Step ${i + 1}. ` + [
-      'Open the app and check the three cards at the top: camera, microphone and save folder.',
+      'Open the app and check camera, audio and save folder in the right rail.',
       'Connect the camera over USB. Make sure it is set to PC Remote.',
       'Pick your microphone and watch the meter while you speak at your normal level.',
       'Choose the folder where your audio takes should go.',
-      'Paste your script, then press Go to Spotlight.',
+      'Press + New, paste your script and save it.',
       'Connect the stage window and drag it to the teleprompter screen.',
       'Adjust the speed and the text size until it reads comfortably.',
       'Hold A to focus on your face, or use the arrows if the camera is on manual focus.',
@@ -829,6 +844,7 @@ function init() {
     ui.badge.hidden = !recording; ui.badgeTime.textContent = fmt(s);
     const warn = recording && s >= WARN_AT && take.camera;
     ui.badge.classList.toggle('warn', warn); ui.rec.classList.toggle('warn', warn);
+    ui.ccBadge.hidden = !recording; ui.ccTime.textContent = fmt(s); ui.ccBadge.classList.toggle('warn', warn);
     if (big) { big.rec.classList.toggle('on', recording); big.recLabel.textContent = recording ? fmt(s) : 'Record'; big.badge.hidden = !recording; big.time.textContent = fmt(s); big.badge.classList.toggle('warn', warn); }
     renderCam(); renderMic();
   }

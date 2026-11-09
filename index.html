@@ -3481,6 +3481,10 @@ var qrcode = function() {
       frag.appendChild(div);
     });
     scriptText.appendChild(frag);
+    if(!isStageWindow && !text.trim()){
+      // Space Cam: no script yet. Recording without a prompter is fine.
+      scriptText.innerHTML = '<div class="para sc-noscript">No script yet. Press <b>+ New</b> on the left (or <kbd>E</kbd>) to paste one, or just record.</div>';
+    }
     applyViewScale();
     dimCur = -2; scheduleDim();
     updateProgress();
@@ -3836,14 +3840,17 @@ var qrcode = function() {
     renderScriptTabs();
   }
   // Space Cam: edit a saved script's full text in a popup (re-paste the whole script).
+  // id null = paste a new script (Spotlight is the only page, so new scripts start here).
   function openScriptEditor(id, evt){
     if(evt) evt.stopPropagation();
-    var s = findScript(id);
+    var isNew = !id;
+    var s = isNew ? { name: nextDefaultName(), text: '' } : findScript(id);
     if(!s) return;
+    var title = isNew ? 'New script' : 'Edit script';
     var wrap = document.createElement('div');
     wrap.className = 'sc-modal';
-    wrap.innerHTML = '<div class="sc-modal-card sc-modal-wide" role="dialog" aria-modal="true" aria-label="Edit script">' +
-      '<div class="sc-modal-head"><div class="sec-title" style="margin:0">Edit script</div>' +
+    wrap.innerHTML = '<div class="sc-modal-card sc-modal-wide" role="dialog" aria-modal="true" aria-label="' + title + '">' +
+      '<div class="sc-modal-head"><div class="sec-title" style="margin:0">' + title + '</div>' +
       '<button type="button" class="sc-modal-x" aria-label="Close">✕</button></div>' +
       '<input class="sc-modal-input sc-modal-name-in" maxlength="80" spellcheck="false" placeholder="Script name">' +
       '<textarea class="sc-modal-text" spellcheck="false" placeholder="Paste or type your script here"></textarea>' +
@@ -3859,9 +3866,16 @@ var qrcode = function() {
       if(!v.trim()){ ta.focus(); return; }
       s.text = v; s.updatedAt = Date.now();
       if(nameIn.value.trim()) s.name = nameIn.value.trim();
+      if(isNew){
+        s.id = genId();
+        state.scripts.push(s);
+        pruneEmptyScripts(s.id);
+        state.activeScriptId = s.id;
+        pause();
+      }
       save();
       if(s.id === state.activeScriptId){
-        if(!stage.classList.contains('hidden')){ applyText(); updateProgress(); }
+        if(!stage.classList.contains('hidden')){ applyText(); applyPreviewVisibility(); if(isNew) seekTo(0); updateProgress(); }
       }
       renderScriptTabs();
       close();
@@ -3877,7 +3891,7 @@ var qrcode = function() {
     document.addEventListener('keydown', onKey, true);
     document.body.appendChild(wrap);
     nameIn.addEventListener('keydown', function(e){ if(e.key === 'Enter' && !e.metaKey && !e.ctrlKey){ e.preventDefault(); ta.focus(); } });
-    nameIn.focus(); nameIn.select();
+    if(isNew) ta.focus(); else { nameIn.focus(); nameIn.select(); }
   }
   function deleteScript(id, evt){
     if(evt) evt.stopPropagation();
@@ -3890,11 +3904,7 @@ var qrcode = function() {
     }
     save();
     renderScriptTabs();
-    if(!stage.classList.contains('hidden')){
-      var left = activeScript();
-      if(!left || !left.text.trim()){ showSetup(false); }
-      else{ applyText(); seekTo(0); }
-    }
+    if(!stage.classList.contains('hidden')){ applyText(); seekTo(0); }
   }
   function renderScriptTabs(){
     scriptTabs.innerHTML = '';
@@ -3984,21 +3994,8 @@ var qrcode = function() {
     if(addPastedScript()) flashButton(saveScriptBtn, 'Saved');
     else input.focus();
   });
-  newScriptBtn.addEventListener('click', function(){
-    if(!confirmDiscard()) return;
-    var name = prompt('Name this script:', nextDefaultName());
-    if(name === null) return;
-    name = name.trim() || nextDefaultName();
-    var s = { id: genId(), name: name, text: '', updatedAt: Date.now() };
-    state.scripts.push(s);
-    state.activeScriptId = s.id;
-    pruneEmptyScripts(s.id);
-    save();
-    input.value = '';
-    renderScriptTabs();
-    if(setup.classList.contains('hidden')) showSetup(true); // new script from the rail while prompting -> paste page
-    input.focus();
-  });
+  // Space Cam: + New opens the paste popup; the script is only created when saved.
+  newScriptBtn.addEventListener('click', function(){ openScriptEditor(null); });
   cancelEdit.addEventListener('click', function(){
     if(!confirmDiscard()) return;
     showStage();
@@ -4036,6 +4033,8 @@ var qrcode = function() {
     else{ try{ scriptText.blur(); }catch(e){} }
   }
   editBtn.addEventListener('click', function(){
+    var cur = activeScript();
+    if(!editMode && !isStageWindow && !(cur && cur.text && cur.text.trim())){ openScriptEditor(null); return; } // nothing to edit yet
     setEditMode(!editMode); // all modes: turns inline editing on/off (button reads Save while on)
   });
   controlsBtn.addEventListener('click', function(){ toggleRail('right'); });
@@ -4045,21 +4044,7 @@ var qrcode = function() {
   brandHomeBtn.addEventListener('click', function(){
     // Fresh, empty paste screen. If the current script is already empty, reuse it
     // instead of piling up blank scripts.
-    if(!confirmDiscard()) return;
-    var cur = activeScript();
-    pruneEmptyScripts(cur && !cur.text ? cur.id : null);
-    cur = activeScript();
-    if(!cur || cur.text){
-      var s = { id: genId(), name: nextDefaultName(), text: '', updatedAt: Date.now() };
-      state.scripts.push(s);
-      state.activeScriptId = s.id;
-      save();
-    }
-    input.value = '';
-    renderScriptTabs();
-    showSetup(false);
-    input.value = '';
-    input.focus();
+    openScriptEditor(null); // Space Cam: no paste screen, so the logo opens the new-script popup
   });
 
   document.getElementById('save-float').addEventListener('click', function(){ setEditMode(false); });
@@ -5216,13 +5201,9 @@ var qrcode = function() {
       stageWidthUiResizeTimer = setTimeout(function(){ applyStageWidth(); if(isSingle()) applyFlip(); }, 150);
     });
   }
-  if(isStageWindow){
-    showStage();
-  }else if(activeScript() && activeScript().text && activeScript().text.trim()){
-    showStage();
-  }else{
-    showSetup(false);
-  }
+  // Space Cam: Spotlight is the only page (no paste/setup screen). No script is fine.
+  if(!isStageWindow){ pruneEmptyScripts(null); renderScriptTabs(); applyText(); } // blank leftovers from the old paste screen go
+  showStage();
 
   // Opened from a pairing QR: join as a guest (device mode picked from this device).
   var joinMatch = !isStageWindow && /^#join=([\w-]{8,32})\.([\w-]{16,48})$/.exec(location.hash);
@@ -5324,8 +5305,7 @@ var qrcode = function() {
       state.scripts = state.scripts.filter(function(x){ return !x.demo; });
       if(!findScript(state.activeScriptId)){
         state.activeScriptId = state.scripts.length ? state.scripts[0].id : null;
-        var a = activeScript();
-        if(!stage.classList.contains('hidden') && (!a || !a.text.trim())) showSetup(false);
+        if(!stage.classList.contains('hidden')){ applyText(); seekTo(0); }
       }
       save(); renderScriptTabs();
     },

@@ -38,6 +38,19 @@ No build step.
 - Git data lives outside the web root at `/home/cam/space-cam.git`. `CLAUDE.md` is excluded from the live folder via sparse-checkout.
 - Never edit the live files on the VPS directly.
 
+## Before deploy
+- Start the local server from `.claude/launch.json` (`space-cam`: `python3 -m http.server 8000`).
+- Test at http://localhost:8000 in Chrome, not the Browser pane (WebUSB camera control and voice scroll need Chrome).
+- Close any spacecam.shovonix.dev tab first: only one tab can hold the camera.
+- Checklist, all must pass:
+  1. Camera connects and the preview shows.
+  2. Mic meter moves.
+  3. `R` records ~10s, stop, `SpaceTake_N.wav` appears in Downloads (or the chosen folder).
+  4. Prompter scrolls with Space, the pedal and Voice scroll.
+  5. Whatever this change touched.
+- Only after that: commit, push, then Shovon runs `deploy-space cam` on the VPS.
+- Before every push, remind Shovon of this checklist and ask whether it passed.
+
 ## Handoff (6 Nov 2026)
 Space Cam was built in a separate Claude Code cloud session (commits tagged `session_01EKf9ApNDB7nsQ68ZSJSjQb`). Work now continues here on the Mac. Don't use that cloud session for Space Cam anymore.
 

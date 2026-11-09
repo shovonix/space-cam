@@ -5,7 +5,7 @@ One page for a solo recording: camera control + audio recording + teleprompter. 
 ## What's in this repo
 - `index.html` — prompter page, forked from Space Prompter v3.5 (Dual Monitor only).
 - `studio.js`, `studio.css` — camera, audio, record and takes panels.
-- `cam-core.js` — camera engine, no UI. `audio-core.js`, `audio-writer.worker.js` — audio engine and WAV writer, no UI. Keep engines and UI separate.
+- `cam-core.js` — camera engine, no UI. `audio-core.js`, `audio-writer.worker.js` — audio engine and WAV writer, no UI. `webcam-core.js`, `video-writer.worker.js` — Mac camera engine and MP4 writer, no UI. `mp3-encode.worker.js` + `lib/lamejs/` (LGPL-3.0) — MP3 on save. Keep engines and UI separate.
 - `lib/` — vendored web-gphoto2 0.4.1 (LGPL-2.1). Don't edit it.
 - `coi-serviceworker.js` — vendored (MIT). Needed for cross-origin isolation on a static host; don't remove it.
 - `test/` — camera diagnostics page.
@@ -27,7 +27,7 @@ No build step.
 
 ## Rules
 - Black and white design, same tokens as the other Space apps. Red for recording/warnings.
-- Take file names: `SpaceTake_1`, `SpaceTake_2` … one counter that never goes back, so names never repeat. Saved to Downloads, or the folder chosen bottom left. Don't change this without asking. (README still shows an old `Take-03_…` example; fix the README, not the code.)
+- Take file names: `Take_1`, `Take_2` … (was `SpaceTake_N` until 9 Nov 2026; the left panel title is "Recordings", the names stay "Take") one counter that never goes back, so names never repeat. Saved to Downloads, or the folder chosen bottom left. Don't change this without asking. (README still shows an old `Take-03_…` example; fix the README, not the code.)
 - Licence: all rights reserved (vendored libraries keep their own licences).
 - Ask before adding a dependency or a build step.
 
@@ -45,9 +45,10 @@ No build step.
 - Checklist, all must pass:
   1. Camera connects and the preview shows.
   2. Mic meter moves.
-  3. `R` records ~10s, stop, `SpaceTake_N.wav` appears in Downloads (or the chosen folder).
+  3. `R` records ~10s, stop, `Take_N.mp3` appears in Downloads (or the chosen folder).
   4. Prompter scrolls with Space, the pedal and Voice scroll.
   5. Whatever this change touched.
+- Bump the `?v=` date on `studio.css` and `studio.js` at the bottom of `index.html` (e.g. `2026-11-09` → `2026-11-12`; add `b` for a second deploy the same day). studio.js passes it on to every file it loads, so browsers pick up the new code without a hard reload.
 - Only after that: commit, push, then Shovon runs `deploy-space cam` on the VPS.
 - Before every push, remind Shovon of this checklist and ask whether it passed.
 
@@ -57,7 +58,7 @@ Space Cam was built in a separate Claude Code cloud session (commits tagged `ses
 **Done (see `git log`):**
 - v1 on 4–5 Nov: camera control over USB (web-gphoto2), WAV recording, Dual Monitor prompter. Installable web app, `/test/` diagnostics page.
 - Setup: first page is Camera | Mic | Script with a setup sidebar (save folder, Bluetooth pedal). Auto-reconnect after reload (~20s retries, because macOS's camera service grabs the camera). Mac setup steps shown until first connect.
-- Takes: left rail with inline waveform player, rename, delete. Names are `SpaceTake_N`, saved to Downloads or a chosen folder.
+- Takes: left rail with inline waveform player, rename, delete. Names are `Take_N`, saved to Downloads or a chosen folder.
 - Mic: RMS level meter with slow release and peak marker; can be disabled.
 - Prompter (6 Nov): tap a word to continue from there, line spacing, paragraph gap, adjustable reading line, pause marks at paragraph breaks.
 - **Voice scroll (6 Nov):** toggle in the Controls rail. Uses `webkitSpeechRecognition` (en-US), matches spoken words in a 30-word window ahead of the guide line and calls `seekTo()`. It's live on spacecam.shovonix.dev but **not yet tested with the A7 III on a real shoot**.

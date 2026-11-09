@@ -137,7 +137,7 @@ export class AudioCore extends EventTarget {
   // ---------- recording ----------
   #ensureWorker() {
     if (this.#worker) return;
-    this.#worker = new Worker(new URL('./audio-writer.worker.js', import.meta.url));
+    this.#worker = new Worker(new URL('./audio-writer.worker.js' + new URL(import.meta.url).search, import.meta.url)); // same ?v= as this file
     this.#worker.onmessage = e => {
       const m = e.data;
       if (m.ev === 'error') this.#fail(`Audio file error (${m.cmd}): ${m.message}`);
@@ -176,6 +176,9 @@ export class AudioCore extends EventTarget {
     this.#setState(this.#stream ? 'ready' : 'off');
     return res;
   }
+
+  /** The open mic stream (read-only), e.g. so a Mac-camera video can carry the sound for syncing. */
+  get stream() { return this.#stream; }
 
   get recordSeconds() { return this.state === 'recording' ? Math.floor((Date.now() - this.recordStartedAt) / 1000) : 0; }
 

@@ -15,7 +15,7 @@
 
 /* camera preview */
 .sc-preview{position:relative;aspect-ratio:16/9;background:#000;border:1px solid var(--hair);border-radius:12px;overflow:hidden;margin-bottom:10px}
-.sc-preview img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.sc-preview img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain} /* the whole frame, never cropped; the box takes the frame's real ratio */
 .sc-grid{position:absolute;inset:0;pointer-events:none}
 .sc-grid i{position:absolute;background:rgba(255,255,255,.35)}
 .sc-grid i:nth-child(1){left:33.333%;top:0;bottom:0;width:1px}
@@ -24,7 +24,8 @@
 .sc-grid i:nth-child(4){top:66.666%;left:0;right:0;height:1px}
 .sc-badge{position:absolute;top:7px;left:7px;display:inline-flex;align-items:center;gap:6px;background:var(--red);color:#fff;font:700 11px var(--mono);padding:3px 8px;border-radius:6px}
 .sc-badge i{width:7px;height:7px;border-radius:50%;background:#fff;animation:scBlink 1s steps(2,start) infinite}
-.sc-badge.warn{background:#C77700}
+.sc-badge.warn{background:var(--red);animation:scWarnPulse 1s ease-in-out infinite} /* last minute before a limit: red, pulsing */
+@keyframes scWarnPulse{50%{box-shadow:0 0 0 4px rgba(232,70,58,.35)}}
 .sc-fps{position:absolute;top:7px;right:8px;font:600 10px var(--mono);color:rgba(255,255,255,.55)}
 .sc-empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;background:radial-gradient(ellipse at center,#141416 0%,#000 75%)}
 .sc-empty .btn{flex:none;min-width:0;padding:10px 18px}
@@ -42,7 +43,7 @@
 .sc-link{background:none;border:0;color:var(--fg-dim);font-size:12px;cursor:pointer;padding:0;text-decoration:underline;text-underline-offset:3px}
 .sc-link:hover{color:var(--fg)}
 .sc-problem{margin-top:12px;border:1px solid #4a3a12;background:#15120a;border-radius:10px;padding:12px;font-size:12px;line-height:1.5;color:#dcdcde}
-.sc-problem b{color:#FFD60A}
+.sc-problem b{color:var(--red)}
 .sc-problem p{margin:6px 0}
 .sc-problem ol{margin:6px 0 0;padding-left:18px}
 .sc-problem li{margin:5px 0}
@@ -55,7 +56,7 @@
 .sc-select{width:100%;background:var(--raised);border:1px solid var(--hair);border-radius:10px;padding:9px 10px;color:var(--fg);font-size:13px;font-family:inherit;margin-bottom:10px}
 .sc-meter{margin-bottom:14px}
 .sc-meter-bar{position:relative;height:8px;border-radius:4px;background:#1c1c1e;overflow:hidden}
-.sc-meter-bar i{position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,#30D158 0%,#30D158 70%,#FFD60A 85%,var(--red) 97%);background-size:var(--meter-w,256px) 100%;}
+.sc-meter-bar i{position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,#F0F0EE 0%,#F0F0EE 85%,var(--red) 97%);background-size:var(--meter-w,256px) 100%;}
 .sc-meter-bar b{position:absolute;top:0;bottom:0;width:2px;background:#fff;left:0}
 .sc-meter-label{display:flex;justify-content:space-between;margin-top:5px;font:10.5px var(--mono);color:var(--fg-dim)}
 .sc-clip{padding:0 5px;border-radius:3px;color:#4a4a50}
@@ -70,12 +71,42 @@
 .cap-side.sc-rec.unarmed{opacity:.55}
 .cap-side.sc-rec.on{background:var(--red);border-color:var(--red);color:#fff;font-family:var(--mono);box-shadow:0 0 22px rgba(232,70,58,.45)}
 .cap-side.sc-rec.on i{background:#fff;border-radius:2px}
-.cap-side.sc-rec.warn{background:#C77700;border-color:#C77700}
+.cap-side.sc-rec.warn{background:var(--red);border-color:var(--red);animation:scWarnPulse 1s ease-in-out infinite}
 .cap-side.sc-rec:hover{background:rgba(232,70,58,.14)}
 .cap-side.sc-rec.on:hover{background:var(--red)}
 
 /* takes (left rail): above Scripts, same row style as scripts */
-#new-script-btn{display:none!important}          /* new scripts start from the main paste page */
+/* script cards: name + "Today 14:20 · 312 words" (same rhythm as the take cards) */
+.script-tab-main{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+.script-tab-meta{font:400 11px/1.4 'Public Sans',system-ui,sans-serif;color:var(--fg-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* hide / show the left panel */
+.sc-rail-hide{position:absolute;top:16px;right:12px;z-index:3;width:28px;height:28px;padding:0;border-radius:8px;background:none;border:1px solid transparent;color:var(--fg-dim);cursor:pointer;display:flex;align-items:center;justify-content:center}
+.sc-rail-hide:hover{color:var(--fg);border-color:var(--hair);background:rgba(255,255,255,.05)}
+.sc-rail-hide svg,.sc-rail-show svg{width:18px;height:18px;fill:currentColor}
+.sc-rail-show{display:none;position:fixed;left:14px;top:14px;z-index:30;gap:10px;padding:6px 8px 6px 6px;border-radius:12px;background:rgba(14,14,15,.85);border:1px solid var(--hair);color:var(--fg);cursor:pointer;align-items:center;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.sc-rail-show:hover{background:#1c1c1f;border-color:#44444a}
+.sc-rs-logo{width:30px;height:30px;border-radius:8px;display:block}
+.sc-rs-text{display:flex;flex-direction:column;align-items:flex-start;line-height:1.15}
+.sc-rs-text b{font:700 14px 'Archivo',system-ui,sans-serif}
+.sc-rs-text small{font:500 10.5px var(--mono);color:var(--fg-dim)}
+.sc-rail-show svg{color:var(--fg-dim)}
+/* hidden: the panel sits off-screen; hovering the corner logo slides it in OVER the script (peek), click pins it */
+body.sc-left-hidden #left-rail{transform:translateX(-104%);visibility:hidden;transition:transform .3s cubic-bezier(.2,.7,.2,1),visibility 0s linear .3s,box-shadow .3s;z-index:28}
+body.sc-left-hidden.sc-left-peek #left-rail{transform:none;visibility:visible;transition:transform .3s cubic-bezier(.2,.7,.2,1),visibility 0s,box-shadow .3s;box-shadow:24px 0 60px rgba(0,0,0,.7)}
+body.sc-left-peek .sc-rail-show{opacity:0;pointer-events:none}
+/* the hover trigger: a thin strip along the left edge, only while the panel is hidden */
+.sc-rail-edge{display:none;position:fixed;left:0;top:0;bottom:0;width:6px;z-index:29}
+body.sc-left-hidden:not(.sc-left-peek):not(.stage-window) .sc-rail-edge{display:block}
+.sc-rail-show{transition:opacity .25s ease}
+body.sc-left-hidden:not(.stage-window) #stage{left:0!important}
+body.sc-left-hidden:not(.stage-window) .sc-rail-show{display:flex}
+body.stage-window .sc-rail-show,body.stage-window .sc-rail-hide{display:none!important}
+/* localhost (testing): no Install app button; the live site keeps it */
+body.sc-local #install-setup,body.sc-local #install-rail{display:none!important}
+/* "+" next to Scripts: opens the blank New script popup */
+#new-script-btn{display:inline-flex!important;align-items:center;justify-content:center;width:26px;height:26px;padding:0!important;border-radius:7px;background:none;border:1px solid transparent!important;color:var(--fg-dim);cursor:pointer;font-size:0}
+#new-script-btn:hover{color:var(--fg);border-color:var(--hair)!important;background:rgba(255,255,255,.05)}
+#new-script-btn svg{width:16px;height:16px;fill:currentColor}
 .sc-takes{margin-top:0}
 .sc-takes .scripts-head{margin-top:28px}
 #scTakeList{display:flex;flex-direction:column;gap:8px}
@@ -97,27 +128,80 @@
 .sc-tp-dl svg{width:16px;height:16px;fill:currentColor}
 .sc-tp-file{font:10.5px var(--mono);color:var(--fg-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sc-tp-loading,.sc-tp-msg{font-size:12px;color:var(--fg-dim);padding:6px 0}
-.sc-tp-msg{color:#FFD60A}
+.sc-tp-msg{color:var(--red)}
 .sc-strip-wrap .sec-title .sc-mini-btn{letter-spacing:0;text-transform:none}
 .sc-take-main{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
 .sc-take-sub{font-family:'Public Sans',system-ui,sans-serif;font-weight:400;font-size:11px;line-height:1.45;color:var(--fg-dim)}
-.sc-take-sub em{font-style:normal;color:#FFD60A}
+.sc-take-sub em{font-style:normal;color:var(--fg)}
+.sc-take-sub em.alarm{color:var(--red)}
 .script-tab.sc-take.unsaved{border-color:#4a3a12}
 .script-tab.sc-take .script-tab-actions{padding-top:1px}
 #left-rail .scripts-head:not(.sc-takes .scripts-head){margin-top:30px}
 
 /* popups: play / rename / delete take, edit script text */
-.sc-modal{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:24px}
-.sc-modal-card{width:min(440px,100%);background:var(--panel);border:1px solid var(--hair);border-radius:16px;padding:20px;box-shadow:0 30px 80px rgba(0,0,0,.6);display:flex;flex-direction:column;gap:14px}
+/* Same look as an opened take card: raised surface, light border, soft glow. The page behind dims and blurs,
+   so the popup clearly sits on top instead of blending into the script. */
+.sc-modal{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.78);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;padding:24px;animation:scModalIn .14s ease-out}
+.sc-modal-card{width:min(440px,100%);background:#1B1B1D;border:1px solid rgba(255,255,255,.18);border-radius:16px;padding:22px;box-shadow:0 0 0 1px rgba(0,0,0,.6),0 0 24px rgba(255,255,255,.05),0 30px 90px rgba(0,0,0,.75);display:flex;flex-direction:column;gap:14px;animation:scCardIn .16s ease-out}
+/* Takes popup: list on the left, preview on the right */
+.sc-modal-card.sc-modal-takes{width:min(920px,100%);height:auto;max-height:calc(100vh - 48px)} /* grows to fit the take, no inner scrolling */
+.sc-tb{flex:1;min-height:0;display:grid;grid-template-columns:150px minmax(0,1fr);gap:14px} /* narrow list on the left */
+.sc-tb-list{height:0;min-height:100%;overflow:auto;display:flex;flex-direction:column;gap:6px;padding-right:4px;overscroll-behavior:contain;scrollbar-width:thin} /* as tall as the right side; scrolls on its own */
+.sc-tb-item{flex-direction:row!important;align-items:center;gap:8px!important;padding:8px 9px!important}
+.sc-tb-txt{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+/* script popup: list (name + date · words) on the left, name + text on the right */
+.sc-se-list .sc-tb-item{flex-direction:column!important;align-items:flex-start!important;gap:3px!important}
+.sc-se-list .sc-tb-name{max-width:100%}
+.sc-se-list .sc-se-new{border-style:dashed;color:var(--fg-dim)}
+.sc-se-list .sc-se-new.on{border-style:solid}
+.sc-se-pane .sc-modal-text{min-height:200px}
+.sc-take-thumb.sc-tb-thumb{width:38px;height:24px;border-radius:5px}
+.sc-tb-item,.sc-tb-file{display:flex;flex-direction:column;gap:3px;text-align:left;background:#0E0E0F;border:1px solid var(--hair);border-radius:10px;padding:10px 12px;color:var(--fg-dim);font:inherit}
+.sc-tb-item{cursor:pointer}
+.sc-tb-item:hover{border-color:#44444a;color:var(--fg)}
+.sc-tb-item.on{color:var(--fg);border-color:rgba(255,255,255,.45);background:rgba(255,255,255,.07)}
+.sc-tb-file{opacity:.65}
+.sc-tb-name{font:600 13px 'Archivo',system-ui,sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-tb-meta{font-size:11.5px}
+.sc-tb-sep{margin:10px 2px 2px;font:600 10.5px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--fg-dim)}
+.sc-tb-pane{min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:12px} /* never scrolls; the video is capped instead */
+.sc-tb-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.sc-tb-title{font:700 16px 'Archivo',system-ui,sans-serif}
+.sc-tb-head .sc-take-ren svg{width:15px;height:15px;fill:currentColor;display:block}
+.sc-tb-pane .sc-modal-row{margin-top:auto}
+@media (max-width:760px){.sc-tb{grid-template-columns:1fr}.sc-tb-list{max-height:30vh}}
+/* take popup: video (if any), audio player, Download take at the bottom */
+.sc-modal-card.sc-modal-take{width:min(720px,100%);max-height:calc(100vh - 48px);overflow:auto}
+.sc-take-mtools{display:flex;align-items:center;gap:2px}
+.sc-take-mtools .sc-take-ren svg{width:15px;height:15px;fill:currentColor;display:block}
+.sc-take-video video{display:block;width:100%;max-height:min(46vh,420px);object-fit:contain;background:#000;border-radius:12px;border:1px solid var(--hair)}
+.sc-take-vnote{padding:14px 16px;border:1px dashed var(--hair);border-radius:12px;font-size:12.5px;color:var(--fg-dim);background:#0E0E0F}
+.sc-take-audio{background:#0E0E0F;border:1px solid var(--hair);border-radius:12px;padding:12px}
+.sc-take-dl,.sc-take-open,.sc-take-save{display:inline-flex;align-items:center;gap:8px}
+.sc-take-dl svg,.sc-take-open svg,.sc-take-save svg{width:16px;height:16px;fill:currentColor;flex:none}
+/* take popup: delete is confirmed inside the bottom row (no second popup) */
+.sc-modal-row.sc-del-confirm{gap:10px;padding:10px 12px;margin:0;border-radius:12px;background:rgba(255,107,97,.07);border:1px solid rgba(255,107,97,.3);animation:scCardIn .14s ease-out}
+.sc-del-msg{margin:0 auto 0 0;font-size:12.5px;line-height:1.45;color:#E6E6E4}
+/* take popup: red trash icon, always the bottom-right corner (Save appears to its left, so it never moves) */
+.sc-take-del{flex:none;display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;padding:0;border-radius:10px;background:none;border:1px solid rgba(255,107,97,.35);color:#FF6B61;cursor:pointer}
+.sc-take-del:hover{background:rgba(255,107,97,.12);border-color:rgba(255,107,97,.6)}
+.sc-take-del svg{width:17px;height:17px;fill:currentColor}
+.btn.danger-text{color:#FF6B61}
+.btn.danger-text:hover{border-color:rgba(255,107,97,.5)}
+.sc-take-sd{display:flex;align-items:center;gap:10px}
+.sc-take-sd svg{width:20px;height:20px;fill:currentColor;flex:none}
+.sc-modal-row .sc-modal-hint{margin:0 auto 0 4px}
+@keyframes scModalIn{from{opacity:0}to{opacity:1}}
+@keyframes scCardIn{from{opacity:0;transform:translateY(6px) scale(.985)}to{opacity:1;transform:none}}
 .sc-modal-card.sc-modal-wide{width:min(860px,100%);height:min(80vh,760px)}
 .sc-modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
 .sc-modal-title{font-family:'Archivo',system-ui,sans-serif;font-weight:700;font-size:17px}
 .sc-modal-name{font-size:12.5px;color:var(--fg-dim);margin-top:4px}
 .sc-modal-x{background:none;border:0;color:var(--fg-dim);font-size:16px;cursor:pointer;padding:4px 6px;border-radius:8px}
 .sc-modal-x:hover{color:var(--fg);background:rgba(255,255,255,.08)}
-.sc-modal-text{flex:1;min-height:0;resize:none;background:var(--raised);border:1px solid var(--hair);border-radius:12px;padding:16px 18px;color:var(--fg);font:15px/1.6 'Public Sans',system-ui,sans-serif;outline:none}
+.sc-modal-text{flex:1;min-height:0;resize:none;background:#0E0E0F;border:1px solid var(--hair);border-radius:12px;padding:16px 18px;color:var(--fg);font:15px/1.6 'Public Sans',system-ui,sans-serif;outline:none}
 .sc-modal-text:focus{border-color:rgba(255,255,255,.4)}
-.sc-modal-input{background:var(--raised);border:1px solid var(--hair);border-radius:10px;padding:11px 12px;color:var(--fg);font:14px 'Public Sans',system-ui,sans-serif;outline:none}
+.sc-modal-input{background:#0E0E0F;border:1px solid var(--hair);border-radius:10px;padding:11px 12px;color:var(--fg);font:14px 'Public Sans',system-ui,sans-serif;outline:none}
 .sc-modal-input:focus{border-color:rgba(255,255,255,.4)}
 .sc-modal-hint{font-size:12px;color:var(--fg-dim);margin-right:auto}
 .sc-modal-p{margin:0;font-size:13.5px;line-height:1.55;color:#cfcfd2}
@@ -193,7 +277,7 @@ body.sc-big{margin:0;height:100vh;display:flex;flex-direction:column;background:
 .sc-status{font-family:var(--mono);font-size:11px;letter-spacing:.02em;color:var(--fg-dim);display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
 .sc-status::before{content:"";width:8px;height:8px;border-radius:50%;background:#4a4a50}
 .sc-status.on{color:#30D158;font-weight:600}.sc-status.on::before{background:#30D158;box-shadow:0 0 0 3px rgba(48,209,88,.18)}
-.sc-status.wait{color:#FFD60A}.sc-status.wait::before{background:#FFD60A}
+.sc-status.wait{color:var(--fg)}.sc-status.wait::before{background:var(--fg)}
 .sc-status.rec{color:#fff}.sc-status.rec::before{background:var(--red);animation:scBlink 1s steps(2,start) infinite}
 /* camera feed / audio wave: same 16:9 box so both cards line up */
 .sc-media{position:relative;width:100%;aspect-ratio:16/9;border-radius:8px;background:#000;overflow:hidden;margin-top:8px;display:grid;place-items:center}
@@ -215,7 +299,7 @@ body.sc-big{margin:0;height:100vh;display:flex;flex-direction:column;background:
 .sc-media-meter{background:#050506;place-items:stretch;padding:0 16px}
 .sc-bigmeter{align-self:center;display:flex;flex-direction:column;gap:8px}
 .sc-bigmeter-bar{position:relative;height:30px;border-radius:7px;background:#17171a;overflow:hidden}
-.sc-bigmeter-bar i{position:absolute;inset:0;background:linear-gradient(90deg,#30D158 0 76%,#FFD60A 76% 88%,#E8463A 88%);clip-path:inset(0 100% 0 0);transition:clip-path 60ms linear}
+.sc-bigmeter-bar i{position:absolute;inset:0;background:linear-gradient(90deg,#F0F0EE 0 88%,#E8463A 88%);clip-path:inset(0 100% 0 0);transition:clip-path 60ms linear}
 .sc-bigmeter-bar b{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:#fff;left:0}
 .sc-bigmeter-scale{position:relative;height:12px;font:10px var(--mono);color:var(--fg-dim)}
 .sc-bigmeter-scale span{position:absolute;transform:translateX(-50%);white-space:nowrap}
@@ -248,7 +332,7 @@ body.sc-big{margin:0;height:100vh;display:flex;flex-direction:column;background:
 .sc-take-head{align-items:center;padding:9px 8px 9px 12px}
 .sc-take-title{display:flex;align-items:center;gap:4px;min-width:0}
 .sc-take .script-tab-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px}
-.sc-take-sub{font:11px var(--mono);color:var(--fg-dim);line-height:1.4}
+.sc-take-sub{font:400 11px/1.4 'Public Sans',system-ui,sans-serif;color:var(--fg-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis} /* same as script cards: one line */
 .sc-take .script-tab-actions{opacity:.55;transition:opacity .15s}
 .sc-take:hover .script-tab-actions,.sc-take.open .script-tab-actions{opacity:1}
 .sc-take-rename{flex:none;width:22px;height:22px}
@@ -307,9 +391,249 @@ body:not(.prompting):not(.stage-window):not(.touch) #setup{right:var(--rail)}
 #right-rail .sc-rail-row{margin-top:6px}
 .sc-noscript{color:var(--fg-dim);font-size:.45em}
 .sc-noscript kbd{font-size:.8em}
-/* live camera view, top right of the center panel (control window only) */
-.sc-center-cam{position:absolute;top:16px;right:16px;z-index:6;width:clamp(180px,24%,320px);aspect-ratio:16/9;background:#000;border:1px solid var(--hair);border-radius:12px;overflow:hidden;cursor:zoom-in;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+/* live camera feed fills the center panel behind the script (control window only) */
+.sc-center-cam{position:absolute;inset:0;overflow:hidden;background:#000;pointer-events:none}
 .sc-center-cam[hidden]{display:none}
-.sc-center-cam img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.sc-center-cam img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:var(--sc-cam-op,1)}
 .sc-center-cam img:not([src]){display:none}
-body.edit-mode .sc-center-cam{opacity:.35;pointer-events:none}
+/* script sits in a dark see-through card over the feed (inset matches the text's 28px side padding) */
+/* edge to edge, soft tint: light in the middle so the artist sees their face, darker toward top and bottom */
+/* --sc-tint is set live from the picture's brightness (auto contrast in studio.js) */
+.sc-center-cam::after{content:"";position:absolute;inset:0;transition:background .4s linear;background:linear-gradient(180deg,rgba(0,0,0,calc(var(--sc-tint,.35) + .25)) 0%,rgba(0,0,0,var(--sc-tint,.35)) 22%,rgba(0,0,0,var(--sc-tint,.35)) 70%,rgba(0,0,0,calc(var(--sc-tint,.35) + .35)) 100%)}
+body:not([data-cv="bg"]) .sc-cv-bgonly{display:none}
+.sc-cv-bgonly .caption{margin-top:6px}
+/* center of the frame, for the artist to line up on. The feed is cropped evenly, so the center stays true */
+.sc-center-mark{position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px;z-index:1}
+.sc-center-mark::before,.sc-center-mark::after{content:"";position:absolute;background:rgba(255,255,255,.55);box-shadow:0 0 4px rgba(0,0,0,.6)}
+.sc-center-mark::before{left:50%;top:0;bottom:0;width:1px}
+.sc-center-mark::after{top:50%;left:0;right:0;height:1px}
+body[data-cv="corner"] .sc-center-mark{display:none}
+.sc-center-cam .sc-grid{display:none} /* the feed is cropped to fill, so thirds would lie; the rail preview keeps the grid */
+.sc-center-cam .sc-badge{top:16px;right:16px;left:auto;z-index:1}
+body.edit-mode .sc-center-cam::after{background:rgba(0,0,0,.7)}
+body[data-cv="bg"].sc-cam-bg #script-text{text-shadow:0 1px 2px rgba(0,0,0,.9),0 2px 16px rgba(0,0,0,.8)}
+/* live audio waveform: right rail (Audio) and top left of the center panel */
+.sc-wave{position:relative;height:84px;margin:0 0 10px;background:#000;border:1px solid var(--hair);border-radius:10px;overflow:hidden}
+.sc-wave[hidden]{display:none}
+.sc-wave canvas{position:absolute;left:8px;right:8px;top:18px;bottom:6px;width:calc(100% - 16px);height:calc(100% - 24px)}
+.sc-wave-tag{position:absolute;top:4px;left:8px;display:flex;align-items:center;gap:6px;font:600 10px var(--mono);letter-spacing:.04em;text-transform:uppercase;color:var(--fg-dim)}
+.sc-wave-tag i{width:7px;height:7px;border-radius:50%;background:var(--fg-dim)}
+.sc-wave.rec .sc-wave-tag{color:#fff}
+.sc-wave.rec .sc-wave-tag i{background:var(--red);animation:scBlink 1s steps(2,start) infinite}
+.sc-wave.rec{border-color:rgba(229,72,77,.6)}
+/* center: seamless full-width strip just above the "% read" line, no box; edges fade out */
+.sc-wave-center{position:absolute;top:auto;bottom:98px;left:8px;right:8px;z-index:6;width:auto;height:40px;margin:0;background:none;border:0;border-radius:0;pointer-events:none}
+.sc-wave-center.rec{border:0}
+.sc-wave-center canvas{left:20px;right:20px;top:0;bottom:0;width:calc(100% - 40px);height:100%;border-radius:0;-webkit-mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent);mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent)}
+/* labels in the bottom-left corner, left of Edit script (bottom bar spans 28–102px from the bottom) */
+.sc-wave-center .sc-wave-tag{top:auto;bottom:-34px;left:20px;text-shadow:0 1px 3px #000}
+.sc-wave-center .sc-wave-noise{top:auto;bottom:-47px;left:20px;right:auto;line-height:1}
+.sc-wave-center .sc-wave-tag{line-height:1}
+body.edit-mode .sc-wave-center{opacity:.4}
+/* room-noise level sits just under the box */
+.sc-wave{overflow:visible;margin-bottom:28px}
+.sc-wave canvas{border-radius:6px}
+.sc-wave-noise{position:absolute;bottom:-17px;left:2px;font:600 10px var(--mono);color:var(--fg-dim);text-shadow:0 1px 3px #000;white-space:nowrap}
+.sc-wave-noise.noisy{color:var(--red)}
+/* "Camera on Stage": the camera behind the script on the prompter glass. Its geometry (mirror/flip/rotation)
+   is copied from #scroller by studio.js, so it always flips with the text. */
+.sc-stage-cam{position:absolute;inset:0;overflow:hidden;pointer-events:none;background:#000}
+.sc-stage-cam[hidden]{display:none}
+.sc-stage-cam img,.sc-stage-cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:var(--sc-cam-op,.2)}
+.sc-stage-cam[data-src="usb"] video,.sc-stage-cam[data-src="mac"] img{display:none}
+.sc-stage-cam img:not([src]){display:none}
+.sc-stage-cam::after{content:"";position:absolute;inset:0;background:rgba(0,0,0,.35)} /* glass needs extra contrast */
+.sc-stagecam{margin-top:6px}
+.sc-stagecam-note{margin-top:6px}
+/* camera source: Sony (USB) or Mac camera */
+#scCamPick{margin-bottom:10px}
+/* take card thumbnail */
+.sc-take-head{align-items:center}
+.sc-take-thumb{flex:none;width:64px;height:40px;border-radius:7px;overflow:hidden;background:#0E0E0F;border:1px solid var(--hair);display:flex;align-items:center;justify-content:center;color:var(--fg-dim);position:relative}
+.sc-take-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.sc-take-thumb canvas{width:100%;height:100%;display:block}
+.sc-take-thumb>svg{width:18px;height:18px;fill:currentColor}
+.sc-take-thumb canvas.sc-thumb-wave{position:absolute;inset:0;background:linear-gradient(180deg,transparent 50%,rgba(0,0,0,.6))}
+.sc-take-thumb.card{color:#cfcfd2}
+.sc-take-thumb.card>svg{margin-bottom:8px}
+.sc-take-main{margin-left:2px}
+/* temporary "Sample data" button in the Takes header */
+.sc-sample-btn{background:none;border:1px solid var(--hair);border-radius:7px;padding:3px 9px;color:var(--fg-dim);font:500 11px 'Public Sans',system-ui,sans-serif;cursor:pointer}
+.sc-sample-btn:hover{color:var(--fg);border-color:#44444a}
+.sc-sample-btn.on{border-color:transparent;color:var(--fg-dim);opacity:.55;padding:3px 4px} /* Remove samples: quiet text, brightens on hover */
+.sc-sample-btn.on:hover{opacity:1;color:var(--fg)}
+.sc-sample-btn[hidden]{display:none}
+/* small icon buttons (Save location change/help) */
+.sc-icon-mini{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;padding:0;border-radius:7px;background:none;border:1px solid transparent;color:var(--fg-dim);cursor:pointer;flex:none}
+.sc-icon-mini:hover{color:var(--fg);border-color:var(--hair);background:rgba(255,255,255,.05)}
+.sc-icon-mini.on{color:var(--fg)}
+.sc-icon-mini svg{width:15px;height:15px;fill:currentColor}
+/* Save location at the bottom of the left rail */
+/* the script list fills the space between Takes and Save location and scrolls on its own (Save location stays put) */
+#left-rail > .script-tabs{flex:1 1 0;min-height:76px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;padding-right:2px;align-content:flex-start}
+#left-rail > .script-tabs > .script-tab{flex:none}
+#left-rail > .rail-spacer{flex:0 0 0}
+#left-rail .sc-save-loc{margin:14px 0 0;padding-top:14px;border-top:1px solid var(--hair)}
+#left-rail .sc-save-loc .caption{margin-top:8px}
+#left-rail .sc-save-loc .sec-title{display:flex;align-items:center;justify-content:space-between}
+#screen-note-mini{display:none !important} /* now a hover tip on Connect stage */
+.sc-folder-line{display:flex;align-items:center;gap:6px}
+/* Save location: minimal — folder icon + name, no box; a soft hover shows it's clickable */
+.sc-folder-pill{flex:1;min-width:0;display:flex;align-items:center;gap:8px;padding:4px 6px;margin:0 -6px;border-radius:7px;background:none;border:0;color:var(--fg);cursor:pointer;font:inherit;text-align:left}
+.sc-folder-pill:hover{background:rgba(255,255,255,.05)}
+.sc-folder-pill:focus-visible{outline:none;box-shadow:0 0 0 2px rgba(255,255,255,.35)}
+.sc-folder-pill svg{width:15px;height:15px;fill:var(--fg-dim);flex:none}
+.sc-folder-pill b{font:500 12.5px 'Public Sans',system-ui,sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-folder-pill.needs-ok::after{content:"Allow";margin-left:auto;font:600 10px var(--mono);color:var(--red);text-transform:uppercase}
+/* take popup: the name is an input that looks like the title until you click it */
+.sc-take-namebox{flex:1;min-width:0}
+.sc-take-nameline{display:flex;align-items:center;gap:2px;min-width:0;margin:-4px 0 0 -8px}
+.sc-take-namepen{flex:none;display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border-radius:7px;background:none;border:0;color:var(--fg-dim);cursor:pointer}
+.sc-take-namepen:hover{color:var(--fg);background:rgba(255,255,255,.06)}
+.sc-take-namepen svg{width:15px;height:15px;fill:currentColor}
+.sc-take-name{max-width:100%;min-width:0;box-sizing:border-box;margin:0;padding:4px 8px;border-radius:8px;border:1px solid transparent;background:none;color:var(--fg);font:700 17px 'Archivo',system-ui,sans-serif;outline:none;cursor:text}
+.sc-take-name:hover{border-color:var(--hair)}
+.sc-take-name:focus{border-color:rgba(255,255,255,.4);background:#0E0E0F}
+.sc-take-namebox .sc-modal-name{margin-top:2px}
+.sc-take-rename-save[hidden]{display:none}
+/* hover help bubbles: [data-tip] on Connect stage and the Save location ⓘ */
+[data-tip]{position:relative}
+[data-tip]:hover::after,[data-tip]:focus-visible::after{content:attr(data-tip);position:absolute;z-index:80;width:max-content;max-width:260px;padding:9px 11px;border-radius:9px;background:#1B1B1D;border:1px solid rgba(255,255,255,.18);box-shadow:0 12px 40px rgba(0,0,0,.6);color:#E6E6E4;font:400 12px/1.45 'Public Sans',system-ui,sans-serif;text-align:left;white-space:normal;letter-spacing:0;text-transform:none;pointer-events:none}
+.sc-tip:hover::after,.sc-tip:focus-visible::after{right:0;bottom:calc(100% + 8px)}
+#display-btn[data-tip]:hover::after{bottom:calc(100% + 12px);left:50%;transform:translateX(-50%)}
+/* folder file list popup */
+.sc-ff-list{display:flex;flex-direction:column;gap:6px;max-height:55vh;overflow:auto}
+.sc-ff-row{display:flex;flex-direction:column;gap:3px;text-align:left;background:#0E0E0F;border:1px solid var(--hair);border-radius:10px;padding:10px 12px;color:var(--fg);cursor:pointer;font:inherit}
+.sc-ff-row:hover:not(:disabled){border-color:#44444a}
+.sc-ff-row:disabled{cursor:default;opacity:.7}
+.sc-ff-name{font:600 13px 'Archivo',system-ui,sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-ff-meta{font-size:11.5px;color:var(--fg-dim)}
+.sc-preview video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
+.sc-preview video[hidden]{display:none}
+.sc-center-cam video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:var(--sc-cam-op,1)}
+body[data-src="mac"] .sc-center-cam img,body[data-src="sony"] .sc-center-cam video{display:none}
+body[data-src="mac"] .sc-sony-only,body[data-src="sony"] .sc-mac-only{display:none !important}
+/* "Camera in the center" setting (right rail): Corner = small view top right, Off = none */
+.sc-cv-label{margin:4px 0 6px}
+.sc-cv{margin-bottom:10px}
+body[data-cv="off"] .sc-center-cam{display:none}
+body[data-cv="corner"] .sc-center-cam{inset:auto;top:16px;right:16px;z-index:6;width:clamp(180px,24%,320px);aspect-ratio:16/9;border:1px solid var(--hair);border-radius:12px;box-shadow:0 8px 30px rgba(0,0,0,.5)}
+body[data-cv="corner"] .sc-center-cam::after{display:none}
+body[data-cv="corner"] .sc-center-cam .sc-grid{display:block}
+body[data-cv="corner"] .sc-center-cam .sc-grid[hidden]{display:none}
+body[data-cv="corner"] .sc-center-cam .sc-badge{top:7px;left:7px;right:auto}
+/* Script fades out near the top and before the bottom controls. One rule for every case so they can't override each other:
+   camera behind the script and/or the waveform strip. With the waveform on, the text is gone before the strip starts. */
+body[data-cv="bg"].sc-cam-bg #scroller,body.sc-wave-on #scroller{
+  --fade-b0:180px;--fade-b1:96px;--fade-low:rgba(0,0,0,.35);
+  -webkit-mask-image:linear-gradient(180deg,transparent 0,#000 80px,#000 calc(100% - var(--fade-b0)),var(--fade-low) calc(100% - var(--fade-b1)),transparent calc(100% - var(--fade-b1) + 28px));
+  mask-image:linear-gradient(180deg,transparent 0,#000 80px,#000 calc(100% - var(--fade-b0)),var(--fade-low) calc(100% - var(--fade-b1)),transparent calc(100% - var(--fade-b1) + 28px))}
+/* with the waveform: text stays fully readable until just above the strip, eases to a subtle 35%, then gives way to the wave */
+body.sc-wave-on #scroller{--fade-b0:210px;--fade-b1:150px}
+@media (max-width:1499px){body.sc-wave-on #scroller{--fade-b0:226px;--fade-b1:164px}}
+
+/* narrow popup lists: smaller text, names cut with … */
+.sc-tb-list .sc-tb-name{font-size:12px}
+.sc-tb-list .sc-tb-meta{font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc-tb-txt{overflow:hidden}
+.sc-se-list .sc-tb-item{padding:8px 10px!important}
+.sc-se-pane{overflow:hidden}
+/* Takes / Scripts popups: small title bar on top (label left, ✕ right), same size and layout for both */
+.sc-pop-bar{display:flex;align-items:center;justify-content:space-between;margin:-8px -6px -4px 0}
+.sc-pop-label{font:600 11px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--fg-dim)}
+.sc-modal-card.sc-modal-scripts{width:min(920px,100%)}
+.sc-se-pane .sc-se-title{font-size:15px}
+.sc-se-pane .sc-modal-text{flex:1;min-height:0;resize:none}
+.sc-pop-right{display:flex;align-items:center;gap:10px}
+/* Center wave row, laid out like the progress row under it: status left, wave in the middle, room noise right (all widths) */
+.sc-wave-center{left:28px;right:28px;bottom:94px;height:20px}
+.sc-wave-center canvas{left:200px;right:180px;top:0;bottom:0;width:calc(100% - 380px);height:100%}
+.sc-wave-center .sc-wave-tag,.sc-wave-center .sc-wave-noise{top:50%;bottom:auto;transform:translateY(-50%);font-size:11px;line-height:1}
+.sc-wave-center .sc-wave-tag{left:0;right:auto}
+.sc-wave-center .sc-wave-noise{left:auto;right:0;text-align:right}
+body:not(.sc-local) #scSample{display:none!important} /* sample data: local testing only, never on the live site */
+/* Left rail always fits the window (also with the Install app button live): the takes and scripts lists shrink and
+   scroll on their own; brand, Save location and © stay in view */
+#left-rail{overflow:hidden}
+#left-rail > *{flex-shrink:0}
+#left-rail > #scTakesSec{flex:0 1 auto;min-height:0;display:flex;flex-direction:column}
+#left-rail > #scTakesSec #scTakeList{flex:0 1 auto;min-height:62px}
+#left-rail > .script-tabs{flex:1 1 0;min-height:62px}
+/* Toast: a small card in the middle of the screen, same look as the popups (no green). Errors get a red edge. */
+.sc-toast{top:50%;bottom:auto;transform:translate(-50%,-50%);background:#1B1B1D;border:1px solid rgba(255,255,255,.18);border-radius:16px;padding:16px 22px;font-size:14px;line-height:1.45;text-align:center;pointer-events:none;box-shadow:0 0 0 1px rgba(0,0,0,.6),0 30px 90px rgba(0,0,0,.75);animation:scToastIn .16s ease-out}
+.sc-toast.ok{border-color:rgba(255,255,255,.18)}
+.sc-toast.error{border-color:rgba(229,72,77,.7)}
+@keyframes scToastIn{from{opacity:0;transform:translate(-50%,-46%)}to{opacity:1;transform:translate(-50%,-50%)}}
+.sc-wave-center{height:24px;bottom:92px}
+.sc-toast{z-index:400}
+/* Toast v2: popup-style card (like the delete popup), centered */
+.sc-toast{display:flex;align-items:center;gap:14px;text-align:left;min-width:min(380px,90vw);max-width:min(520px,90vw);padding:18px 18px 18px 20px;overflow:hidden;pointer-events:auto;animation:scToastIn .18s cubic-bezier(.2,.7,.2,1)}
+.sc-toast[hidden]{display:none}
+.sc-toast-ic{flex:none;width:36px;height:36px;border-radius:50%;display:grid;place-items:center;background:rgba(255,255,255,.1)}
+.sc-toast-ic svg{width:19px;height:19px;fill:#fff}
+.sc-toast.error .sc-toast-ic{background:rgba(229,72,77,.16)}
+.sc-toast.error .sc-toast-ic svg{fill:var(--red)}
+.sc-toast-txt{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+.sc-toast-txt b{font:700 15px 'Archivo',system-ui,sans-serif;color:var(--fg)}
+.sc-toast-txt span{font-size:13px;color:var(--fg-dim)}
+.sc-toast-txt span:empty{display:none}
+.sc-toast-x{flex:none;align-self:flex-start;background:none;border:0;color:var(--fg-dim);font-size:14px;cursor:pointer;padding:2px 6px;border-radius:8px}
+.sc-toast-x:hover{color:var(--fg);background:rgba(255,255,255,.08)}
+.sc-toast-bar{position:absolute;left:0;bottom:0;height:2px;width:100%;background:rgba(255,255,255,.35);transform-origin:left;animation:scToastBar var(--toast-ms,4200ms) linear forwards}
+.sc-toast.error .sc-toast-bar{background:var(--red)}
+@keyframes scToastBar{from{transform:scaleX(1)}to{transform:scaleX(0)}}
+@keyframes scToastIn{from{opacity:0;transform:translate(-50%,-50%) scale(.96)}to{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+/* "Take saved" card: thumbnail + ✓, name, length, where it went; screen dimmed like the popups */
+.sc-saved{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.6);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:24px;animation:scModalIn .14s ease-out}
+.sc-saved-card{position:relative;overflow:hidden;display:flex;align-items:center;gap:16px;width:min(460px,100%);background:#1B1B1D;border:1px solid rgba(255,255,255,.18);border-radius:16px;padding:18px 16px 18px 18px;box-shadow:0 0 0 1px rgba(0,0,0,.6),0 0 24px rgba(255,255,255,.05),0 30px 90px rgba(0,0,0,.75);animation:scCardIn .18s ease-out}
+.sc-take-thumb.sc-saved-thumb{position:relative;flex:none;width:96px;height:60px;border-radius:10px;overflow:visible}
+.sc-saved-thumb > img,.sc-saved-thumb > canvas,.sc-saved-thumb > svg{border-radius:10px}
+.sc-saved-ok{position:absolute;right:-7px;bottom:-7px;width:24px;height:24px;border-radius:50%;background:#fff;display:grid;place-items:center;box-shadow:0 0 0 3px #1B1B1D}
+.sc-saved-ok svg{width:15px;height:15px;fill:#000}
+.sc-saved-txt{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1}
+.sc-saved-txt b{font:700 16px 'Archivo',system-ui,sans-serif;color:var(--fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-saved-meta{font:600 12px var(--mono);color:var(--fg)}
+.sc-saved-where{font-size:12.5px;color:var(--fg-dim)}
+.sc-saved-card .sc-modal-x{align-self:flex-start}
+.sc-saved-bar{position:absolute;left:0;bottom:0;height:2px;width:100%;background:rgba(255,255,255,.4);transform-origin:left;animation:scToastBar var(--saved-ms,4500ms) linear forwards}
+.sc-saved-media{position:relative;flex:none}
+.sc-take-thumb.sc-saved-thumb{overflow:hidden}
+/* Take marks in the script (control window only): red line where a take stopped, read part dimmed, ticks on the progress bar */
+body:not(.stage-window) #script-text{position:relative}
+.sc-mark{position:absolute;left:0;right:0;height:0;border-top:2px solid rgba(229,72,77,.85);pointer-events:none;z-index:2}
+.sc-mark:not(.last){border-top-color:rgba(229,72,77,.4)}
+.sc-mark-tag{position:absolute;right:max(28px,env(safe-area-inset-right,0px));bottom:4px;display:inline-flex;align-items:center;gap:2px;padding:4px 4px 4px 10px;border-radius:8px;background:rgba(20,8,9,.92);border:1px solid rgba(229,72,77,.6);font:600 13px/1 var(--mono,ui-monospace),monospace;letter-spacing:0;color:#fff;white-space:nowrap;pointer-events:auto;cursor:pointer}
+.sc-mark:not(.last) .sc-mark-tag{opacity:.6}
+.sc-mark-tag:hover{opacity:1;border-color:var(--red)}
+.sc-mark-tag b{font-weight:700;color:var(--red)}
+.sc-mark-tag > span{color:#ddd}
+.sc-mark-x{background:none;border:0;color:#aaa;font-size:12px;line-height:1;padding:3px 5px;margin-left:4px;border-radius:5px;cursor:pointer}
+.sc-mark-x:hover{color:#fff;background:rgba(255,255,255,.12)}
+#script-text::highlight(sc-read){color:rgba(240,240,238,.38)}
+#progress{position:relative;overflow:visible}
+#progress-fill{border-radius:2px}
+.sc-mark-tick{position:absolute;top:-3px;width:2px;height:9px;margin-left:-1px;background:var(--red);border-radius:1px;pointer-events:auto}
+/* Saved card v2: name box open for renaming; error stops show the warning on top */
+.sc-saved-card{flex-direction:column;align-items:stretch;gap:12px;width:min(500px,100%)}
+.sc-saved-row{display:flex;align-items:center;gap:16px}
+.sc-saved-head{font-size:12px;color:var(--fg-dim)}
+.sc-saved-name{display:flex;gap:8px}
+.sc-saved-in{flex:1;min-width:0;background:#0E0E0F;border:1px solid rgba(255,255,255,.3);border-radius:8px;color:var(--fg);font:700 15px 'Archivo',system-ui,sans-serif;padding:7px 10px;outline:none}
+.sc-saved-in:focus{border-color:rgba(255,255,255,.85)}
+.sc-saved-name .btn,.sc-saved-foot .btn{padding:7px 16px;min-height:0}
+.sc-saved-row .sc-modal-x{align-self:flex-start}
+.sc-saved-hint{font-size:11.5px;color:var(--fg-dim)}
+.sc-saved-hint kbd,.sc-saved-foot kbd{font:600 10.5px var(--mono);border:1px solid var(--hair);border-radius:4px;padding:1px 5px;color:var(--fg-dim)}
+.sc-saved.held .sc-saved-bar{display:none}
+.sc-saved.err .sc-saved-card{border-color:rgba(229,72,77,.7)}
+.sc-saved-warn{display:flex;gap:10px;align-items:flex-start;background:rgba(229,72,77,.12);border:1px solid rgba(229,72,77,.45);border-radius:10px;padding:10px 12px}
+.sc-saved-warn svg{flex:none;width:18px;height:18px;fill:var(--red);margin-top:1px}
+.sc-saved-warn > span{display:flex;flex-direction:column;gap:3px}
+.sc-saved-warn b{font:700 14px 'Archivo',system-ui,sans-serif;color:#fff}
+.sc-saved-warn > span > span{font-size:12.5px;color:#d9b9b9;line-height:1.45}
+.sc-saved-foot{display:flex;justify-content:flex-end;align-items:center;gap:12px}
+.sc-saved-name .btn,.sc-saved-foot .btn{flex:none;width:auto}
+.sc-saved-name .btn,.sc-saved-foot .btn{min-width:0}
+/* Black and white camera behind the script and on the Stage (display only; recordings stay in colour) */
+.sc-center-cam.sc-bw img,.sc-center-cam.sc-bw video,.sc-stage-cam.sc-bw img,.sc-stage-cam.sc-bw video{filter:grayscale(1)}
+.sc-bwrow{margin-top:10px}

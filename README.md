@@ -11,13 +11,13 @@ Built on the Space Prompter design. Chrome or Edge on a Mac. Built and tested wi
 - **Camera** (right rail): live preview (~24 fps, for framing), exposure/battery readout, hold-to-autofocus, manual focus near/far with step size, grid, big floating preview window.
 - **Audio** (right rail): pick any mic, level meter with clip light, WAV 24-bit at the mic's rate. Browser processing (echo cancel, noise suppression, auto gain) is off.
 - **Record** (bottom bar): one press starts the camera clip and the audio file together. Timer, warning from 29:00, A7 III clip limit 29:59.
-- **Takes** (left rail): each take with its time, where the audio went, Save / Delete. Audio is written into the browser's private storage while recording (survives a crash) and moved into your chosen folder when you stop. No folder? Save each take after the shoot. Unsaved takes are recovered on the next visit.
+- **Takes** (left rail): each take with its time, an inline waveform player, Rename and Delete. Audio is written into the browser's private storage while recording (survives a crash), then saved when you stop: to Downloads, or to a folder you pick bottom left (with a folder, Rename renames the file too). Unsaved takes are recovered on the next visit.
 
-File name: `Take-03_2026-11-05_110438.wav`. Sync in Premiere with the camera's own audio: Synchronize → Audio.
+File names: `SpaceTake_1.wav`, `SpaceTake_2.wav` … one counter that never goes back, so names never repeat. Sync in Premiere with the camera's own audio: Synchronize → Audio.
 
 ## Shortcuts
 Prompter: `Space` play/pause (double-tap previous paragraph, hold back to top) · `F` full screen · `E` edit
-Space Cam: `R` record camera + audio · hold `A` autofocus · `←` `→` focus near/far (camera on MF) · `G` grid
+Space Cam: `R` record camera + audio · hold `A` autofocus · `←` `→` focus near/far (camera on MF) · `G` grid · `Cmd+R` reload and reconnect (releases the camera cleanly first; not while recording)
 
 ## Camera setup
 1. MENU → Network → Ctrl w/ Smartphone → Off

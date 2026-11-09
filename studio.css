@@ -618,8 +618,8 @@ body:not(.stage-window) #script-text{position:relative}
 .sc-saved-row{display:flex;align-items:center;gap:16px}
 .sc-saved-head{font-size:12px;color:var(--fg-dim)}
 .sc-saved-name{display:flex;gap:8px}
-.sc-saved-in{flex:1;min-width:0;background:#0E0E0F;border:1px solid rgba(255,255,255,.3);border-radius:8px;color:var(--fg);font:700 15px 'Archivo',system-ui,sans-serif;padding:7px 10px;outline:none}
-.sc-saved-in:focus{border-color:rgba(255,255,255,.85)}
+input.sc-saved-in{flex:1;min-width:0;background:#0E0E0F;border:1px solid rgba(255,255,255,.3);border-radius:8px;color:var(--fg);font:700 15px 'Archivo',system-ui,sans-serif;padding:7px 10px;outline:none}
+input.sc-saved-in:focus{border-color:rgba(255,255,255,.85)}
 .sc-saved-name .btn,.sc-saved-foot .btn{padding:7px 16px;min-height:0}
 .sc-saved-row .sc-modal-x{align-self:flex-start}
 .sc-saved-hint{font-size:11.5px;color:var(--fg-dim)}
@@ -637,3 +637,72 @@ body:not(.stage-window) #script-text{position:relative}
 /* Black and white camera behind the script and on the Stage (display only; recordings stay in colour) */
 .sc-center-cam.sc-bw img,.sc-center-cam.sc-bw video,.sc-stage-cam.sc-bw img,.sc-stage-cam.sc-bw video{filter:grayscale(1)}
 .sc-bwrow{margin-top:10px}
+/* One-click "Clear marks" floating button over the script (control window only) */
+.sc-marks-clear{position:absolute;top:14px;left:50%;transform:translateX(-50%);z-index:8;display:inline-flex;align-items:center;gap:6px;padding:6px 12px 6px 9px;border-radius:999px;background:rgba(20,20,22,.9);border:1px solid rgba(229,72,77,.45);color:#ddd;font:600 12px 'Archivo',system-ui,sans-serif;cursor:pointer}
+.sc-marks-clear:hover{color:#fff;border-color:var(--red)}
+.sc-marks-clear[hidden]{display:none}
+.sc-marks-clear svg{width:13px;height:13px;fill:currentColor}
+body.stage-window .sc-marks-clear{display:none}
+/* Marks v2: white with a soft glow instead of red; Clear marks top right */
+.sc-mark{border-top:2px solid rgba(255,255,255,.9);box-shadow:0 0 8px rgba(255,255,255,.55),0 0 18px rgba(255,255,255,.25)}
+.sc-mark:not(.last){border-top-color:rgba(255,255,255,.4);box-shadow:0 0 6px rgba(255,255,255,.2)}
+.sc-mark-tag{background:rgba(14,14,15,.92);border-color:rgba(255,255,255,.55);box-shadow:0 0 10px rgba(255,255,255,.25)}
+.sc-mark-tag:hover{border-color:#fff}
+.sc-mark-tag b{color:#fff}
+.sc-mark-tag > span{color:#cfcfcf}
+.sc-mark-tick{background:#fff;box-shadow:0 0 6px rgba(255,255,255,.8)}
+.sc-marks-clear{left:auto;right:16px;transform:none;border-color:rgba(255,255,255,.35)}
+.sc-marks-clear:hover{border-color:#fff}
+.sc-marks-clear{padding:6px 10px 6px 12px}
+.sc-marks-clear svg{width:14px;height:14px;fill:var(--red)}
+/* Marker v3: a small glowing marker at the end of the stop line, no text (details on hover) */
+.sc-mark-tag{bottom:auto;top:-7px;width:12px;height:12px;padding:0;gap:0;border-radius:50%;background:#fff;border:0;box-shadow:0 0 0 3px rgba(0,0,0,.6),0 0 10px rgba(255,255,255,.8),0 0 22px rgba(255,255,255,.35)}
+.sc-mark:not(.last) .sc-mark-tag{opacity:1;background:rgba(255,255,255,.55);box-shadow:0 0 0 3px rgba(0,0,0,.6),0 0 6px rgba(255,255,255,.3)}
+.sc-mark-tag:hover{transform:scale(1.25);opacity:1}
+/* Marker v4 (option C): dot at the line's end + text above it, no box; ✕ on hover */
+.sc-mark-tag{top:-26px;bottom:auto;right:max(28px,env(safe-area-inset-right,0px));width:auto;height:auto;padding:2px 0;gap:4px;border-radius:0;background:none;border:0;box-shadow:none;font:600 13px/1 var(--mono,ui-monospace),monospace;color:#fff;text-shadow:0 0 8px rgba(255,255,255,.5),0 1px 3px #000;transform:none}
+.sc-mark-tag:hover{transform:none}
+.sc-mark-tag b{color:#fff;font-weight:600}
+.sc-mark:not(.last) .sc-mark-tag{opacity:.5;background:none;box-shadow:none}
+.sc-mark-tag:hover{opacity:1}
+.sc-mark-x{opacity:0;transition:opacity .15s;text-shadow:none}
+.sc-mark-tag:hover .sc-mark-x{opacity:1}
+.sc-mark-dot{position:absolute;right:calc(max(28px,env(safe-area-inset-right,0px)) - 6px);top:-7px;width:12px;height:12px;border-radius:50%;background:#fff;box-shadow:0 0 0 3px rgba(0,0,0,.55),0 0 10px rgba(255,255,255,.8),0 0 22px rgba(255,255,255,.35);pointer-events:none}
+.sc-mark:not(.last) .sc-mark-dot{background:rgba(255,255,255,.5);box-shadow:0 0 0 3px rgba(0,0,0,.55),0 0 6px rgba(255,255,255,.3)}
+.sc-mark-tag{right:calc(max(28px,env(safe-area-inset-right,0px)) + 14px)}
+/* Script part (recording popup) */
+.sc-sp{border-top:1px solid var(--hair);padding-top:10px;display:flex;flex-direction:column;gap:8px;min-height:0}
+.sc-sp-head{display:flex;justify-content:space-between;gap:10px;font:600 11px var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--fg-dim)}
+.sc-sp-head b{color:var(--fg);font-weight:600;text-transform:none;letter-spacing:0}
+.sc-sp-range{text-transform:none;letter-spacing:0;white-space:nowrap}
+.sc-sp-bar{position:relative;height:5px;border-radius:3px;background:#2a2a2e}
+.sc-sp-bar i{position:absolute;top:0;bottom:0;border-radius:3px;background:#fff;box-shadow:0 0 6px rgba(255,255,255,.6)}
+.sc-sp-rows{display:flex;flex-direction:column;max-height:118px;overflow:auto;scrollbar-width:thin}
+.sc-sp-row{display:flex;gap:12px;align-items:baseline;text-align:left;background:none;border:0;border-radius:7px;padding:4px 8px;color:var(--fg);font:inherit;font-size:12.5px;cursor:pointer}
+.sc-sp-row:hover{background:#26262a}
+.sc-sp-row.end{cursor:default;color:var(--fg-dim)}
+.sc-sp-row.end:hover{background:none}
+.sc-sp-t{font:600 11.5px var(--mono);color:var(--fg-dim);min-width:40px}
+.sc-sp-w{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Script popup: Text | Coverage */
+.sc-se-top{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.sc-se-tabs{display:inline-flex;border:1px solid var(--hair);border-radius:9px;padding:2px}
+.sc-se-tabs[hidden]{display:none}
+.sc-se-tabs button{background:none;border:0;color:var(--fg-dim);font:600 12px 'Archivo',system-ui,sans-serif;padding:5px 12px;border-radius:7px;cursor:pointer}
+.sc-se-tabs button.on{background:#2a2a2e;color:var(--fg)}
+.sc-se-pane [hidden]{display:none!important}
+.sc-se-cov{flex:1;min-height:0;display:flex;flex-direction:column;gap:8px}
+.sc-cov-head{display:flex;justify-content:space-between;font:600 11px var(--mono);color:var(--fg-dim)}
+.sc-cov-miss{color:var(--red)}
+.sc-cov-miss.ok{color:var(--fg-dim)}
+.sc-cov-rows{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:2px;scrollbar-width:thin}
+.sc-cov-row{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:10px;align-items:center;padding:7px 8px;border-radius:8px}
+.sc-cov-row:hover{background:#202024}
+.sc-cov-n{font:600 11px var(--mono);color:var(--fg-dim)}
+.sc-cov-txt{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sc-cov-chips{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.sc-cov-chip{font:600 11px var(--mono);border:1px solid #3a3a3e;border-radius:999px;padding:3px 9px;color:#ccc;background:none;cursor:pointer;white-space:nowrap}
+.sc-cov-chip:hover{border-color:#888;color:#fff}
+.sc-cov-chip.best{border-color:#fff;color:#fff;background:#2a2a2e;box-shadow:0 0 8px rgba(255,255,255,.25)}
+.sc-cov-chip.none{border-color:rgba(229,72,77,.6);color:var(--red);cursor:default}
+.sc-cov-nostar{font-size:11px;color:var(--fg-dim)}

@@ -1219,6 +1219,7 @@ function init() {
           a.addEventListener('timeupdate', () => { if (Math.abs(vid.currentTime - a.currentTime) > 0.25) vid.currentTime = a.currentTime; });
         }
       } else abox.innerHTML = '<div class="sc-take-vnote">No audio was recorded with this take.</div>';
+      renderScriptPart(t, pane);
 
     }
     renderList(); show(t, { edit });
@@ -1459,6 +1460,36 @@ function init() {
     await dir.removeEntry(oldName);
   }
 
+  // ---- "Script part" in the take popup: which part of which script, and when each paragraph starts (click = jump there)
+  function renderScriptPart(t, pane) {
+    const sc = t.script; if (!sc) return;
+    const cur = window.spaceCamMarks?.script(sc.id), paras = window.spaceCamMarks?.paras(sc.id) || [];
+    const same = cur && cur.sig === sc.sig, n = Math.max(1, sc.count || paras.length || 1);
+    const from = Math.min(sc.from, sc.to), to = Math.max(sc.from, sc.to);
+    const pct = Math.round((to - from + 1) / n * 100);
+    const box = h(`<div class="sc-sp">
+      <div class="sc-sp-head"><span>Script part · <b></b></span><span class="sc-sp-range"></span></div>
+      <div class="sc-sp-bar"><i style="left:${from / n * 100}%;width:${(to - from + 1) / n * 100}%"></i></div>
+      <div class="sc-sp-rows"></div></div>`);
+    box.querySelector('b').textContent = cur?.name || sc.name || 'Script';
+    box.querySelector('.sc-sp-range').textContent = (from === to ? `paragraph ${from + 1}` : `paragraphs ${from + 1}–${to + 1}`) + ` · ${pct}%` + (same ? '' : ' · script edited since');
+    const rows = box.querySelector('.sc-sp-rows');
+    const words = p => same && paras[p] ? paras[p].replace(/\s+/g, ' ').slice(0, 60) + (paras[p].length > 60 ? '…' : '') : `Paragraph ${p + 1}`;
+    for (const x of sc.paras || []) {
+      const r = h(`<button type="button" class="sc-sp-row"><span class="sc-sp-t">${esc(fmt(Math.floor(x.t)))}</span><span class="sc-sp-w"></span></button>`);
+      r.querySelector('.sc-sp-w').textContent = words(x.p);
+      r.onclick = () => { if (!player) return; player.audio.currentTime = x.t; player.audio.play().catch(() => {}); };
+      rows.append(r);
+    }
+    const end = h(`<div class="sc-sp-row end"><span class="sc-sp-t">${esc(fmt(t.seconds || 0))}</span><span class="sc-sp-w">stopped</span></div>`);
+    rows.append(end);
+    pane.querySelector('.sc-modal-row')?.before(box);
+  }
+  // the prompter asks for names and coverage by take id, so a rename or delete shows there too
+  window.spaceCamTakeName = id => { const t = takes.find(x => x.id === id); return t ? takeLabel(t) : null; };
+  window.spaceCamCoverage = scriptId => takes.filter(t => t.script && t.script.id === scriptId)
+    .map(t => ({ id: t.id, label: takeLabel(t), sig: t.script.sig, from: Math.min(t.script.from, t.script.to), to: Math.max(t.script.from, t.script.to), paras: t.script.paras || [] }));
+
   // ---- Take card thumbnail (see fillThumb for the rules)
   // Thumbnail rules:
   //  - video saved on this device (Mac camera): its frame; a faint waveform on top when audio was recorded, plain if not
@@ -1549,6 +1580,7 @@ function init() {
     return `${day} ${hhmm(d)}`;
   }
   function renderTakes() {
+    try { window.spaceCamMarks?.refresh(); } catch {}
     t_ids();
     const list = takes.slice().reverse();
     ui.saveAll.hidden = true;
@@ -1933,6 +1965,10 @@ function init() {
     take = { id: 't' + started.getTime().toString(36), series: 'st', no, label, name: a ? name : null, startedAt: started.getTime(), camera: !!c, audio: a ? 'recording' : 'none', video: v ? 'recording' : undefined, videoName: v || undefined };
     if (v) grabThumb(take.id); // card thumbnail from the Mac camera, ~1 s in
     take.mark = window.spaceCamMarks?.start() || null; // where the take starts in the script
+    if (take.mark) { // which script, and when each paragraph comes up (for the Script part and Coverage views)
+      const sc = window.spaceCamMarks.script(take.mark.id);
+      take.script = { id: take.mark.id, name: sc?.name || '', sig: take.mark.sig, count: window.spaceCamMarks.paras(take.mark.id).length, from: take.mark.from.p, to: take.mark.from.p, paras: [{ p: take.mark.from.p, t: 0 }] };
+    }
     take.limit = await takeLimit(take);
     try { wake = await navigator.wakeLock?.request('screen'); } catch {}
     timer = setInterval(tick, 250); tick();
@@ -1944,7 +1980,10 @@ function init() {
     const t = take; take = null; clearInterval(timer); timer = null;
     if (!stopping) sfx('stop');
     try { window.spaceCamPrompter?.pause(); } catch {} // the script stops scrolling the moment recording stops
-    try { window.spaceCamMarks?.stop(t.mark, t.label || 'Take', Math.round((Date.now() - t.startedAt) / 1000)); } catch {} // red line in the script where it stopped
+    try { // marker line in the script where it stopped (linked by id, so renames follow)
+      const r = window.spaceCamMarks?.stop(t.mark, t.label || 'Take', Math.round((Date.now() - t.startedAt) / 1000), t.id);
+      if (t.script) { if (r) { t.script.from = r.from.p; t.script.to = r.to.p; } else delete t.script; }
+    } catch {}
     delete t.mark;
     try { await wake?.release(); } catch {} wake = null;
     const [a, , v] = await Promise.all([t.audio === 'recording' ? audio.stopRecording() : null, cam.recording ? cam.stopRecording() : null, t.video === 'recording' ? web.stopRecording() : null]);
@@ -2014,6 +2053,12 @@ function init() {
 
   function tick() {
     if (!take) return;
+    if (take.script && take.mark) { // log the second each new paragraph reaches the reading line
+      try {
+        const sp = window.spaceCamMarks.spot(take.mark), ps = take.script.paras;
+        if (sp && sp.p !== ps[ps.length - 1].p) { ps.push({ p: sp.p, t: Math.round((Date.now() - take.startedAt) / 100) / 10 }); if (ps.length > 400) ps.shift(); }
+      } catch {}
+    }
     const s = Math.floor((Date.now() - take.startedAt) / 1000), lim = take.limit;
     if (lim && s >= lim.sec) { if (take.camera && /29:59/.test(lim.why)) cam.markStoppedByCamera(); stopTogether(lim.why); return; }
     if (lim && s === lim.sec - 60) toast(`One minute left: ${lim.why}.`, 'error');

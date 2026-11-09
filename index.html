@@ -3500,7 +3500,7 @@ var qrcode = function() {
     scriptText.appendChild(frag);
     if(!isStageWindow && !text.trim()){
       // Space Cam: no script yet. Recording without a prompter is fine.
-      scriptText.innerHTML = '<div class="para sc-noscript">No script yet. Press <b>+ New</b> on the left (or <kbd>E</kbd>) to paste one, or just record.</div>';
+      scriptText.innerHTML = '<div class="para sc-noscript">No script yet. To add one, click <b>+</b> next to Scripts on the left, or click the <b>Add script</b> button. Or just record without one.</div>';
     }
     applyViewScale();
     if(keepG !== null && isFinite(keepG)){
@@ -3512,6 +3512,8 @@ var qrcode = function() {
     dimCur = -2; scheduleDim();
     updateProgress();
     renderMarks();
+    // Space Cam: the bottom button reads "Add script" until there is one
+    if(!isStageWindow && !editMode && typeof editBtn !== 'undefined' && editBtn){ var eLab = editBtn.querySelector('span'); if(eLab) eLab.textContent = text.trim() ? 'Edit script' : 'Add script'; }
   }
   // ---- Position sync in content units ----
   // The control column can be narrower than the real stage window. To keep
@@ -3878,9 +3880,11 @@ var qrcode = function() {
       '<div class="sc-pop-bar"><span class="sc-pop-label">Scripts</span><span class="sc-pop-right"><span class="sc-modal-hint"><kbd>Esc</kbd> close</span>' +
       '<button type="button" class="sc-modal-x" aria-label="Close">✕</button></span></div>' +
       '<div class="sc-tb"><div class="sc-tb-list sc-se-list" role="listbox" aria-label="Scripts"></div>' +
-      '<div class="sc-tb-pane sc-se-pane"><div class="sc-modal-title sc-se-title">Edit script</div>' +
+      '<div class="sc-tb-pane sc-se-pane"><div class="sc-se-top"><div class="sc-modal-title sc-se-title">Edit script</div>' +
+      '<div class="sc-se-tabs" role="tablist"><button type="button" data-t="text" class="on">Text</button><button type="button" data-t="cov">Coverage</button></div></div>' +
       '<input class="sc-modal-input sc-modal-name-in" maxlength="80" spellcheck="false" placeholder="Script name">' +
       '<textarea class="sc-modal-text" spellcheck="false" placeholder="Paste or type your script here"></textarea>' +
+      '<div class="sc-se-cov" hidden></div>' +
       '<div class="sc-modal-row"><span class="sc-modal-hint"><kbd>⌘</kbd><kbd>Enter</kbd> save</span>' +
       '<button type="button" class="btn ghost sc-cancel">Cancel</button><button type="button" class="btn primary sc-save">Save</button></div>' +
       '</div></div></div>';
@@ -3888,10 +3892,61 @@ var qrcode = function() {
     var nameIn = wrap.querySelector('.sc-modal-name-in');
     var ta = wrap.querySelector('textarea');
     function dirty(){ return nameIn.value !== baseName || ta.value !== baseText; }
+    // ---- Coverage: which recordings covered each paragraph; star the one to use (stored on the script as best[paragraph] = take id)
+    var cov = wrap.querySelector('.sc-se-cov'), tabs = wrap.querySelector('.sc-se-tabs'), tab = 'text';
+    function fmtT(x){ x = Math.max(0, Math.round(x || 0)); return Math.floor(x / 60) + ':' + String(x % 60).padStart(2, '0'); }
+    function showTab(t){
+      tab = (t === 'cov' && !isNew) ? 'cov' : 'text';
+      tabs.querySelectorAll('button').forEach(function(b){ b.classList.toggle('on', b.dataset.t === tab); });
+      ta.hidden = tab !== 'text'; cov.hidden = tab !== 'cov'; nameIn.hidden = tab !== 'text';
+      wrap.querySelector('.sc-se-pane .sc-modal-row').hidden = tab !== 'text';
+      if(tab === 'cov') renderCov();
+    }
+    tabs.addEventListener('click', function(e){ var b = e.target.closest('button'); if(!b) return; if(b.dataset.t === 'cov' && !saveCurrent()) return; showTab(b.dataset.t); });
+    function renderCov(){
+      var paras = (s.text || '').split(/\n[ \t]*\n+/), sig = textSig(s.text);
+      var all = window.spaceCamCoverage ? window.spaceCamCoverage(s.id) : [];
+      var takesNow = all.filter(function(t){ return t.sig === sig; }), older = all.length - takesNow.length;
+      var best = s.best || {}, missing = 0;
+      var rows = paras.map(function(txt, i){
+        var on = takesNow.filter(function(t){ return t.from <= i && i <= t.to; });
+        if(!on.length) missing++;
+        return { i: i, txt: txt, on: on };
+      });
+      cov.innerHTML = '';
+      var head = document.createElement('div'); head.className = 'sc-cov-head';
+      head.innerHTML = '<span></span><span class="sc-cov-miss"></span>';
+      head.firstChild.textContent = takesNow.length + ' recording' + (takesNow.length === 1 ? '' : 's') + (older ? ' · ' + older + ' from an older version not shown' : '');
+      head.lastChild.textContent = missing ? missing + ' part' + (missing === 1 ? '' : 's') + ' missing' : 'every part covered';
+      head.lastChild.classList.toggle('ok', !missing);
+      cov.appendChild(head);
+      var box = document.createElement('div'); box.className = 'sc-cov-rows'; cov.appendChild(box);
+      rows.forEach(function(r){
+        var row = document.createElement('div'); row.className = 'sc-cov-row';
+        row.innerHTML = '<span class="sc-cov-n"></span><span class="sc-cov-txt"></span><span class="sc-cov-chips"></span>';
+        row.querySelector('.sc-cov-n').textContent = r.i + 1;
+        row.querySelector('.sc-cov-txt').textContent = r.txt.replace(/\s+/g, ' ').slice(0, 80);
+        var chips = row.querySelector('.sc-cov-chips');
+        if(!r.on.length){ var no = document.createElement('span'); no.className = 'sc-cov-chip none'; no.textContent = 'no take'; chips.appendChild(no); }
+        r.on.forEach(function(t){
+          var c = document.createElement('button'); c.type = 'button';
+          var starred = best[r.i] === t.id;
+          c.className = 'sc-cov-chip' + (starred ? ' best' : '');
+          var at = (t.paras || []).find(function(x){ return x.p === r.i; });
+          c.textContent = (starred ? '★ ' : '') + t.label.replace(/_/g, ' ');
+          c.title = (at ? 'Starts at ' + fmtT(at.t) + ' in this recording. ' : '') + (starred ? 'Click to remove the star' : 'Click to star: use this one for this part');
+          c.onclick = function(){ s.best = s.best || {}; if(s.best[r.i] === t.id) delete s.best[r.i]; else s.best[r.i] = t.id; save(); renderCov(); };
+          chips.appendChild(c);
+        });
+        if(r.on.length && best[r.i] == null){ var ns = document.createElement('span'); ns.className = 'sc-cov-nostar'; ns.textContent = 'no star yet'; chips.appendChild(ns); }
+        box.appendChild(row);
+      });
+    }
     function load(target){
       if(target){ s = target; isNew = false; } else { s = { name: nextDefaultName(), text: '' }; isNew = true; }
       nameIn.value = baseName = s.name; ta.value = baseText = s.text || '';
       titleEl.textContent = isNew ? 'New script' : 'Edit script';
+      tabs.hidden = isNew; showTab('text');
       renderList();
     }
     function renderList(){
@@ -4358,6 +4413,7 @@ var qrcode = function() {
     var y = (r.top + r.bottom) / 2 - sTop + scroller.scrollTop;
     seekTo(y - scroller.clientHeight * guideFrac);
     scheduleDim();
+    clearDimFrom(spotAtGuide()); // Space Cam: retake from here, so the grey (read) text from here on turns white
   });
   marginSlider.addEventListener('input', function(){
     state.marginPx = Number(marginSlider.value);
@@ -5263,7 +5319,7 @@ var qrcode = function() {
     // Margin, speed, text size, flip and fullscreen stay touch/mouse-only
     // (fullscreen still works on F, just not advertised in the hint).
     if(k === 'f'){ fullscreenBtn.click(); }
-    else if(k === 'e'){ editBtn.click(); }
+    else if(k === 'e'){ var curS = activeScript(); if(curS && curS.text && curS.text.trim()) editBtn.click(); } // Space Cam: E edits an existing script only; new scripts come from + or a double-click
   });
 
   document.addEventListener('keyup', function(e){
@@ -5498,29 +5554,57 @@ var qrcode = function() {
     if(!b || (!b.height && !b.top)) return null;
     return (b.top - scriptText.getBoundingClientRect().top) / viewK;
   }
+  function cmpSpot(a, b){ return (a.p - b.p) || (a.o - b.o); }
+  // tap a word or start a new take: everything from that spot on turns white again (lines stay)
+  function clearDimFrom(spot){
+    var s = activeScript(); if(!spot || !s || !s.marks || !s.marks.length) return;
+    var changed = false;
+    s.marks.forEach(function(m){ var end = m.dimTo || m.to; if(cmpSpot(end, spot) > 0){ m.dimTo = cmpSpot(spot, m.from) > 0 ? spot : m.from; changed = true; } });
+    if(changed){ save(); renderMarks(); }
+  }
+  var marksClearBtn = null;
+  function renderMarksClear(n){
+    if(!marksClearBtn){
+      marksClearBtn = document.createElement('button');
+      marksClearBtn.type = 'button'; marksClearBtn.className = 'sc-marks-clear';
+      marksClearBtn.title = 'Remove all markers from this script';
+      marksClearBtn.addEventListener('click', function(e){
+        e.stopPropagation();
+        var s = activeScript(); if(s){ s.marks = []; save(); renderMarks(); }
+      });
+      stage.appendChild(marksClearBtn);
+    }
+    marksClearBtn.hidden = !n;
+    marksClearBtn.innerHTML = '<span>Clear markers</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>';
+  }
   function renderMarks(){
     if(isStageWindow) return;
     scriptText.querySelectorAll('.sc-mark').forEach(function(el){ el.remove(); });
     var bar = document.getElementById('progress'); if(bar) bar.querySelectorAll('.sc-mark-tick').forEach(function(el){ el.remove(); });
     if(window.CSS && CSS.highlights) CSS.highlights.delete('sc-read');
     var s = activeScript();
+    renderMarksClear((s && s.marks && !editMode) ? s.marks.length : 0);
     if(!s || !s.marks || !s.marks.length || editMode) return;
     if(s.marks.some(function(m){ return m.sig !== textSig(s.text); })){ // text changed since: the spots no longer line up
-      s.marks = s.marks.filter(function(m){ return m.sig === textSig(s.text); }); save();
+      s.marks = s.marks.filter(function(m){ return m.sig === textSig(s.text); }); save(); renderMarksClear(s.marks.length);
       if(!s.marks.length) return;
     }
     var paras = scriptText.querySelectorAll('.para:not(.sc-noscript)');
     var ranges = [], max = Math.max(1, scroller.scrollHeight - scroller.clientHeight);
     s.marks.forEach(function(m, mi){
-      var r = rangeAt(paras, m.from, 0), r2 = rangeAt(paras, m.to, 0);
+      var dimEnd = m.dimTo || m.to; // a later tap / new take can whiten the rest (dimTo), the red line stays at m.to
+      var r = rangeAt(paras, m.from, 0), r2 = cmpSpot(dimEnd, m.from) > 0 ? rangeAt(paras, dimEnd, 0) : null;
       if(r && r2){ try{ r.setEnd(r2.startContainer, r2.startOffset); if(!r.collapsed) ranges.push(r); }catch(e){} }
       var y = lineY(paras, m.to); if(y === null) return;
       var el = document.createElement('div');
       el.className = 'sc-mark' + (mi === s.marks.length - 1 ? ' last' : '');
       el.style.top = y + 'px';
-      el.innerHTML = '<span class="sc-mark-tag" title="Continue from here"><b></b><span></span><button type="button" class="sc-mark-x" aria-label="Remove this mark" title="Remove this mark">✕</button></span>';
-      el.querySelector('b').textContent = m.take + ' stopped';
-      el.querySelector('span span').textContent = m.sec != null ? ' · ' + String(Math.floor(m.sec / 60)).padStart(2, '0') + ':' + String(m.sec % 60).padStart(2, '0') : '';
+      // a glowing dot at the end of the line, the take name and length beside it (no box); ✕ shows on hover
+      var len = m.sec != null ? Math.floor(m.sec / 60) + ':' + String(m.sec % 60).padStart(2, '0') : '';
+      el.innerHTML = '<span class="sc-mark-tag" title="Continue from here"><b></b><button type="button" class="sc-mark-x" aria-label="Remove this marker" title="Remove this marker">✕</button></span><i class="sc-mark-dot"></i>';
+      var nm = m.takeId && window.spaceCamTakeName ? window.spaceCamTakeName(m.takeId) : m.take; // the recording's current name
+      if(nm === null) return; // that recording was deleted
+      el.querySelector('b').textContent = String(nm || m.take).replace(/_/g, ' ') + (len ? ' · ' + len : '');
       var tag = el.querySelector('.sc-mark-tag');
       ['pointerdown', 'mousedown'].forEach(function(ev){ tag.addEventListener(ev, function(e){ e.stopPropagation(); }); });
       tag.addEventListener('click', function(e){
@@ -5543,16 +5627,22 @@ var qrcode = function() {
     // Space Cam: recording stopped → the prompter stops scrolling at once
     window.spaceCamPrompter = { pause: function(){ if(playing) pause(); } };
     window.spaceCamMarks = {
-      start: function(){ var s = activeScript(); if(!s || !s.text || !s.text.trim() || stage.classList.contains('hidden')) return null; var sp = spotAtGuide(); return sp ? { id: s.id, from: sp, sig: textSig(s.text) } : null; },
-      stop: function(tok, take, sec){
-        if(!tok) return;
-        var s = findScript(tok.id); if(!s || textSig(s.text) !== tok.sig) return;
-        var to = (activeScript() === s) ? spotAtGuide() : null; if(!to) return;
+      start: function(){ var s = activeScript(); if(!s || !s.text || !s.text.trim() || stage.classList.contains('hidden')) return null; var sp = spotAtGuide(); if(sp) clearDimFrom(sp); return sp ? { id: s.id, from: sp, sig: textSig(s.text) } : null; },
+      stop: function(tok, take, sec, takeId){
+        if(!tok) return null;
+        var s = findScript(tok.id); if(!s || textSig(s.text) !== tok.sig) return null;
+        var to = (activeScript() === s) ? spotAtGuide() : null; if(!to) return null;
         if(to.p < tok.from.p || (to.p === tok.from.p && to.o < tok.from.o)){ var x = to; to = tok.from; tok.from = x; } // read backwards: keep from before to
-        (s.marks = s.marks || []).push({ take: take, sec: sec, from: tok.from, to: to, sig: tok.sig, at: Date.now() });
+        (s.marks = s.marks || []).push({ take: take, takeId: takeId || null, sec: sec, from: tok.from, to: to, sig: tok.sig, at: Date.now() });
         if(s.marks.length > 20) s.marks.shift();
         save(); renderMarks();
-      }
+        return { from: tok.from, to: to };
+      },
+      // where the reading line is now, in the take's script (null if another script is showing)
+      spot: function(tok){ var s = activeScript(); return (tok && s && s.id === tok.id && !stage.classList.contains('hidden')) ? spotAtGuide() : null; },
+      paras: function(id){ var s = findScript(id); return s && s.text ? s.text.split(/\n[ \t]*\n+/) : []; },
+      script: function(id){ var s = findScript(id); return s ? { id: s.id, name: s.name, sig: textSig(s.text) } : null; },
+      refresh: function(){ renderMarks(); }
     };
   }
 
@@ -5732,5 +5822,5 @@ window.claude.hot.snapshot(function(){ return { state: state }; });
 </script>
 <!-- Bump ?v= on every deploy so browsers load the new files instead of cached ones.
      studio.js passes the same ?v= on to every file it loads (engines, workers). -->
-<link rel="stylesheet" href="studio.css?v=2026-11-09">
-<script type="module" src="studio.js?v=2026-11-09"></script>
+<link rel="stylesheet" href="studio.css?v=2026-11-09b">
+<script type="module" src="studio.js?v=2026-11-09b"></script>

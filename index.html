@@ -3462,12 +3462,23 @@ var qrcode = function() {
   function isEditingScript(){
     return !isStageWindow && document.activeElement && scriptText.contains(document.activeElement);
   }
+  var renderedText = null; // the exact text currently built into #script-text
   function applyText(){
     // Inline editing: our own typing already lives in the DOM, so rebuilding
     // it here would reset the caret and scroll position mid-sentence.
     if(isEditingScript()) return;
     var activeS = activeScript();
     var text = (activeS && activeS.text) || (isStageWindow ? 'Waiting for script from the control window…' : '');
+
+    // Same text already on screen: leave the DOM alone. Every 'state'
+    // broadcast (any slider, key, or stage-width report) lands here, and
+    // tearing the paragraphs down for nothing made the text flash and jump
+    // while reading.
+    if(text === renderedText && scriptText.firstChild) return;
+    // The text really changed (e.g. edited in the other window): rebuild, but
+    // keep the reader on the same line instead of snapping back toward the top.
+    var keepG = (renderedText !== null && !stage.classList.contains('hidden') && scroller.scrollTop > 0) ? getG() : null;
+    renderedText = text;
 
     // Split on blank lines into paragraph blocks (not just one text node) so
     // "previous paragraph" has real boundaries to jump between.
@@ -3486,6 +3497,12 @@ var qrcode = function() {
       scriptText.innerHTML = '<div class="para sc-noscript">No script yet. Press <b>+ New</b> on the left (or <kbd>E</kbd>) to paste one, or just record.</div>';
     }
     applyViewScale();
+    if(keepG !== null && isFinite(keepG)){
+      suppressScrollSync = true;
+      clearTimeout(suppressScrollSyncTimer);
+      suppressScrollSyncTimer = setTimeout(function(){ suppressScrollSync = false; }, 120);
+      setG(keepG);
+    }
     dimCur = -2; scheduleDim();
     updateProgress();
   }
@@ -3563,6 +3580,7 @@ var qrcode = function() {
     clearTimeout(suppressScrollSyncTimer);
     suppressScrollSyncTimer = setTimeout(function(){ suppressScrollSync = false; }, 120);
     scroller.scrollTop = top;
+    playG = null; // tick() picks up the new spot even for a tiny seek (voice scroll, tap a word)
     if(pair.role === 'host') pairSend({ t: 'pos', pos: getPos() });
     if(bc) bc.postMessage({type:'seek', g: getG()});
   }
@@ -4092,10 +4110,17 @@ var qrcode = function() {
   // updates instead of gliding, since it has no local motion of its own
   // to fill the gaps — BroadcastChannel traffic at 60Hz with this small a
   // payload is not a real cost.
+  // playG: the control window's exact (unrounded) position while playing.
+  // scrollTop gets rounded to device pixels, and with the scaled-down
+  // control preview (viewK ~0.5) a frame's step is often under half a
+  // pixel — added straight to scrollTop it was lost or came out uneven,
+  // so playback stalled/stuttered and the stage mirrored those jumps.
+  var playG = null;
+  function curG(){ return (playing && playG !== null) ? playG : getG(); }
   function broadcastScrollPos(){
     if(pair.role === 'host' && Date.now() - pair.lastPos > 90){ pair.lastPos = Date.now(); pairSend({ t: 'pos', pos: getPos() }); }
     if(!bc) return;
-    bc.postMessage({type:'scrollpos', g: getG()});
+    bc.postMessage({type:'scrollpos', g: curG()});
   }
   function tick(t){
     if(!playing) return;
@@ -4103,7 +4128,14 @@ var qrcode = function() {
     var dt = (t - lastT) / 1000;
     lastT = t;
     if(pair.role === 'guest') scroller.scrollTop += (pair.vel || 0) * dt; // follows the desktop's pace
-    else scroller.scrollTop += state.speed * dt * viewK; // speed is in stage px/s, so scale it to this view
+    else{
+      // Someone scrolled/seeked mid-play (wheel, slider, paragraph jump):
+      // adopt the new spot instead of fighting it.
+      var actual = getG();
+      if(playG === null || Math.abs(actual - playG) > (2 / viewK + 2)) playG = actual;
+      playG += state.speed * dt; // speed is in stage px/s = content units
+      setG(playG);
+    }
     broadcastScrollPos();
     var atBottom = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2;
     if(atBottom && pair.role !== 'guest'){
@@ -4127,14 +4159,19 @@ var qrcode = function() {
     // comment above. They still flip `playing` and update wake-lock/UI
     // locally (useful on the real external display), but position only
     // ever comes from the control window's broadcasts.
+    playG = null;
     if(!isStageWindow) rafId = requestAnimationFrame(tick);
+    else startFollow();
     if(bc && !applyingRemote) bc.postMessage({type:'playing', value:true});
     if(pair.role === 'host') pairSend({ t: 'play', v: true, pos: getPos() });
   }
   function pause(){
     if(pair.role === 'guest' && !applyingRemote){ pairSend({ t: 'ctl', cmd: 'pause' }); return; }
+    var endG = curG();
     playing = false;
+    playG = null;
     if(rafId) cancelAnimationFrame(rafId);
+    stopFollow();
     playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
     playBtn.classList.remove('active');
     releaseWake();
@@ -4145,7 +4182,7 @@ var qrcode = function() {
       // during the last playing frame should already have them here —
       // this is the belt-and-suspenders exact value for the instant
       // scrolling actually stopped. Same ratio approach as seekTo()/'seek'.
-      bc.postMessage({type:'playing', value:false, g: getG()});
+      bc.postMessage({type:'playing', value:false, g: endG});
     }
     if(pair.role === 'host') pairSend({ t: 'play', v: false, pos: getPos() });
   }
@@ -4156,9 +4193,42 @@ var qrcode = function() {
   // lands on the current line instead of starting from the top. Only
   // meaningful called from the control window, which is the only one with
   // an authoritative position to report.
+  // Stage/preview follower. Each 'scrollpos' from the control window is
+  // an anchor; between anchors the stage moves on its own vsync at the
+  // same speed and eases out any small error. Setting scrollTop straight
+  // from each message made it judder: messages don't line up with the
+  // stage's frames (some frames got two, some none). Still can't drift —
+  // every message re-anchors it, and a big gap (a seek) snaps at once.
+  var follow = { raf: 0, g: null, anchorG: null, anchorT: 0, lastT: 0 };
+  function followAnchor(g){
+    follow.anchorG = g; follow.anchorT = performance.now();
+    if(follow.g === null || Math.abs(g - follow.g) > 60){ follow.g = g; setG(g); }
+  }
+  function followTick(t){
+    if(!playing || !isStageWindow){ follow.raf = 0; return; }
+    var dt = follow.lastT ? Math.min((t - follow.lastT) / 1000, 0.1) : 0;
+    follow.lastT = t;
+    if(follow.anchorG !== null && follow.g !== null){
+      var predicted = follow.anchorG + state.speed * Math.min((performance.now() - follow.anchorT) / 1000, 0.25);
+      follow.g += state.speed * dt;
+      var err = predicted - follow.g;
+      if(Math.abs(err) > 60) follow.g = predicted; else follow.g += err * 0.15;
+      setG(follow.g);
+    }
+    follow.raf = requestAnimationFrame(followTick);
+  }
+  function startFollow(){
+    if(!isStageWindow || follow.raf) return;
+    follow.g = null; follow.anchorG = null; follow.lastT = 0;
+    follow.raf = requestAnimationFrame(followTick);
+  }
+  function stopFollow(){
+    if(follow.raf) cancelAnimationFrame(follow.raf);
+    follow.raf = 0; follow.g = null; follow.anchorG = null;
+  }
   function sendSyncReply(){
     if(!bc) return;
-    bc.postMessage({type:'scrollpos', g: getG()});
+    bc.postMessage({type:'scrollpos', g: curG()});
     if(playing) bc.postMessage({type:'playing', value:true});
   }
   function toggle(){ playing ? pause() : play(); }
@@ -5004,12 +5074,17 @@ var qrcode = function() {
         suppressScrollSync = true;
         clearTimeout(suppressScrollSyncTimer);
         suppressScrollSyncTimer = setTimeout(function(){ suppressScrollSync = false; }, 120);
-        if(typeof msg.g === 'number') setG(msg.g);
+        if(typeof msg.g === 'number'){
+          setG(msg.g);
+          if(isStageWindow && playing){ follow.g = msg.g; followAnchor(msg.g); }
+        }
       }else if(msg.type === 'scrollpos' && isStageWindow){
         // Continuous position feed from the control window's tick() loop
         // while it's playing — this is what keeps a stage/preview window
         // from ever drifting, since it never computes its own position.
-        if(typeof msg.g === 'number') setG(msg.g);
+        if(typeof msg.g === 'number'){
+          if(playing) followAnchor(msg.g); else setG(msg.g);
+        }
       }else if(msg.type === 'syncRequest' && !isStageWindow){
         // A stage/preview window just loaded (possibly mid-script) and is
         // asking where the control window currently is — answer right

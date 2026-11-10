@@ -55,7 +55,7 @@ No build step.
   3. `R` records ~10s, stop, `Take_N.mp3` appears in Downloads (or the chosen folder).
   4. Prompter scrolls with Space, the pedal and Voice scroll.
   5. Whatever this change touched.
-- Bump the `?v=` date on `studio.css` and `studio.js` at the bottom of `index.html` (e.g. `2026-11-09` → `2026-11-12`; add `b` for a second deploy the same day). studio.js passes it on to every file it loads, so browsers pick up the new code without a hard reload.
+- Bump the `?v=` date on `studio.css` (in the `<head>` of `index.html`) and `studio.js` (at the bottom) — keep both the same (e.g. `2026-11-09` → `2026-11-12`; add `b` for a second deploy the same day). studio.js passes it on to every file it loads, so browsers pick up the new code without a hard reload.
 - Only after that: commit, push, then Shovon runs `deploy-space cam` on the VPS.
 - Before every push, remind Shovon of this checklist and ask whether it passed.
 

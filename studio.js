@@ -918,23 +918,16 @@ function init() {
     ui.help.open = ui.help2.open = true;
   }
   // Connected but the picture never draws (two USB cameras plugged in, or macOS's camera service in the way): say so, with the fix
-  // Connected but no picture after a fresh plug-in: the camera library in this page holds on to the old, dead session,
-  // and only a fresh page clears it (that's why a reload always fixed it). So reload by itself, once: never while
-  // recording or saving, and at most once a minute (remembered across the reload), so it can never loop.
+  // Connected but no picture: say so, with the fix (two USB cameras plugged in, or macOS's camera service in the way)
   let feedOk = false, feedT = 0;
-  async function fixFeed() {
+  function fixFeed() {
     if (src !== 'sony' || cam.state !== 'connected' || feedOk) return;
-    const last = Number(sessionStorage.getItem('spaceCam.feedReload') || 0);
-    if (take || cam.recording || takes.some(t => t.saving) || Date.now() - last < 60000) return showCamProblem('feed', 'Camera connected, but no picture');
-    sessionStorage.setItem('spaceCam.feedReload', String(Date.now()));
-    console.warn('[Space Cam] no picture after connecting: reloading once to get it');
-    toast('Getting the camera picture…');
-    await cam.release();
-    location.reload();
+    console.warn('[Space Cam] camera connected, but no picture yet');
+    showCamProblem('feed', 'Camera connected, but no picture');
   }
   cam.addEventListener('state', e => {
     clearTimeout(feedT);
-    if (e.detail.state === 'connected') { feedOk = false; feedT = setTimeout(fixFeed, 6000); }
+    if (e.detail.state === 'connected') { feedOk = false; feedT = setTimeout(fixFeed, 8000); }
   });
   { let bad = 0;
     ui.img.addEventListener('error', () => { if (src !== 'sony' || cam.state !== 'connected' || !ui.img.getAttribute('src')) return; if (++bad === 8) fixFeed(); });
@@ -977,6 +970,7 @@ function init() {
     const opts = [];
     if (cam.state === 'connected') opts.push(['usb', `${cameraName(cam.model)} (USB)`]);
     else if (usb.length) opts.push(['usb', `${usbName(usb[0])} (USB)`]);
+    else if (camPick === 'usb' && store.get('camEverConnected', false)) opts.push(['usb', 'USB camera (not plugged in)']); // stays picked while unplugged or switched off
     // Before camera access is allowed, Chrome hides the names, so they show as one "Mac camera" entry.
     if (vids.length && vids.every(d => !d.label)) opts.push(['mac:', MACCAM]);
     else vids.forEach((d, i) => opts.push(['mac:' + d.deviceId, d.label || `Camera ${i + 1}`]));
@@ -988,8 +982,10 @@ function init() {
     if (CamCore.supported) opts.push(['usb:add', 'Add USB camera…']);
     ui.camPick.replaceChildren(...opts.map(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; return o; }));
     ui.camPick.value = cur;
-    // the saved camera isn't here (e.g. USB camera unplugged): show the first camera that is, without connecting it
-    if (ui.camPick.value !== cur && !take) {
+    // the saved Mac camera isn't here: show the first camera that is, without connecting it.
+    // Never for the USB camera: unplugging it or switching it off must not flip Space Cam over to the Mac camera
+    // (it did, and the A7 III then connected with no picture until a reload).
+    if (ui.camPick.value !== cur && !take && cur !== 'usb') {
       const first = opts.find(o => o[0] !== 'usb:add');
       if (first && !(src === 'sony' && cam.state === 'connecting')) { camPick = first[0]; src = camPick.startsWith('mac') ? 'mac' : 'sony'; document.body.dataset.src = src; ui.camPick.value = camPick; }
     }
@@ -1055,10 +1051,9 @@ function init() {
     if (document.hidden) { document.addEventListener('visibilitychange', () => autoConnect(fromPlug), { once: true }); return; }
     if (!(await cam.hasPermittedDevice())) return;
     // After a reload macOS's camera service often grabs the camera for a moment, so keep trying for ~20 s.
-    // A camera that was just plugged in starts fresh: no USB reset (a reset re-plugs it, and that would loop).
     for (let i = 0; i < 10; i++) {
       if (!store.get('camAuto', false) || cam.state === 'connected' || document.hidden) return;
-      if (cam.state !== 'connecting') await cam.connect({ pick: false, reset: fromPlug ? i === 2 : i === 0 });
+      if (cam.state !== 'connecting') await cam.connect({ pick: false, reset: i === 0 }); // a reset clears a half-open session (as in v1.0); only the visible tab does this, so two tabs can't loop
       if (cam.state === 'connected' || cam.lastErrorKind !== 'busy') return; // only 'busy' is worth retrying
       await new Promise(r => setTimeout(r, 2000));
     }
@@ -1237,9 +1232,12 @@ function init() {
     const fresh = micsSeen ? devs.filter(d => d.id && d.id !== 'default' && d.id !== 'communications' && !micsSeen.has(d.id)) : [];
     if (devs.some(d => d.id)) micsSeen = new Set(devs.map(d => d.id));
     const same = ui.mic.options.length === devs.length && devs.every((d, i) => ui.mic.options[i].value === d.id && ui.mic.options[i].text === d.label);
-    if (!same && document.activeElement !== ui.mic) ui.mic.replaceChildren(...devs.map(d => new Option(d.label, d.id))); // never rebuild the list while it's open
+    if (!same) {
+      if (document.activeElement === ui.mic) { ui.mic.addEventListener('blur', () => fillMics(), { once: true }); } // open right now: rebuild the moment it closes
+      else ui.mic.replaceChildren(...devs.map(d => new Option(d.label, d.id)));
+    }
     const keep = audio.deviceId || store.get('micId', ''); // mic off: still show the mic you picked
-    if (keep && devs.some(d => d.id === keep)) ui.mic.value = keep;
+    if (keep && devs.some(d => d.id === keep) && document.activeElement !== ui.mic) ui.mic.value = keep;
     if (fresh.length && !take && audio.state !== 'recording') { // a mic was just plugged in (e.g. a RØDE): use it
       const d = fresh[fresh.length - 1];
       store.set('micId', d.id);
@@ -1376,6 +1374,7 @@ function init() {
   async function openMic(id) {
     const want = id ?? store.get('micId', '');
     let ok = false;
+    console.log('[Space Cam] opening mic:', want || 'default');
     try { ok = await audio.open(want); } catch (e) { toast('Could not open that mic: ' + (e?.message || e), 'error'); }
     if (ok) { store.set('micId', audio.deviceId); store.set('micAuto', true); }
     else console.warn('[Space Cam] mic did not open:', want, [...ui.mic.options].map(o => o.text));

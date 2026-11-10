@@ -7,15 +7,109 @@ const V = new URL(import.meta.url).search;
 const { CamCore } = await import('./cam-core.js' + V);
 const { AudioCore } = await import('./audio-core.js' + V);
 const { WebcamCore } = await import('./webcam-core.js' + V);
+const { AssistCore, FACE_MB } = await import('./assist-core.js' + V);
+try { if (localStorage.getItem('spaceCam.triedVoice')) document.body.classList.add('sc-tried-voice'); if (JSON.parse(localStorage.getItem('spaceCam.triedAssist'))) document.body.classList.add('sc-tried-assist'); } catch {}
 
 // The stage window (#stage) and its mini preview (#stage-preview) are plain prompter views; the only thing
 // studio.js adds there is the optional camera layer behind the text ("Camera on Stage").
 if (/^#stage/.test(location.hash)) initStageCam(); else init();
 
+// ---- Stage: a box you can drag anywhere and resize from its corner. It snaps to left / centre / right and
+// top / middle / bottom (guide line shows), otherwise to a 20 px grid; size in steps. Spot, alignment and size
+// are remembered under KEY. Used by the camera + mic signal and the Shooting assistant card. ----
+function floatOnStage(stage, ind, KEY, def) {
+  {
+    ind.classList.add('sc-sr-drag'); ind.title = 'Drag to move · corner to resize';
+    const M = 22, SNAP = 26, GRID = 20, STEPS = [0.75, 1, 1.25, 1.5, 1.75, 2, 2.5];
+    const handle = document.createElement('span'); handle.className = 'sc-sr-size'; ind.append(handle);
+    const gx = document.createElement('i'), gy = document.createElement('i');
+    gx.className = 'sc-sr-guide v'; gy.className = 'sc-sr-guide h'; stage.append(gx, gy);
+    let st = Object.assign({ ax: 'right', ay: 'top', x: 0, y: 0, s: 1 }, def || {});
+    try { st = Object.assign(st, JSON.parse(localStorage.getItem(KEY) || 'null') || {}); } catch {}
+    if (st.s && !STEPS.includes(st.s)) st.s = 1;
+    const size = () => ({ w: ind.offsetWidth * st.s, h: ind.offsetHeight * st.s });
+    const W = () => stage.clientWidth, H = () => stage.clientHeight;
+    const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+    // anchor → pixel position
+    const toPx = () => {
+      const { w, h } = size();
+      const x = st.ax === 'left' ? M : st.ax === 'center' ? (W() - w) / 2 : st.ax === 'right' ? W() - w - M : st.x * W();
+      const y = st.ay === 'top' ? M : st.ay === 'middle' ? (H() - h) / 2 : st.ay === 'bottom' ? H() - h - M : st.y * H();
+      return { x: clamp(x, 6, W() - w - 6), y: clamp(y, 6, H() - h - 6) };
+    };
+    const apply = () => { const p = toPx(); ind.style.transform = `scale(${st.s})`; ind.style.left = p.x + 'px'; ind.style.top = p.y + 'px'; ind.style.right = 'auto'; };
+    // raw pixel position → snapped anchor
+    const snapTo = (x, y) => {
+      const { w, h } = size(), cx = [['left', M], ['center', (W() - w) / 2], ['right', W() - w - M]], cy = [['top', M], ['middle', (H() - h) / 2], ['bottom', H() - h - M]];
+      // near an edge, or pushed past it, counts as that edge
+      const bx = x < M + SNAP ? cx[0] : x > W() - w - M - SNAP ? cx[2] : cx.find(([, v]) => Math.abs(x - v) < SNAP);
+      const by = y < M + SNAP ? cy[0] : y > H() - h - M - SNAP ? cy[2] : cy.find(([, v]) => Math.abs(y - v) < SNAP);
+      st.ax = bx ? bx[0] : null; st.ay = by ? by[0] : null;
+      if (!bx) st.x = Math.round(x / GRID) * GRID / W();
+      if (!by) st.y = Math.round(y / GRID) * GRID / H();
+      gx.classList.toggle('on', st.ax === 'center'); gy.classList.toggle('on', st.ay === 'middle');
+    };
+    const save = () => { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch {} };
+    requestAnimationFrame(apply); setTimeout(apply, 300);
+    addEventListener('resize', apply);
+    const track = (e, onMove) => {
+      e.preventDefault(); e.stopPropagation(); const tgt = e.currentTarget; tgt.setPointerCapture(e.pointerId); ind.classList.add('dragging');
+      const move = ev => { onMove(ev); apply(); };
+      const up = () => { ind.classList.remove('dragging'); gx.classList.remove('on'); gy.classList.remove('on'); tgt.removeEventListener('pointermove', move); save(); };
+      tgt.addEventListener('pointermove', move); tgt.addEventListener('pointerup', up, { once: true }); tgt.addEventListener('pointercancel', up, { once: true });
+    };
+    ind.addEventListener('pointerdown', e => {
+      if (e.target === handle) return;
+      const r0 = ind.getBoundingClientRect(), sr = stage.getBoundingClientRect(), dx = e.clientX - r0.left, dy = e.clientY - r0.top;
+      track(e, ev => snapTo(ev.clientX - dx - sr.left, ev.clientY - dy - sr.top));
+    });
+    handle.addEventListener('pointerdown', e => {
+      const r0 = ind.getBoundingClientRect(), d0 = Math.hypot(e.clientX - r0.left, e.clientY - r0.top), s0 = st.s;
+      const p0 = toPx(); // keep the top-left corner still while resizing, then re-snap
+      track(e, ev => {
+        const raw = s0 * Math.hypot(ev.clientX - r0.left, ev.clientY - r0.top) / d0;
+        st.s = STEPS.reduce((a, b) => Math.abs(b - raw) < Math.abs(a - raw) ? b : a);
+        const keepX = st.ax === 'left' || !st.ax, keepY = st.ay === 'top' || !st.ay;
+        if (!keepX || !keepY) snapTo(keepX ? p0.x : toPx().x, keepY ? p0.y : toPx().y); // right/centre/bottom anchors stay anchored
+        else snapTo(p0.x, p0.y);
+      });
+    });
+    ind.addEventListener('click', e => e.stopPropagation()); // a click on it doesn't count as a click on the Stage (full screen)
+    return { apply };
+  }
+}
+
+// ---- Recording signal (Stage window top right + control window corner): camera with a blinking red dot,
+// mic with a green dot that jumps with the voice. Grey with a slash when that part isn't recording.
+function recIndicator() {
+  const el = document.createElement('div');
+  el.className = 'sc-stage-rec'; el.setAttribute('aria-hidden', 'true'); // always shown: grey when nothing records
+  el.innerHTML = '<span class="sc-sr-cam"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 10.5 21 8v8l-5-2.5"/></svg><i></i></span>'
+    + '<span class="sc-sr-mic"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg><i></i></span>';
+  const dot = el.querySelector('.sc-sr-mic i');
+  let talkUntil = 0;
+  setInterval(() => el.classList.toggle('blk', !el.classList.contains('blk')), 500); // one shared blink for both dots, so they stay in sync
+  const set = m => {
+    el.classList.toggle('rec', !!m.rec);
+    el.classList.toggle('cam-on', !!m.cam); el.classList.toggle('mic-on', !!m.mic);
+    el.classList.toggle('cam-conn', !!m.camConn); el.classList.toggle('mic-conn', !!m.micConn); // connected green · off grey · recording red
+    const lv = Math.max(0, Math.min(1, ((m.db ?? -120) + 55) / 45)); // -55 dB … -10 dB
+    // recording: the camera dot blinks; the mic dot blinks in sync while you talk, and stays steady red when you're silent
+    dot.style.transform = ''; dot.style.opacity = '';
+    if (m.mic && lv > 0.18) talkUntil = performance.now() + 450; // a short hold so it doesn't flicker between words
+    el.classList.toggle('mic-talk', !!m.mic && performance.now() < talkUntil);
+  };
+  return { el, set };
+}
+
 // ---- Stage window: camera behind the script, mirrored/flipped/rotated exactly like the text ----
 // The control window sends {type:'cfg'} (on/off, which camera, brightness) and, for a USB camera, preview frames
 // on the 'spaceCamCam' channel. The Mac camera is opened here directly (Chrome lets windows share a camera).
 function initStageCam() {
+  // your own app icon (set in the control window) as this tab's icon too; follows changes live
+  { const fav = document.querySelector('link[rel="icon"]'), def = fav?.getAttribute('href');
+    const applyFav = () => { let c = null; try { c = JSON.parse(localStorage.getItem('spaceCam.customLogo') || 'null'); } catch {} if (fav) fav.href = c || def; };
+    applyFav(); addEventListener('storage', e => { if (e.key === 'spaceCam.customLogo') applyFav(); }); }
   const stage = document.getElementById('stage'), scroller = document.getElementById('scroller');
   if (!stage || !scroller) return;
   const layer = document.createElement('div');
@@ -52,6 +146,24 @@ function initStageCam() {
       lastUrl = u;
     }
   };
+  // REC + audio signal, top right of the Stage (not mirrored: it sits outside the script)
+  const { el: ind, set: setInd } = recIndicator(); stage.append(ind);
+  floatOnStage(stage, ind, 'spaceCam.stageRecPos', { ax: 'right', ay: 'top' });
+  // Shooting assistant tips on the Stage too: a floating card, bottom centre by default, drag / resize like the signal
+  const tipCard = document.createElement('div'); tipCard.className = 'sc-stage-tip'; tipCard.hidden = true; tipCard.setAttribute('aria-live', 'polite');
+  tipCard.innerHTML = '<span class="sc-st-ic"></span><span class="sc-st-txt"></span>';
+  stage.append(tipCard);
+  const tipFloat = floatOnStage(stage, tipCard, 'spaceCam.stageTipPos', { ax: 'center', ay: 'bottom' });
+  const TIP_IC = { warn: '!', light: '☀', sound: '♪', frame: '⌖', info: 'i' };
+  const tipMsg = t => {
+    if (!t){ tipCard.hidden = true; return; }
+    tipCard.dataset.kind = t.kind; tipCard.querySelector('.sc-st-ic').textContent = TIP_IC[t.kind] || 'i'; tipCard.querySelector('.sc-st-txt').textContent = t.text;
+    tipCard.hidden = false; requestAnimationFrame(() => tipFloat.apply());
+  };
+  let recSeen = 0;
+  const recMsg = m => { recSeen = performance.now(); setInd(m); };
+  setInterval(() => { if (performance.now() - recSeen > 1500){ setInd({ rec: false }); tipCard.hidden = true; } }, 500); // control window gone or stopped: grey, no tip
+  const prev = ch.onmessage; ch.onmessage = e => { if (e.data?.type === 'rec') return recMsg(e.data); if (e.data?.type === 'tip') return tipMsg(e.data.tip); prev(e); };
   ch.postMessage({ type: 'hello' });
   addEventListener('pagehide', stopStream);
 }
@@ -94,7 +206,19 @@ function init() {
     if (!force && key === stageCamLast) return; // renderCam runs often; only send changes
     stageCamLast = key; stageCamCh.postMessage(msg);
   }
-  if (stageCamCh) stageCamCh.onmessage = ({ data }) => { if (data?.type === 'hello') sendStageCam(true); };
+  if (stageCamCh) stageCamCh.onmessage = ({ data }) => { if (data?.type === 'hello') { sendStageCam(true); try { sendTip(); } catch {} } };
+  // Stage window: REC + audio signal in its top right corner. Sent 4×/s; the Stage turns it off if this stops coming.
+  let recLevelDb = -120;
+  function sendStageRec() {
+    const t = take;
+    const camRec = !!t && (t.camera ? !!cam.recording : t.video === 'recording' && !!web.recording);
+    const micRec = !!t && t.audio === 'recording' && audio.state === 'recording';
+    const camConn = src === 'mac' ? web.state === 'connected' : cam.state === 'connected', micConn = audio.state !== 'off';
+    const msg = { type: 'rec', rec: !!t, cam: camRec, mic: micRec, camConn, micConn, db: micRec || micConn ? recLevelDb : -120 };
+    try { setRecInd?.(msg); } catch {} // same signal in this window's corner
+    try { stageCamCh.postMessage(msg); } catch {}
+  }
+  setInterval(sendStageRec, 120); // fast enough for the mic dot to follow the voice
   const liveOn = () => (src === 'mac' ? webOn() : cam.state === 'connected');
 
   // ------------------------------------------------------------------ markup
@@ -179,7 +303,9 @@ function init() {
   const soundSec = h(`
   <div class="sec sc-sec" id="scSoundSec">
     <div class="sec-title"><span>Sounds</span></div>
-    <div class="tpair"><button type="button" class="tbtn" id="scSounds" aria-pressed="true" title="Beeps for Record and Stop, an alarm when something drops"><span>Alert sounds</span></button></div>
+    <div class="tpair"><button type="button" class="tbtn" id="scSndStart" data-snd="start" aria-pressed="true"><span>Record start sound</span></button></div>
+    <div class="tpair"><button type="button" class="tbtn" id="scSndStop" data-snd="stop" aria-pressed="true"><span>Record stop sound</span></button></div>
+    <div class="tpair"><button type="button" class="tbtn" id="scSndError" data-snd="error" aria-pressed="true"><span>Error sound</span></button></div>
     <div class="caption">A beep when recording starts and stops, and an alarm when something goes wrong: camera or mic disconnected, recording stopped on its own, a capture failed. Use headphones if you don't want the beeps in the recording.</div>
   </div>`);
 
@@ -220,7 +346,7 @@ function init() {
       <div class="caption" id="scMicTip" hidden>WAV 24-bit, no browser processing. Set the level on your interface; aim for peaks around −12 dB.</div>
     </div>
     <div class="sec sc-sec">
-      <div class="sec-title"><span>Save location</span><button type="button" class="sc-icon-mini sc-tip" aria-label="How saving works" data-tip="Takes save here automatically: the MP3 audio, and the video when you record with a Mac camera. A USB camera keeps its video on its own memory card.">${'<svg viewBox="0 0 24 24"><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16z"/></svg>'}</button></div>
+      <div class="sec-title"><span data-help="Takes save here automatically: the MP3 audio, and the video when you record with a Mac camera. A USB camera keeps its video on its own memory card.">Save location</span></div>
       <div class="sc-folder-line">
         <button type="button" class="sc-folder-pill" id="scFolderRow" title="Where takes are saved">${'<svg viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>'}<b id="scFolderName">Downloads</b></button>
       </div>
@@ -240,18 +366,274 @@ function init() {
 
   const rightRail = $('right-rail'), utility = $('utility');
   utility.after(camSec); camSec.after(audioSec); audioSec.after(soundSec);
+  // ---- Right rail, one page (no tabs): connect row → one preview (Camera | Stage) → Camera → Audio → Prompter,
+  // speed + mic level (and the small utility icons) pinned at the bottom. Notes sit behind ⓘ, choices are icons,
+  // on/off settings are switches. index.html keeps its ids, so the prompter code doesn't notice the moves.
+  const IC = {
+    bg: '<svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zM5 7v10h14V7z"/><path d="M7 10h10v2H7zm0 3h7v2H7z"/></svg>',
+    corner: '<svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zM5 7v10h14V7z"/><path d="M12 12h6v4h-6z"/></svg>',
+    off: '<svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 2a7 7 0 0 1 5.6 11.2L7.8 6.4A7 7 0 0 1 12 5zm-5.6 2.8 9.8 9.8A7 7 0 0 1 6.4 7.8z"/></svg>',
+    grid: '<svg viewBox="0 0 24 24"><path d="M3 3h18v18H3zm2 2v4h4V5zm6 0v4h2V5zm4 0v4h4V5zM5 11v2h4v-2zm6 0v2h2v-2zm4 0v2h4v-2zM5 15v4h4v-4zm6 0v4h2v-4zm4 0v4h4v-4z"/></svg>',
+    big: '<svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zm2 2v10h14V7zm7 4h6v5h-6z"/></svg>',
+    near: '<svg viewBox="0 0 24 24"><path d="M15 5 8 12l7 7 1.4-1.4L10.8 12l5.6-5.6z"/></svg>',
+    far: '<svg viewBox="0 0 24 24"><path d="m9 5 7 7-7 7-1.4-1.4 5.6-5.6-5.6-5.6z"/></svg>',
+    power: '<svg viewBox="0 0 24 24"><path d="M11 2h2v10h-2z"/><path d="M6.3 5.7 7.7 7.1A7 7 0 1 0 16.3 7.1l1.4-1.4A9 9 0 1 1 6.3 5.7z"/></svg>'
+  };
+  // ---- Right rail: tabs Camera · Mic · Prompter at the top (icon + name + status dot, underline on the open one).
+  // Each tab starts with its own connection switch and holds its own view: the camera view in Camera, the Stage
+  // preview in Prompter (or floating over the script). Notes sit behind ⓘ, choices are icons, on/off are switches.
+  // index.html keeps its ids, so the prompter code doesn't notice the moves.
+  const TI = {
+    cam: '<svg viewBox="0 0 24 24" class="sc-ti"><rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 10.5 21 8v8l-5-2.5"/></svg>',
+    mic: '<svg viewBox="0 0 24 24" class="sc-ti"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>',
+    pr: '<svg viewBox="0 0 24 24" class="sc-ti"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M7 8.5h10M7 12h7M9 21h6M12 17v4"/></svg>'
+  };
+  const connRow = h(`<div class="sc-tabs" role="tablist" aria-label="Right panel">
+    <button type="button" role="tab" class="sc-tab" data-c="cam" data-rt="camera"><span class="sc-tic">${TI.cam}<i></i></span><b>Camera</b></button>
+    <button type="button" role="tab" class="sc-tab" data-c="mic" data-rt="audio"><span class="sc-tic">${TI.mic}<i></i></span><b>Mic</b></button>
+    <button type="button" role="tab" class="sc-tab only-dual" data-c="stage" data-rt="prompter"><span class="sc-tic">${TI.pr}<i></i></span><b>Prompter</b></button>
+  </div>`);
+  utility.before(connRow);
+  utility.classList.add('sc-gone'); // its buttons move: full screen next to Clear markers, pedal + sync into the Prompter tab
+  // full screen: top right of the script, right of Clear markers
+  const stageTools = h(`<div class="sc-stage-tools"></div>`);
+  $('stage').append(stageTools);
+  if ($('fullscreen-btn')) stageTools.append($('fullscreen-btn'));
+  const { el: recDot, set: setRecInd } = recIndicator(); recDot.title = 'Recording: camera · mic'; stageTools.prepend(recDot); // the only recording sign up here: the Record button already shows the time
+  const railTabs = connRow;
+  const appSec = $('size-group')?.closest('.sec');
+  const stageBox = $('stage-preview-box');
+  if (stageBox) { const oldSec = stageBox.parentElement; if (oldSec && oldSec !== appSec) { oldSec.after(stageBox); if (!oldSec.children.length) oldSec.remove(); } }
+  // connection switches
+  const connSw = (k, label) => h(`<button type="button" class="tbtn sc-swb sc-connsw" data-k="${k}" aria-pressed="false"><span><b>${label}</b><small></small></span></button>`);
+  const swCam = connSw('cam', 'Camera'), swMic = connSw('mic', 'Mic'), swPr = connSw('pr', 'Connect stage');
+  camSec.prepend(swCam); audioSec.prepend(swMic);
+  swCam.onclick = () => { const on = src === 'mac' ? web.state === 'connected' : cam.state === 'connected'; on ? ui.disconnect.onclick() : ui.connect.onclick(); };
+  swMic.onclick = () => (audio.state === 'off' ? ui.micOn.click() : ui.micOff.click());
+  swPr.onclick = () => $('display-btn')?.click(); // same as the bottom bar's Connect stage, so both always agree
+  function setRailTab(t) {
+    if (!['camera', 'audio', 'prompter'].includes(t)) t = 'camera';
+    rightRail.dataset.tab = t; store.set('railTab', t);
+    railTabs.querySelectorAll('[data-rt]').forEach(b => { const on = b.dataset.rt === t; b.classList.toggle('on', on); b.setAttribute('aria-selected', on); });
+    rightRail.scrollTop = 0;
+    dispatchEvent(new Event('resize')); // previews inside the tab measure themselves
+  }
+  railTabs.addEventListener('click', e => { const b = e.target.closest('[data-rt]'); if (b) setRailTab(b.dataset.rt); });
+  // status: a dot on each tab (green connected, red recording / dropped) and the line under each switch
+  let railMicBad = false, railDbT = 0;
+  function renderRailTabs(db) {
+    const dot = (c, cls, tip) => { const b = connRow.querySelector(`[data-c="${c}"]`); if (!b) return; b.querySelector('i').className = cls || ''; b.title = tip; };
+    const camOn = src === 'mac' ? web.state === 'connected' : cam.state === 'connected';
+    const camRec = (src === 'mac' && web.recording) || (src !== 'mac' && cam.recording);
+    const camBad = !camOn && src !== 'mac' && (cam.state === 'disconnected' || !ui.problem.hidden);
+    const camName = src === 'mac' ? 'Mac camera' : cameraName(cam.model).replace(/ ·.*/, '');
+    dot('cam', camRec ? 'rec' : camOn ? 'ok' : camBad ? 'bad' : '', 'Camera: ' + (camRec ? 'recording' : camOn ? camName : camBad ? 'disconnected' : 'off'));
+    const aOn = audio.state !== 'off';
+    if (aOn) railMicBad = false;
+    dot('mic', audio.state === 'recording' ? 'rec' : aOn ? 'ok' : railMicBad ? 'bad' : '', 'Mic: ' + (audio.state === 'recording' ? 'recording' : aOn ? (db != null && db > -119 ? Math.round(db) + ' dB' : 'on') : railMicBad ? 'dropped' : 'off'));
+    const st = $('display-btn')?.classList.contains('connected');
+    dot('stage', st ? 'ok' : '', 'Stage: ' + (st ? 'connected' : 'off'));
+    const swSet = (el, on, txt) => { el.setAttribute('aria-pressed', String(!!on)); el.querySelector('small').textContent = txt; el.title = (on ? 'Turn off: ' : 'Turn on: ') + el.querySelector('b').textContent.toLowerCase(); };
+    swSet(swCam, camOn, camOn ? camName + ' connected' : cam.state === 'connecting' ? 'Connecting…' : camBad ? 'Disconnected — switch on to retry' : 'Off');
+    swSet(swMic, aOn, aOn ? (audio.deviceLabel || 'On') : railMicBad ? 'Dropped — switch on to retry' : 'Off');
+    swSet(swPr, st, st ? 'On' : 'Off'); swPr.dataset.base = st ? 'On' : 'Off'; showSyncMsg();
+  }
+  function showSyncMsg() {
+    const ss = $('sync-status'), sm = swPr.querySelector('small'), msg = (ss?.textContent || '').trim();
+    sm.textContent = (swPr.dataset.base || 'Off') + (msg ? ' · ' + msg : '');
+  }
+  setTimeout(() => { const ss = $('sync-status'); if (ss) new MutationObserver(showSyncMsg).observe(ss, { childList: true, characterData: true, subtree: true }); }, 0);
+  audio.addEventListener('error', () => { railMicBad = true; renderRailTabs(); });
+  if ($('display-btn')) new MutationObserver(() => renderRailTabs()).observe($('display-btn'), { attributes: true, attributeFilter: ['class'] });
+  // ---- tab contents
+  {
+    // switches (one per row)
+    const swList = (...els) => { const g = h(`<div class="sc-swgrid"></div>`); els.filter(Boolean).forEach(el => { const par = el.parentElement; el.classList.add('sc-swb'); g.append(el); if (par && par.classList.contains('tpair') && !par.children.length) par.remove(); }); return g; };
+    const row = (label, ...kids) => { const r = h(`<div class="sc-row"><span class="sc-lab">${label}</span></div>`); kids.forEach(k => r.append(k)); return r; };
+    // CAMERA: switch · picker (+ grid, big preview) · view · focus · position · visibility · B&W · on Stage · keys
+    const pickRow = h(`<div class="sc-row sc-pickrow"></div>`);
+    const camPickEl = $('scCamPick'); camPickEl.before(pickRow); pickRow.append(camPickEl);
+    const vseg = h(`<div class="sc-iseg"></div>`); pickRow.append(vseg);
+    const gb = $('scGridBtn'), bb = $('scBig');
+    const oldVPair = gb.parentElement;
+    gb.innerHTML = IC.grid; gb.title = 'Grid (G)'; gb.setAttribute('aria-label', 'Grid'); bb.innerHTML = IC.big; bb.title = 'Big preview'; bb.setAttribute('aria-label', 'Big preview');
+    oldVPair.remove(); vseg.remove(); bb.hidden = true; camSec.append(bb); // the big preview opens from the button on the feed now
+    { const pv = $('scPreview'); const sb = h(`<button type="button" class="btn sc-prev-set" id="scPrevSet" disabled title="Turn the camera on first"><svg viewBox="0 0 24 24"><path d="M19.14 12.94a7 7 0 0 0 0-1.88l2.03-1.58a.5.5 0 0 0 .12-.64l-1.92-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7 7 0 0 0-1.62-.94l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.58.24-1.12.55-1.62.94l-2.39-.96a.5.5 0 0 0-.6.22L2.71 8.84a.5.5 0 0 0 .12.64l2.03 1.58a7 7 0 0 0 0 1.88l-2.03 1.58a.5.5 0 0 0-.12.64l1.92 3.32c.13.22.39.3.6.22l2.39-.96c.5.39 1.04.7 1.62.94l.36 2.54c.05.24.26.42.5.42h3.84c.25 0 .45-.18.5-.42l.36-2.54c.58-.24 1.12-.55 1.62-.94l2.39.96c.22.08.47 0 .6-.22l1.92-3.32a.5.5 0 0 0-.12-.64zM12 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg><span>Camera settings</span></button>`); pv.after(sb); sb.onclick = () => openBig(); }
+    // Grid lines: its own switch row under the preview (G toggles it too)
+    gb.innerHTML = '<span>Grid lines</span>'; gb.title = 'Rule-of-thirds lines on the camera preview (G)';
+    $('scPrevSet').after(swList(gb)); // preview → Camera settings → Grid lines
+    const af = $('scAF'), near = $('scNear'), far = $('scFar');
+    const fpair = af.parentElement;
+    near.innerHTML = IC.near; far.innerHTML = IC.far; af.innerHTML = '<span>AF</span>';
+    near.title = 'Focus nearer (← · lens on MF)'; far.title = 'Focus farther (→ · lens on MF)'; af.title = 'Hold to autofocus (A)';
+    const frow = h(`<div class="sc-row sc-sony-only"><span class="sc-lab">Focus</span><div class="sc-iseg"></div></div>`);
+    fpair.before(frow); frow.querySelector('.sc-iseg').append(near, af, far); fpair.remove();
+    { const vl = camSec.querySelector('.sc-cv-bgonly .slider-label span'); if (vl) vl.textContent = 'Camera visibility'; }
+    const cv = camSec.querySelector('.sc-cv'), cvLabel = camSec.querySelector('.sc-cv-label');
+    // one switch instead of the old position icons: camera behind the script on / off
+    const cvSw = h(`<button type="button" class="tbtn" id="scCvSw" aria-pressed="true" title="Show the live camera behind the script"><span><svg viewBox="0 0 28 18" class="sc-mini"><rect x="1" y="1" width="26" height="16" rx="2" class="o"/><circle cx="14" cy="7.5" r="2.6" class="f"/><path d="M8.5 17c.8-3.4 3-5 5.5-5s4.7 1.6 5.5 5" class="f"/></svg>Camera behind text</span></button>`);
+    const cvrow = swList(cvSw); cv.before(cvrow); cv.hidden = true; cv.classList.add('sc-iseg'); cvLabel?.remove();
+    cv.querySelector('[data-cv="corner"]')?.remove(); // no floating box: behind the script or off
+    const cvNames = { bg: 'Behind the script', off: 'Off' };
+    cv.querySelectorAll('[data-cv]').forEach(b => { b.innerHTML = IC[b.dataset.cv]; b.title = cvNames[b.dataset.cv]; b.setAttribute('aria-label', cvNames[b.dataset.cv]); });
+    const bw = $('scCamBW'), onStage = $('scStageCam');
+    bw.querySelector('span').textContent = 'Black and white'; onStage.querySelector('span').textContent = 'Camera on Stage';
+    camSec.querySelector('.sc-cv-bgonly')?.after(swList(bw));
+    const onStageList = swList(onStage);
+    // MIC: switch · mic picker · meter · alert sounds
+    { const wr = $('scWaveRail'), mw = $('scMeterWrap'); if (wr && mw) mw.after(wr); } // live wave + room noise, like the center
+    { const mw = $('scMeterWrap'); if (mw) { const lv = row('Level'); lv.classList.add('sc-lvrow'); mw.before(lv); lv.append(mw); } } // level bar on its own labelled row, like the camera rows
+    const sndBtns = ['scSndStart', 'scSndStop', 'scSndError'].map(id => $(id));
+    soundSec.querySelector('.sec-title')?.remove(); soundSec.prepend(h(`<div class="sc-grp">Sounds</div>`), swList(...sndBtns));
+    // PROMPTER: Connect stage · Stage preview (or floating) · Stage sync · Stage view · text · lines · fade · margin · pedal · keys
+    const mir = $('mirror-btn'), flp = $('flip-btn'), rot = $('rotate-btn');
+    const stPair = mir.parentElement;
+    const viewNames = { 'mirror-btn': 'Flip H', 'flip-btn': 'Flip V', 'rotate-btn': 'Rotate' };
+    [mir, flp, rot].forEach(b => { b.querySelectorAll('span:not(.rot-deg)').forEach(x => x.remove()); b.classList.add('sc-ib'); b.insertAdjacentHTML('beforeend', `<span class="sc-ibl">${viewNames[b.id]}</span>`); });
+    const stageView = h(`<div class="sc-iseg sc-iseg-l"></div>`); stageView.append(mir, flp, rot); stPair.remove();
+    { const d = rot.querySelector('.rot-deg'); if (d) rot.append(d); } // "Rotate 0°": the degree right after the name, it changes on every press
+    const syncRow = row('Stage sync', ...[$('sync-btn')].filter(Boolean));
+    const ss = $('sync-status'); if (ss) syncRow.querySelector('.sc-lab').append(ss);
+    const pedalRow = row('Bluetooth pedal', ...[$('pedal-btn')].filter(Boolean));
+    const pp = $('pedal-panel'); if (pp) document.body.append(pp);
+    const alignSeg = $('align-seg'), alignGrp = $('align-group');
+    const alignRow = row('Align', alignSeg); alignGrp.remove();
+    const vis = (svg) => `<svg viewBox="0 0 28 18" class="sc-mini">${svg}</svg>`;
+    const lbl = (id, text, pic) => { const sp = $(id).querySelector('span'); sp.textContent = text; $(id).querySelector('svg')?.remove(); if (pic) sp.insertAdjacentHTML('afterbegin', vis(pic)); };
+    lbl('guide-btn', 'Reading line', '<rect x="1" y="1" width="26" height="16" rx="2" class="o"/><rect x="4" y="8" width="20" height="2" class="f"/>');
+    lbl('pausemarks-btn', 'Pause marks', '<rect x="4" y="3" width="20" height="2" class="f"/><rect x="4" y="7" width="12" height="2" class="f"/><circle cx="6" cy="13" r="2" class="r"/>');
+    lbl('fade-btn', 'Fade other lines', '<rect x="4" y="2" width="20" height="2" class="f" opacity=".3"/><rect x="4" y="8" width="20" height="2" class="f"/><rect x="4" y="14" width="20" height="2" class="f" opacity=".3"/>');
+    lbl('voice-scroll-btn', 'Voice scroll', '<rect x="11" y="2" width="6" height="9" rx="3" class="o"/><path d="M8 9a6 6 0 0 0 12 0M14 15v2" class="o"/>');
+    const lineSw = h(`<div></div>`); // Reading line switch, its position slider under it, then the other line settings
+    lineSw.append(swList($('guide-btn')));
+    { const gp = $('guidepos-group'); const gl = gp?.querySelector('.slider-label > span:first-child'); if (gl) gl.textContent = 'Line position'; if (gp) lineSw.append(gp); }
+    lineSw.append(swList($('pausemarks-btn'), $('fade-btn')));
+    // Voice scroll listens to your voice: its own section in the Mic tab (switch, then Engine / Accent / download)
+    { const vs = $('voice-scroll-sec'); if (vs) { soundSec.after(vs); vs.dataset.rt = 'audio'; vs.querySelector('.sec-title')?.remove(); vs.prepend(h(`<div class="sc-grp sc-grp-new sc-new-voice">Voice scroll <span class="sc-new">New</span></div>`), swList($('voice-scroll-btn'))); } }
+    { const gv = lineSw.querySelector('#guidepos-val') || $('guidepos-val'); if (gv) { const trim = () => { if (/ from top/.test(gv.textContent)) gv.textContent = gv.textContent.replace(' from top', ''); }; trim(); new MutationObserver(trim).observe(gv, { childList: true, characterData: true, subtree: true }); } }
+    // floating Stage preview over the script (like the camera's small box), on by default, drag anywhere
+    // a key is 'Space', ['Space','Space'] (press twice) or 'Hold Space' (word + key)
+    const kb = k => Array.isArray(k) ? k.map(x => `<kbd>${x}</kbd>`).join('') : k.startsWith('Hold ') ? `<i>Hold</i><kbd>${k.slice(5)}</kbd>` : `<kbd>${k}</kbd>`;
+    const keys = list => h(`<div class="sc-keys">${list.map(([k, t]) => `<span><b>${kb(k)}</b><em>${t}</em></span>`).join('')}</div>`);
+    const grp = t => h(`<div class="sc-grp">${t}</div>`);
+    // sync icon sits right of the Connect stage switch (no separate row): more room further down
+    const prHead = h(`<div class="sc-prhead"></div>`); prHead.append(swPr);
+    { const sb = syncRow.querySelector('#sync-btn'); if (sb) { sb.title = 'Stage sync: re-send the current position to the Stage window and the preview'; prHead.append(sb); } const st2 = syncRow.querySelector('#sync-status'); if (st2) prHead.append(st2); }
+    const order = [prHead, stageBox, onStageList, row('View', stageView), $('margin-group'), grp('Text'),
+      $('speed-group'), $('size-group'), $('parasp-group'), alignRow,
+      grp('Guide'), lineSw, $('dim-group'), grp('Pedal'), pedalRow,
+      keys([['Space', 'Play / pause'], [['Space', 'Space'], 'Previous paragraph'], ['Hold Space', 'Back to the top']])];
+    const speedSec = $('speed-group')?.closest('.sec');
+    order.filter(Boolean).forEach(el => appSec.append(el));
+    // one matching icon set in front of every control's name (camera, mic and prompter tabs):
+    // same 16 px square, same line weight, so none looks bigger than another
+    {
+      const ICO = {
+        'Grid lines': '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M9 5v14M15 5v14M3 9.7h18M3 14.3h18"/>',
+        'Focus': '<circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2" class="d"/>',
+        'Focus step': '<path d="M4 12h16M8 8l-4 4 4 4M16 8l4 4-4 4"/>',
+        'Camera behind text': '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="12" cy="10.5" r="2.2"/><path d="M8 19c.6-2.6 2.1-4 4-4s3.4 1.4 4 4"/>',
+        'Camera visibility': '<path d="M2.5 12S6 6 12 6s9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"/><circle cx="12" cy="12" r="2.6"/>',
+        'Black and white': '<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" class="d"/>',
+        'Record start sound': '<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M17 15V8M14.5 10.5 17 8l2.5 2.5"/>',
+        'Record stop sound': '<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M17 8v7M14.5 12.5 17 15l2.5-2.5"/>',
+        'Error sound': '<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M17.5 7.5v5"/><circle cx="17.5" cy="16" r=".9" class="d"/>',
+        'Alert sounds': '<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M15.5 9.5a3.5 3.5 0 0 1 0 5M18.5 7a7.5 7.5 0 0 1 0 10"/>',
+        'Voice scroll': '<rect x="9" y="3.5" width="6" height="10" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v3.5"/>',
+        'Camera on Stage': '<rect x="3" y="4" width="18" height="12" rx="2"/><circle cx="12" cy="9" r="2"/><path d="M8.8 16c.5-1.8 1.7-2.8 3.2-2.8s2.7 1 3.2 2.8M9 20h6"/>',
+        'View': '<path d="M12 3v18" stroke-dasharray="2 2.2"/><path d="M9 7 4 12l5 5zM15 7l5 5-5 5z"/>',
+        'Margin': '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 8v8M17 8v8M10 10h4M10 14h3"/>',
+        'Speed': '<path d="M4 17a8 8 0 1 1 16 0"/><path d="M12 17l4-5"/><circle cx="12" cy="17" r="1.3" class="d"/>',
+        'Text size': '<path d="M3 18 8 6l5 12M4.8 14h6.4M14 18l3.5-8 3.5 8M15.2 15.5h4.6"/>',
+        'Paragraph gap': '<path d="M4 5h16M4 8.5h10M4 15.5h16M4 19h12"/>',
+        'Align': '<path d="M4 6h16M4 10h10M4 14h16M4 18h12"/>',
+        'Reading line': '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M6.5 12h11"/>',
+        'Line position': '<path d="M4 12h11M19 6v12M17 8l2-2 2 2M17 16l2 2 2-2"/>',
+        'Pause marks': '<path d="M4 6h16M4 10.5h10"/><circle cx="6" cy="17" r="2" class="r"/>',
+        'Fade other lines': '<path d="M4 6h16" opacity=".35"/><path d="M4 12h16"/><path d="M4 18h16" opacity=".35"/>',
+        'Fade opacity': '<circle cx="9" cy="12" r="5" class="d"/><circle cx="15" cy="12" r="5" opacity=".45"/>',
+        'Bluetooth pedal': '<path d="M7 7.5l10 9L12 21V3l5 4.5-10 9"/>',
+        'Shooting assistant': '<path d="M12 3l1.6 3.9L17.5 8.5l-3.9 1.6L12 14l-1.6-3.9L6.5 8.5l3.9-1.6z"/><path d="M18 14l.8 1.9 1.9.8-1.9.8L18 19.4l-.8-1.9-1.9-.8 1.9-.8zM6 15l.6 1.4 1.4.6-1.4.6L6 19l-.6-1.4L4 17l1.4-.6z"/>',
+        'Level': '<path d="M5 18v-4M9.5 18V9M14 18v-6M18.5 18V5"/>',
+      };
+      const rr = $('right-rail');
+      rr.querySelectorAll('.sc-swb > span:first-child, .slider-group .slider-label > span:first-child, .sc-row > .sc-lab').forEach(el => {
+        const name = [...el.childNodes].filter(n => n.nodeType === 3).map(n => n.textContent).join('').replace(/[↑↓]/g, '').trim();
+        const ico = ICO[name]; if (!ico) return;
+        el.querySelectorAll('svg.sc-mini, svg.sc-ic').forEach(x => x.remove()); // older, differently sized pictures
+        el.insertAdjacentHTML('afterbegin', `<svg viewBox="0 0 24 24" class="sc-ic" aria-hidden="true">${ico}</svg>`);
+        if (getComputedStyle(el).display === 'inline') el.style.display = 'inline-flex';
+        el.style.alignItems = 'center'; el.style.gap = '8px';
+      });
+    }
+    ['linesp-group'].forEach(id => $(id)?.classList.add('sc-gone')); // standard line spacing, no slider
+    if (speedSec && speedSec !== appSec && !speedSec.querySelector('input')) speedSec.remove();
+    appSec.querySelector('.sec-title')?.remove();
+    // Shooting assistant: tips about light, sound, framing and focus (face detector downloaded once, offline)
+    camSec.append(h(`<div class="sc-grp sc-grp-new sc-new-assist">Shooting assistant <span class="sc-new">New</span></div>`));
+    { const sw = h(`<button type="button" class="tbtn" id="scAssist" aria-pressed="false"><span data-help="Tips while you set up and record: too dark, too bright, noisy room, mic too loud or quiet, camera battery. With the face detector also: off-center framing, headroom, focus missing your face, light behind you. Everything runs on this Mac; nothing is sent anywhere."><svg viewBox="0 0 24 24" class="sc-ic" aria-hidden="true"><path d="M12 3l1.6 3.9L17.5 8.5l-3.9 1.6L12 14l-1.6-3.9L6.5 8.5l3.9-1.6z"/><path d="M18 14l.8 1.9 1.9.8-1.9.8L18 19.4l-.8-1.9-1.9-.8 1.9-.8zM6 15l.6 1.4 1.4.6-1.4.6L6 19l-.6-1.4L4 17l1.4-.6z"/></svg>Shooting assistant</span></button>`);
+      camSec.append(swList(sw));
+      camSec.append(h(`<div class="vs-dl sc-assist-dl" hidden><button type="button" class="btn vs-dl-btn">Download face detector</button><span class="vs-dl-bar" hidden><i></i></span><span class="vs-dl-note"></span><span class="vs-dl-what">Downloads the face detection engine and model: ${FACE_MB} MB, once. It stays in this browser and runs on your Mac. It adds framing, headroom, focus and backlight tips; light and sound tips work without it.</span></div>`)); }
+    camSec.append(keys([['R', 'Record'], ['Hold A', 'Autofocus'], ['← →', 'Focus near / far'], ['G', 'Grid lines']]));
+    $('shortcuts-hint')?.classList.add('sc-gone');
+    // hide what the switches and the center panel already cover
+    $('scDisconnect').classList.add('sc-gone'); $('scMicOff').classList.add('sc-gone'); $('scMicOn').classList.add('sc-gone');
+    // tabs: everything not Camera or Mic belongs to Prompter
+    camSec.dataset.rt = 'camera'; audioSec.dataset.rt = soundSec.dataset.rt = 'audio';
+    for (const el of [...rightRail.children]) {
+      if ([utility, connRow].includes(el) || el.dataset.rt || el.classList.contains('rail-close')) continue;
+      el.dataset.rt = 'prompter';
+    }
+    setRailTab(store.get('railTab', 'camera'));
+    // help notes: no ⓘ icon; rest the mouse on the control's name and the note shows by itself
+    const addTip = (target, text) => { if (!target || !text) return; target.dataset.help = text.trim(); };
+    addTip(camSec.querySelector('.sc-cv-bgonly .slider-label span'), camSec.querySelector('.sc-cv-bgonly .caption')?.textContent);
+    addTip(bw.querySelector('span'), camSec.querySelector('.sc-bw-note')?.textContent);
+    addTip(onStage.querySelector('span'), camSec.querySelector('.sc-stagecam-note')?.textContent);
+    addTip(frow.querySelector('.sc-lab'), 'Hold A for autofocus. ← → move focus near and far when the lens is on MF.');
+    addTip($('scSndStart').querySelector('span'), 'A short rising beep when recording starts. Turn it off and on to hear it.');
+    addTip($('scSndStop').querySelector('span'), 'A short falling beep when recording stops. Turn it off and on to hear it.');
+    addTip($('scSndError').querySelector('span'), 'An alarm when something goes wrong: camera or mic disconnected, recording stopped on its own, a capture failed. Use headphones if you don’t want beeps in the recording. Turn it off and on to hear it.');
+    addTip($('pausemarks-btn').querySelector('span'), 'Small marks at paragraph breaks, a cue to pause.');
+    addTip($('voice-scroll-btn').querySelector('span'), 'Scroll by speaking your script (English, Chrome).');
+    rightRail.querySelectorAll('.caption').forEach(c => { if (!c.closest('.sc-problem, .sc-help, #display-fallback')) c.classList.add('sc-gone'); });
+    // one floating note for every [data-help] name (anywhere in the app): shows after the mouse rests ~½ s, stays inside the window
+    const tipEl = h(`<div class="sc-tipbox" role="tooltip" hidden></div>`); document.body.append(tipEl);
+    const showTip = el => {
+      tipEl.textContent = el.dataset.help; tipEl.hidden = false;
+      const r = el.getBoundingClientRect(), w = tipEl.offsetWidth, hh = tipEl.offsetHeight;
+      tipEl.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left)) + 'px';
+      tipEl.style.top = (r.bottom + 8 + hh > innerHeight - 8 ? r.top - hh - 8 : r.bottom + 8) + 'px';
+    };
+    // the name often sits inside a button with its own browser tooltip (title): park that title while ours shows, or both appear
+    let parked = [];
+    const park = i => { parked = []; for (let el = i; el && el !== document.body; el = el.parentElement) if (el.title) { parked.push([el, el.title]); el.removeAttribute('title'); } };
+    const unpark = () => { parked.forEach(([el, t]) => { if (!el.title) el.title = t; }); parked = []; };
+    let tipT = 0, tipFor = null;
+    const hideTip = () => { clearTimeout(tipT); tipEl.hidden = true; tipFor = null; unpark(); };
+    document.addEventListener('mouseover', e => {
+      const el = e.target.closest?.('[data-help]');
+      if (el === tipFor) return;
+      hideTip(); if (!el) return;
+      tipFor = el; park(el); tipT = setTimeout(() => showTip(el), 450);
+    });
+    document.addEventListener('pointerdown', hideTip, true);
+    addEventListener('scroll', hideTip, true);
+  }
   $('stage').prepend(centerCam); // first child, so the script and guide draw on top
   // Live audio waveform, top left of the center panel (the right rail has a bigger one under Audio)
   const centerWave = h(`<div class="sc-wave sc-wave-center" id="scWaveCenter" hidden aria-hidden="true"><canvas></canvas><span class="sc-wave-tag"><i></i><b>Not recording</b></span></div>`);
   $('stage').append(centerWave);
   // Camera in the center: 'bg' behind the script (default), 'corner' small top right, 'off'
   function setCenterView(v) {
-    if (!['bg', 'corner', 'off'].includes(v)) v = 'bg';
+    if (!['bg', 'off'].includes(v)) v = 'bg'; // (the old corner box is gone; a saved 'corner' becomes 'bg')
     store.set('centerView', v);
     document.body.dataset.cv = v;
     camSec.querySelectorAll('[data-cv]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.cv === v)));
+    $('scCvSw')?.setAttribute('aria-pressed', String(v === 'bg'));
   }
   camSec.querySelectorAll('[data-cv]').forEach(b => (b.onclick = () => { setCenterView(b.dataset.cv); measureContrast(true); }));
+  { const sw = $('scCvSw'); if (sw) sw.onclick = () => { setCenterView(document.body.dataset.cv === 'bg' ? 'off' : 'bg'); measureContrast(true); }; }
   setCenterView(store.get('centerView', 'bg'));
 
   // Camera visibility through the script: how much of the feed shows behind the text, 10–100%.
@@ -269,7 +651,7 @@ function init() {
   bwBtn.onclick = () => { store.set('camBW', !camBW()); renderBW(); measureContrast(true); sendStageCam(); };
   renderBW();
   // Camera on Stage toggle
-  const stageCamBtn = camSec.querySelector('#scStageCam');
+  const stageCamBtn = $('scStageCam'); // lives in the Prompter tab now
   const renderStageCamBtn = () => stageCamBtn.setAttribute('aria-pressed', String(!!store.get('stageCam', false)));
   stageCamBtn.onclick = () => { store.set('stageCam', !store.get('stageCam', false)); renderStageCamBtn(); sendStageCam(); };
   renderStageCamBtn();
@@ -354,12 +736,12 @@ function init() {
   // Short synthesized beeps (no sound files): start = two rising tones (Rise), stop = two falling (Fall), error = one low buzz (Buzz). Prompter play/pause stays silent.
   // One switch in the right rail turns them all on or off.
   let sfxCtx = null, sfxLastErr = 0;
-  const sfxOn = () => store.get('sounds', true);
+  const sfxOn = kind => store.get('snd_' + kind, store.get('sounds', true)); // each sound has its own switch (old single switch is the default)
   const sfxWake = () => { try { sfxCtx ||= new AudioContext(); if (sfxCtx.state === 'suspended') sfxCtx.resume(); } catch {} };
   document.addEventListener('pointerdown', sfxWake, { capture: true });
   document.addEventListener('keydown', sfxWake, { capture: true });
-  function sfx(kind) {
-    if (!sfxOn()) return;
+  function sfx(kind, force = false) {
+    if (!force && !sfxOn(kind)) return;
     if (kind === 'error') { const n = performance.now(); if (n - sfxLastErr < 1500) return; sfxLastErr = n; } // one alarm per problem
     sfxWake(); if (!sfxCtx) return;
     const tones = { start: [[660, 0, .09], [990, .11, .12]], stop: [[880, 0, .09], [520, .11, .14]], error: [[150, 0, .5]] }[kind];
@@ -373,10 +755,10 @@ function init() {
     }
   }
 
-  // Alert sounds switch: all beeps on or off together; turning it on plays a sample beep
-  const soundBtn = soundSec.querySelector('#scSounds');
-  const renderSoundBtn = () => soundBtn.setAttribute('aria-pressed', String(sfxOn()));
-  soundBtn.onclick = () => { store.set('sounds', !sfxOn()); renderSoundBtn(); sfx('start'); };
+  // Three sound switches (start, stop, error); turning one on plays its sound once so you know what it is
+  const sndSwitches = [...soundSec.querySelectorAll('[data-snd]')];
+  const renderSoundBtn = () => sndSwitches.forEach(b => b.setAttribute('aria-pressed', String(sfxOn(b.dataset.snd))));
+  sndSwitches.forEach(b => b.onclick = () => { const k = b.dataset.snd, on = !sfxOn(k); store.set('snd_' + k, on); renderSoundBtn(); if (on) { if (k === 'error') sfxLastErr = 0; sfx(k, true); } });
   renderSoundBtn();
 
   // ------------------------------------------------------------------ toast
@@ -399,15 +781,17 @@ function init() {
   // ------------------------------------------------------------------ camera
   let lastUrl = null, big = null;
   function renderCam() {
+    setTimeout(renderRailTabs, 0);
     const on = cam.state === 'connected';
     ui.empty.hidden = on; ui.img.hidden = !on; ui.info.hidden = !on; ui.disconnect.hidden = !on;
+    { const ps = $('scPrevSet'); if (ps) { ps.disabled = !on; ps.title = on ? 'Focus, exposure and framing on the big screen' : 'Turn the camera on first'; } } if (!on && src === 'sony') closeBig?.();
     centerCam.hidden = !on; if (!on) ui.ccImg.removeAttribute('src');
     document.body.classList.toggle('sc-cam-bg', on);
     ui.connect.disabled = cam.state === 'connecting' || cam.state === 'unsupported';
     ui.connect.textContent = cam.state === 'connecting' ? 'Connecting…' : ui.connect.dataset.retry ? 'Try again' : 'Connect camera';
     ui.af.disabled = !on || !cam.has('af');
     ui.near.disabled = ui.far.disabled = ui.step.disabled = !on || !cam.has('mf');
-    ui.gridBtn.disabled = ui.big.disabled = !on;
+    ui.big.disabled = !on; ui.gridBtn.disabled = false; // grid works with any camera
     if (!('documentPictureInPicture' in window)) { ui.big.disabled = true; ui.big.title = 'Needs Chrome 116 or newer'; }
     ui.camState.textContent = cam.recording ? 'Recording' : on ? (cam.model || 'Connected') : cam.state === 'connecting' ? 'Connecting' : cam.state === 'unsupported' ? 'Needs Chrome' : 'Off';
     ui.camState.className = 'sc-state' + (cam.recording ? ' rec' : on ? ' on' : '');
@@ -432,19 +816,24 @@ function init() {
   function renderMacCam() {
     const on = webOn(), busyW = web.state === 'connecting';
     ui.empty.hidden = on; ui.img.hidden = true; ui.vid.hidden = !on; ui.info.hidden = true; ui.disconnect.hidden = !on;
+    { const ps = $('scPrevSet'); if (ps) { ps.disabled = !on; ps.title = on ? 'Focus, exposure and framing on the big screen' : 'Turn the camera on first'; } } if (!on && src === 'mac') closeBig?.();
     centerCam.hidden = !on; document.body.classList.toggle('sc-cam-bg', on);
     ui.connect.disabled = busyW || !WebcamCore.supported;
     ui.connect.disabled = busyW || !WebcamCore.supported;
     ui.connect.textContent = busyW ? 'Starting…' : 'Connect camera';
     ui.connectSub.textContent = WebcamCore.supported ? (ui.camPick.selectedOptions[0]?.textContent || 'Mac camera') : 'Needs Chrome or Edge';
-    ui.gridBtn.disabled = !on; ui.big.disabled = true; ui.big.title = 'Big preview works with the Sony';
+    ui.gridBtn.disabled = false; ui.big.disabled = true; ui.big.title = 'Big preview works with the Sony';
     ui.disconnect.textContent = 'Turn off Mac camera';
     ui.camState.textContent = web.recording ? 'Recording' : on ? 'Mac camera' : busyW ? 'Starting' : 'Off';
     ui.camState.className = 'sc-state' + (web.recording ? ' rec' : on ? ' on' : '');
   }
+  let camUserOff = false; // true between your own 'off' and the camera reporting disconnected
   cam.addEventListener('state', e => {
-    if (e.detail.state === 'connected') { store.set('camAuto', true); store.set('camEverConnected', true); ui.help.open = ui.help2.open = false; ui.problem.hidden = true; ui.problem2.hidden = true; delete ui.connect.dataset.retry; cam.startPreview(); }
-    if (e.detail.state === 'disconnected') { sfx('error'); showCamProblem('nodevice', 'Camera unplugged or switched off.'); closeBig(); }
+    if (e.detail.state === 'connected') { camUserOff = false; store.set('camAuto', true); store.set('camEverConnected', true); ui.help.open = ui.help2.open = false; ui.problem.hidden = true; ui.problem2.hidden = true; delete ui.connect.dataset.retry; cam.startPreview(); }
+    if (e.detail.state === 'disconnected') { // you switched it off: quiet. It dropped by itself: buzz + the problem box
+      if (camUserOff) { camUserOff = false; closeBig(); }
+      else { sfx('error'); showCamProblem('nodevice', 'Camera unplugged or switched off.'); closeBig(); }
+    }
     if (['connected', 'disconnected', 'idle'].includes(e.detail.state)) fillCamPick(); // the USB entry shows the real model name
     renderCam(); renderRec();
   });
@@ -457,6 +846,7 @@ function init() {
   cam.addEventListener('log', e => { const { message, level } = e.detail; (level === 'error' ? console.error : level === 'warn' ? console.warn : console.log)('[Space Cam]', message); });
   cam.addEventListener('stats', e => (ui.fps.textContent = `${e.detail.fps.toFixed(0)} fps`));
   cam.addEventListener('info', e => {
+    try { assist.battery(e.detail.battery); } catch {}
     const i = e.detail, ap = typeof i.aperture === 'string' ? i.aperture.replace(/^f\//, 'f/') : i.aperture;
     ui.info.innerHTML = [i.iso && `ISO <b>${i.iso}</b>`, i.shutter && `<b>${i.shutter}</b>`, ap && `<b>${ap}</b>`, i.focusMode && `<b>${i.focusMode}</b>`, i.battery && `🔋 <b>${i.battery}</b>`].filter(Boolean).join('<i>·</i>');
   });
@@ -493,7 +883,7 @@ function init() {
     </ol>`;
   for (const box of [ui.help, ui.help2]) {
     box.innerHTML = SETUP_FIX;
-    box.open = !store.get('camEverConnected', false);
+    box.open = box !== ui.help && !store.get('camEverConnected', false); // right rail: closed unless a connect fails (one-page rail has no room)
     box.querySelectorAll('[data-copy]').forEach(b => b.onclick = async e => {
       e.preventDefault();
       const label = b.textContent; try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = b.dataset.done || 'Copied'; setTimeout(() => (b.textContent = label), 1500); } catch { toast('Could not copy.', 'error'); }
@@ -521,10 +911,10 @@ function init() {
   ui.disconnect.onclick = () => {
     if (src === 'mac') {
       if (web.recording) return toast('Stop recording first.', 'error');
-      store.set('webOn', false); web.close(); toast('Camera off.'); return;
+      store.set('webOn', false); web.close(); return; // switched off on purpose: no message
     }
     if (cam.recording) return toast('Stop recording first.', 'error');
-    store.set('camAuto', false); closeBig(); cam.disconnect(); toast('Camera released.');
+    store.set('camAuto', false); closeBig(); camUserOff = true; cam.disconnect(); // on purpose: no message, no buzz
   };
 
   // ---- Mac camera (instead of the Sony) ----
@@ -579,15 +969,15 @@ function init() {
       fillCamPick(); renderCam(); renderRec();
       return;
     }
-    const wasOn = src === 'mac' ? webOn() : cam.state === 'connected';
     camPick = next; store.set('camPick', next);
     const nextSrc = next.startsWith('mac') ? 'mac' : 'sony';
     // release the camera you're leaving
     if (src === 'sony' && nextSrc === 'mac' && cam.state === 'connected') { store.set('camAuto', false); closeBig(); cam.disconnect(); }
     if (src === 'mac' && (nextSrc === 'sony' || next !== 'mac:' + web.deviceId)) { web.close(); if (nextSrc === 'sony') store.set('webOn', false); }
     src = nextSrc; document.body.dataset.src = src; ui.preview.style.aspectRatio = '';
-    // switching between two Mac cameras while one was on: open the new one straight away
-    if (wasOn && src === 'mac') await ui.connect.onclick();
+    // picking a camera connects it straight away (the switch only turns the picked camera on and off)
+    if (src === 'sony') camUserOff = false;
+    await ui.connect.onclick();
     renderCam(); renderRec();
   };
   navigator.mediaDevices?.addEventListener?.('devicechange', () => fillCamPick());
@@ -644,44 +1034,158 @@ function init() {
   ui.near.onclick = () => focusBy(-1); ui.far.onclick = () => focusBy(1);
 
   // grid
-  function setGrid(on) { ui.grid.hidden = !on; ui.ccGrid.hidden = !on; ui.gridBtn.setAttribute('aria-pressed', String(on)); store.set('grid', on); if (big) big.grid.hidden = !on; }
+  function setGrid(on) { document.body.classList.toggle('sc-grid-on', !!on); ui.grid.hidden = !on; ui.ccGrid.hidden = !on; ui.gridBtn.setAttribute('aria-pressed', String(on)); store.set('grid', on); document.querySelector('.sc-cs-grid')?.setAttribute('aria-pressed', String(on)); }
   ui.gridBtn.onclick = () => setGrid(ui.grid.hidden);
   setGrid(store.get('grid', false));
 
-  // big floating preview (Document Picture-in-Picture)
-  async function openBig() {
-    if (big) return closeBig();
-    let w;
-    try { w = await documentPictureInPicture.requestWindow({ width: 760, height: 470 }); }
-    catch (e) { return toast('Could not open the big preview: ' + (e?.message || e), 'error'); }
-    document.querySelectorAll('link[rel="stylesheet"][href^="studio.css"]').forEach(l => w.document.head.append(l.cloneNode()));
-    w.document.title = 'Space Cam · preview';
-    w.document.body.className = 'sc-big';
-    w.document.body.innerHTML = `
-      <div class="sc-big-stage"><img alt=""><div class="sc-grid" hidden><i></i><i></i><i></i><i></i></div>
-        <span class="sc-badge" hidden><i></i><span>00:00</span></span></div>
-      <div class="sc-big-bar"><button class="af">Focus (A)</button><button class="near">◀ Near</button>
-        <button class="rec"><i></i><span>Record</span></button><button class="far">Far ▶</button></div>`;
-    const q = s => w.document.querySelector(s);
-    big = { w, img: q('img'), grid: q('.sc-grid'), badge: q('.sc-badge'), time: q('.sc-badge span'), rec: q('.rec'), recLabel: q('.rec span'), af: q('.af'), near: q('.near'), far: q('.far') };
-    big.img.src = ui.img.src; big.grid.hidden = ui.grid.hidden;
-    big.rec.onclick = toggleTake;
-    big.af.addEventListener('pointerdown', afDown); big.af.addEventListener('pointerup', afUp); big.af.addEventListener('pointerleave', afUp);
-    big.near.onclick = () => focusBy(-1); big.far.onclick = () => focusBy(1);
-    big.near.disabled = big.far.disabled = !cam.has('mf');
-    w.document.addEventListener('keydown', onKeyDown); w.document.addEventListener('keyup', onKeyUp);
-    w.addEventListener('pagehide', () => { big = null; ui.big.setAttribute('aria-pressed', 'false'); });
-    ui.big.setAttribute('aria-pressed', 'true');
-    renderRec();
+  // ---- Shooting assistant (assist-core.js): one tip at a time, top of the center, ✕ hides it for 5 min ----
+  const assist = new AssistCore();
+  let lastTip = null; const sendTip = () => { try { stageCamCh?.postMessage({ type: 'tip', tip: assistOn() && liveOn() ? lastTip : null }); } catch {} };
+  const TIP_IC = {
+    warn: '<path d="M12 3 2 20h20L12 3zm-1 6h2v6h-2zm0 8h2v2h-2z"/>',
+    light: '<path d="M12 7a5 5 0 1 0 0 10 5 5 0 0 0 0-10zM11 1h2v3h-2zm0 19h2v3h-2zM1 11h3v2H1zm19 0h3v2h-3zM4.2 5.6l1.4-1.4 2.1 2.1-1.4 1.4zm12.1 12.1 1.4-1.4 2.1 2.1-1.4 1.4zM4.2 18.4l2.1-2.1 1.4 1.4-2.1 2.1zM16.3 6.3l2.1-2.1 1.4 1.4-2.1 2.1z"/>',
+    sound: '<path d="M4 9h4l5-4v14l-5-4H4zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4z"/>',
+    frame: '<path d="M3 3h6v2H5v4H3zm12 0h6v6h-2V5h-4zM3 15h2v4h4v2H3zm16 0h2v6h-6v-2h4z"/><circle cx="12" cy="12" r="3"/>',
+    info: '<path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/>',
+  };
+  const tipCard = h(`<div class="sc-assist-tip" role="status" aria-live="polite" hidden><span class="sc-assist-ic"><svg viewBox="0 0 24 24"></svg></span><span class="sc-assist-txt"></span><button type="button" class="sc-assist-x" aria-label="Hide this tip" title="Hide this tip for 5 minutes">✕</button></div>`);
+  $('stage').append(tipCard);
+  let tipId = null;
+  assist.addEventListener('tip', e => {
+    const t = e.detail; tipId = t?.id || null;
+    lastTip = t ? { id: t.id, kind: t.kind, text: t.text } : null; sendTip();
+    if (!t) { tipCard.hidden = true; return; }
+    tipCard.className = 'sc-assist-tip k-' + t.kind;
+    tipCard.querySelector('svg').innerHTML = TIP_IC[t.kind] || TIP_IC.info;
+    tipCard.querySelector('.sc-assist-txt').textContent = t.text;
+    tipCard.hidden = false;
+  });
+  tipCard.querySelector('.sc-assist-x').onclick = () => { if (tipId) assist.snooze(tipId); };
+  const assistBtn = $('scAssist'), assistDl = camSec.querySelector('.sc-assist-dl'); let assistAutoDl = false;
+  const assistOn = () => !!store.get('assistOn', false); // off until you turn it on (then remembered); the face detector downloads on first use
+  async function renderAssist() {
+    const on = assistOn();
+    assistBtn?.setAttribute('aria-pressed', String(on));
+    const ready = await AssistCore.faceReady();
+    assistDl.hidden = ready; // the download shows whenever it isn't downloaded yet, on or off: you choose when
+    if (!on) { tipCard.hidden = true; sendTip(); return; }
+    if (ready && !assist.faceOn) assist.loadFace().catch(() => {});
+
   }
-  function closeBig() { if (big) { big.w.close(); big = null; } ui.big.setAttribute('aria-pressed', 'false'); }
+  if (assistBtn) assistBtn.onclick = () => { store.set('assistOn', !assistOn()); if (assistOn()) { store.set('triedAssist', true); document.body.classList.add('sc-tried-assist'); } renderAssist(); };
+  { const b = assistDl.querySelector('.vs-dl-btn'), bar = assistDl.querySelector('.vs-dl-bar'), fill = bar.querySelector('i'), note = assistDl.querySelector('.vs-dl-note');
+    b.onclick = async () => {
+      b.disabled = true; bar.hidden = false; fill.style.width = '0%'; note.textContent = 'Downloading…';
+      try { await AssistCore.downloadFace(p => { fill.style.width = Math.round(p * 100) + '%'; note.textContent = Math.round(p * 100) + '%'; });
+        note.textContent = 'Starting the face detector…'; await assist.loadFace(); assistDl.hidden = true; }
+      catch (e) { note.textContent = 'Download failed (' + (e?.message || e) + '). Try again.'; }
+      b.disabled = false; bar.hidden = true;
+    };
+  }
+  renderAssist();
+  // look at the preview ~1.5×/s while it's on and a camera is live (a small copy of the preview, never the recording)
+  setInterval(() => {
+    if (!assistOn() || !liveOn() || document.hidden) { if ((!assistOn() || !liveOn()) && !tipCard.hidden) { tipCard.hidden = true; sendTip(); } return; }
+    assist.recording = !!take;
+    assist.analyze(src === 'mac' ? ui.vid : ui.img, { camera: src === 'mac' ? 'mac' : 'sony' });
+  }, 650);
+
+  // big floating preview (Document Picture-in-Picture)
+  // ---- Camera settings mode: the script steps aside and the camera behind it comes forward (full, in colour) ----
+  // Focus and, for USB cameras, ISO / shutter / aperture / white balance / exposure from the camera's own lists.
+  // "Save and back to script" (or Esc) returns. Leaves by itself when the script scrolls, a take starts or the camera goes.
+  const SET_NAMES = { iso: 'ISO', shutter: 'Shutter', aperture: 'Aperture', wb: 'White balance', ev: 'Exposure' };
+  const BACK_IC = '<svg viewBox="0 0 24 24"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20z"/></svg>';
+  const SAVE_IC = '<svg viewBox="0 0 24 24"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>';
+  // one bar fixed to the bottom of the preview: title left · focus + exposure middle · Back / Save right
+  const camSet = h(`<div class="sc-camset" hidden>
+      <div class="sc-camset-head"><b>Camera settings</b><span></span></div>
+      <div class="sc-camset-mid">
+        <div class="sc-camset-focus"><span class="sc-cs-lab">Focus</span><div class="sc-cs-seg">
+          <button type="button" class="sc-cs-near" title="Focus nearer (←)">◀</button><button type="button" class="sc-cs-af" title="Hold to autofocus (A)">AF</button><button type="button" class="sc-cs-far" title="Focus farther (→)">▶</button></div></div>
+        <div class="sc-camset-opts"></div>
+      </div>
+      <span class="sc-modal-hint sc-cs-esc"><kbd>Esc</kbd> back</span>
+      <button type="button" class="sc-cs-save">${BACK_IC}<span>Back</span></button>
+    </div>`);
+  $('stage').append(camSet);
+  const csQ = sel => camSet.querySelector(sel), csOpts = csQ('.sc-camset-opts');
+  let csDirty = false;
+  const markDirty = () => { if (csDirty) return; csDirty = true; const b = csQ('.sc-cs-save'); b.classList.add('dirty'); b.innerHTML = `${SAVE_IC}<span>Save</span>`; b.title = 'Your changes are on the camera. Back to the prompter'; };
+  { const af = csQ('.sc-cs-af'); af.addEventListener('pointerdown', e => { markDirty(); afDown(e); }); af.addEventListener('pointerup', afUp); af.addEventListener('pointerleave', afUp); }
+  csQ('.sc-cs-near').onclick = () => { markDirty(); focusBy(-1); }; csQ('.sc-cs-far').onclick = () => { markDirty(); focusBy(1); };
+  csQ('.sc-cs-save').onclick = () => closeBig();
+  const camSetOn = () => document.body.classList.contains('sc-camset-on');
+  function openBig() {
+    if (camSetOn()) return;
+    if (take) return toast('Stop recording first.', 'error');
+    if (!liveOn()) return;
+    try { window.spaceCamPrompter?.pause(); } catch {}
+    document.body.classList.add('sc-camset-on'); camSet.hidden = false;
+    csDirty = false; { const b = csQ('.sc-cs-save'); b.classList.remove('dirty'); b.innerHTML = `${BACK_IC}<span>Back</span>`; b.title = 'Back to the prompter (Esc)'; }
+    renderBigSettings(); fitCamSet(); requestAnimationFrame(fitCamSet);
+    document.addEventListener('keydown', camSetKey, true);
+  }
+  function closeBig() {
+    if (!document.body.classList.contains('sc-camset-on')) return;
+    document.body.classList.remove('sc-camset-on'); document.querySelector('.sc-camset').hidden = true;
+    document.removeEventListener('keydown', camSetKey, true);
+  }
+  // the camera gets its own 16:9 frame between the corner buttons and the settings panel, so nothing covers it
+  function fitCamSet() {
+    const cc = document.getElementById('scCenterCam');
+    if (!document.body.classList.contains('sc-camset-on')) { if (cc) cc.style.cssText = cc.style.cssText.replace(/--cs-[^;]+;?/g, ''); return; }
+    const st = $('stage'), bar = document.querySelector('.sc-camset');
+    const W = st.clientWidth, H = st.clientHeight, top = 76, side = 28, gapBottom = 24;
+    let w = W - side * 2;
+    bar.style.setProperty('width', Math.round(w) + 'px', 'important'); // measure the bar at this width (it may wrap)
+    const barH = bar.offsetHeight || 72;
+    let hh = w * 9 / 16;
+    const maxH = Math.max(120, H - top - barH - gapBottom);
+    if (hh > maxH) { hh = maxH; w = hh * 16 / 9; bar.style.setProperty('width', Math.round(w) + 'px', 'important'); }
+    const camTop = Math.round(top + (maxH - hh) / 2);
+    cc.style.setProperty('--cs-w', Math.round(w) + 'px'); cc.style.setProperty('--cs-h', Math.round(hh) + 'px'); cc.style.setProperty('--cs-top', camTop + 'px');
+    bar.style.setProperty('top', (camTop + Math.round(hh)) + 'px', 'important');
+  }
+  addEventListener('resize', fitCamSet);
+  function camSetKey(e) { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeBig(); } }
+  function renderBigSettings() {
+    if (!camSetOn()) return;
+    const sony = src === 'sony';
+    csQ('.sc-camset-focus').hidden = !sony || !cam.has('af');
+    csQ('.sc-cs-near').disabled = csQ('.sc-cs-far').disabled = !cam.has('mf');
+    const all = sony && cam.settings ? cam.settings() : {};
+    const keys = Object.keys(SET_NAMES).filter(k => all[k]);
+    csOpts.hidden = !keys.length;
+    const canSet = sony && (keys.length > 0 || cam.has('af') || cam.has('mf'));
+    camSet.querySelector('.sc-camset-head span').textContent = canSet ? 'Changes go to the camera right away.' : 'Check your framing. G for grid lines.';
+    camSet.classList.toggle('sc-cs-simple', !canSet);
+    if (csOpts.dataset.keys !== keys.join()) {
+      csOpts.dataset.keys = keys.join();
+      csOpts.replaceChildren(...keys.map(k => {
+        const lab = h(`<label class="sc-cs-opt"><span>${k === 'wb' ? 'WB' : SET_NAMES[k]}</span><select class="sc-select" data-k="${k}"></select></label>`);
+        const sel = lab.querySelector('select');
+        sel.append(...all[k].choices.map(c => new Option(c, c)));
+        sel.onchange = async () => {
+          sel.disabled = true; const ok = await cam.setSetting(k, sel.value); sel.disabled = false; if (ok) markDirty();
+          if (!ok) { toast(`The camera didn’t take that ${SET_NAMES[k].toLowerCase()} — some settings need the mode dial on M.`, 'error'); renderBigSettings(); }
+        };
+        return lab;
+      }));
+    }
+    csOpts.querySelectorAll('select').forEach(sel => { const v = all[sel.dataset.k]; if (!v) return; sel.value = v.value; sel.disabled = !!v.readonly; sel.title = v.readonly ? 'The camera won’t change this right now (check the mode dial)' : ''; });
+  }
+  cam.addEventListener('info', () => renderBigSettings());
+  // leaves when the script starts scrolling
+  { const pb = document.getElementById('play'); if (pb) new MutationObserver(() => { if (pb.classList.contains('active')) closeBig(); }).observe(pb, { attributes: true, attributeFilter: ['class'] }); }
   ui.big.onclick = openBig;
 
   // ------------------------------------------------------------------ audio
   async function fillMics() {
     const devs = await audio.listDevices();
     ui.mic.replaceChildren(...devs.map(d => new Option(d.label, d.id)));
-    if (audio.deviceId) ui.mic.value = audio.deviceId;
+    const keep = audio.deviceId || store.get('micId', ''); // mic off: still show the mic you picked
+    if (keep && devs.some(d => d.id === keep)) ui.mic.value = keep;
   }
   audio.addEventListener('devices', fillMics);
   audio.addEventListener('state', e => renderMic());
@@ -691,14 +1195,18 @@ function init() {
   const toPct = db => Math.max(0, Math.min(100, (db - FLOOR) / -FLOOR * 100));
   audio.addEventListener('level', e => {
     const { clip } = e.detail;
+    try { assist.audio({ rmsDb: e.detail.rmsDb, peakDb: e.detail.peakDb, clip }); } catch {}
     const now0 = performance.now(), dt = Math.min(0.1, (now0 - shownT) / 1000);
     // Calm meter: the bar follows loudness (RMS), rises quickly and falls slowly (~12 dB/s).
     const target = Math.max(e.detail.rmsDb, -120);
+    recLevelDb = e.detail.peakDb ?? target;
     shown = target > shown ? shown + (target - shown) * Math.min(1, dt * 18) : Math.max(target, shown - 12 * dt);
     shownT = now0;
     const peakDb = shown;
     const pct = toPct(peakDb);
     ui.meterFill.style.width = pct + '%'; ui.cFill.style.clipPath = `inset(0 ${100 - pct}% 0 0)`;
+    { const f = $('scRfFill'); if (f) { f.style.width = pct + '%'; f.classList.toggle('clip', clip); } } // pinned mini meter
+    if (now0 - railDbT > 400) { railDbT = now0; const d = $('scRfDb'); if (d) d.textContent = (peakDb <= -119 ? '−∞' : Math.round(peakDb)) + ' dB'; const rd = $('scRfDot'); if (rd) rd.className = audio.state === 'recording' ? 'rec' : 'on'; renderRailTabs(peakDb); }
     // The thin marker shows real peaks (held 1.5 s), so you still see how close you get to clipping.
     const now = performance.now(), p = e.detail.peakDb;
     if (p > peakHold || now - peakHoldT > 1500) { peakHold = p; peakHoldT = now; }
@@ -771,8 +1279,8 @@ function init() {
     if (!rec && waveNowClip) { g.fillStyle = '#E5484D'; g.fillRect(0, 0, dpr * 3, H); g.fillRect(W - dpr * 3, 0, dpr * 3, H); } // clipping right now: red edges
     if (noiseDb !== null) {
       const noisy = noiseDb > NOISY_DB;
-      nz.textContent = `Room noise ${noiseDb <= -119 ? '−∞' : '−' + Math.abs(Math.round(noiseDb))} dB${noisy ? ' · noisy' : ''}`;
-      nz.classList.toggle('noisy', noisy);
+      nz.textContent = `Room noise ${noiseDb <= -119 ? '−∞' : '−' + Math.abs(Math.round(noiseDb))} dB`; // plain white: the Shooting assistant tells you if the room is noisy
+      nz.classList.remove('noisy');
     } else nz.textContent = '';
   }
   function renderWave() {
@@ -788,6 +1296,8 @@ function init() {
   }
   function renderMic() {
     const on = audio.state !== 'off';
+    renderRailTabs(on ? undefined : null);
+    { const f = $('scRfFill'), d = $('scRfDb'); if (!on && f) { f.style.width = '0%'; d.textContent = 'Mic off'; $('scRfDot').className = ''; } }
     ui.micOn.hidden = on; ui.mic.hidden = !on; ui.meterWrap.hidden = !on;
     ui.micState.textContent = audio.state === 'recording' ? 'Recording' : on ? 'Ready' : 'Off';
     ui.micState.className = 'sc-state' + (audio.state === 'recording' ? ' rec' : on ? ' on' : '');
@@ -809,9 +1319,11 @@ function init() {
     renderRec();
   }
   ui.micOn.onclick = () => openMic();
+  // Voice scroll (index.html) listens through the mic picked here, not the Mac's default: hand it the live track
+  window.spaceCamMic = () => { const t = audio.stream?.getAudioTracks()[0]; return t && t.readyState === 'live' ? { track: t, label: audio.deviceLabel || t.label || 'your mic' } : null; };
   async function closeMic() {
     if (take || audio.state === 'recording') return toast('Stop recording first.', 'error');
-    store.set('micAuto', false); await audio.close(); renderMic(); renderRec(); toast('Mic disconnected.');
+    store.set('micAuto', false); await audio.close(); renderMic(); renderRec(); // on purpose: no message
   }
   ui.cMicBtn.onclick = () => (audio.state !== 'off' ? closeMic() : openMic());
   ui.micOff.onclick = closeMic;
@@ -848,6 +1360,22 @@ function init() {
     catch (e) { if (e?.name !== 'AbortError') toast('Could not use that folder: ' + (e?.message || e), 'error'); }
     renderFolder(); flushWaiting();
   }
+  let leftSet = null, rightSet = null; // set by the panel blocks below; used by the edge handles and the swipe
+  // Peek a hidden side panel: touching the screen edge slides it in over the script; it goes as soon as the mouse is
+  // clearly outside the panel's area. (Checked on every mouse move rather than on 'mouseleave': the panel slides in,
+  // so a quick mouse could leave before it ever entered, and the panel used to stay out.)
+  function railPeek(rail, edge, side) {
+    const cls = side === 'left' ? 'sc-left-peek' : 'sc-right-peek', hiddenCls = side === 'left' ? 'sc-left-hidden' : 'sc-right-hidden';
+    const peek = on => document.body.classList.toggle(cls, on);
+    edge.addEventListener('mouseenter', () => { if (document.body.classList.contains(hiddenCls)) peek(true); });
+    document.addEventListener('pointermove', e => {
+      if (!document.body.classList.contains(cls)) return;
+      if (document.querySelector('.sc-modal, .sc-saved, #pedal-panel.show')) return; // a popup opened from the panel: leave it alone
+      const w = rail.offsetWidth, out = side === 'left' ? e.clientX > w + 12 : e.clientX < innerWidth - w - 12;
+      if (out) peek(false);
+    });
+    return peek;
+  }
   // Left panel can be hidden for more prompter width: « at its top hides it, the » tab on the left edge brings it back.
   // Remembered between visits. The prompter re-fits its text to the new width (it listens for resize).
   {
@@ -862,22 +1390,137 @@ function init() {
       // as soon as the mouse leaves it. Clicking the corner header pins it back (normal layout). The header itself
       // doesn't react to hover, so it's easy to click.
       const edge = h(`<div class="sc-rail-edge" aria-hidden="true"></div>`); document.body.append(edge);
-      const peek = on => document.body.classList.toggle('sc-left-peek', on);
-      edge.addEventListener('mouseenter', () => { if (document.body.classList.contains('sc-left-hidden')) peek(true); });
-      lr.addEventListener('mouseleave', () => { if (document.body.classList.contains('sc-left-peek')) peek(false); });
+      const peek = railPeek(lr, edge, 'left');
       const setLeft = hidden => {
         if (hidden) syncBrand();
         peek(false);
         document.body.classList.toggle('sc-left-hidden', hidden);
         store.set('leftHidden', hidden);
-        requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+        requestAnimationFrame(() => window.dispatchEvent(new Event('resize'))); setTimeout(() => window.dispatchEvent(new Event('resize')), 330);
       };
-      hideBtn.onclick = () => setLeft(true);
+      hideBtn.onclick = () => setLeft(true); leftSet = setLeft;
       // The logo and the "Space Cam" name hide/show the panel. (No link to shovonix.dev: Chrome would bring that tab
       // to the front and pull focus away from Space Cam; a page can't open a tab in the background.)
       $('brand-home-btn')?.addEventListener('click', () => setLeft(true));
       showTab.onclick = () => setLeft(false);
-      if (store.get('leftHidden', false)) { setLeft(true); setTimeout(syncBrand, 500); } // version text fills in a moment after load
+      if (store.get('leftHidden', true)) { setLeft(true); setTimeout(syncBrand, 500); } // first visit: left panel closed; version text fills in a moment after load
+    }
+  }
+  // Right panel can be hidden too: » at the end of its tab row hides it; the gear at the top right (or the right
+  // screen edge, to peek) brings it back. Remembered between visits.
+  {
+    const rr = $('right-rail'), tabsRow = rr?.querySelector('.sc-tabs');
+    if (rr && tabsRow) {
+      const hideR = h(`<button type="button" class="sc-rhide" title="Hide this panel" aria-label="Hide the right panel"><svg viewBox="0 0 24 24"><path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z"/></svg></button>`);
+      const head = h(`<div class="sc-rhead"><b>Controls</b></div>`); head.append(hideR); tabsRow.before(head); // own row, like the left panel's header
+      const gear = h(`<button type="button" class="sc-rshow" title="Show the controls" aria-label="Show the right panel"><svg viewBox="0 0 24 24" class="sc-tool-ic"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>`);
+      const GEAR_SVG = gear.innerHTML;
+      document.body.append(gear);
+      const edgeR = h(`<div class="sc-rail-edge sc-rail-edge-r" aria-hidden="true"></div>`); document.body.append(edgeR);
+      const peekR = railPeek(rr, edgeR, 'right');
+      const setRight = hidden => {
+        peekR(false);
+        document.body.classList.toggle('sc-right-hidden', hidden);
+        store.set('rightHidden', hidden);
+        gear.title = hidden ? 'Show the controls' : 'Hide the controls'; gear.setAttribute('aria-label', gear.title); gear.classList.toggle('on', !hidden);
+        requestAnimationFrame(() => window.dispatchEvent(new Event('resize'))); setTimeout(() => window.dispatchEvent(new Event('resize')), 330);
+      };
+      hideR.onclick = () => setRight(true);
+      gear.onclick = () => setRight(false); rightSet = setRight; // the gear shows only while the panel is hidden
+      setRight(!!store.get('rightHidden', false)); // also sets the gear's look and label
+    }
+  }
+  // Focus mode + full screen (top right, next to Clear markers):
+  //  - Focus: closes both side panels; click again to open both. Two icons for the two states.
+  //  - Full screen: the whole page goes full screen with both panels closed (the Space Cam box and the gear stay, to
+  //    open them); leaving full screen puts the panels back the way they were.
+  {
+    const B = document.body, isH = c => B.classList.contains(c);
+    const SV = (d, extra = '') => `<svg viewBox="0 0 24 24" class="sc-tool-ic"${extra}>${d}</svg>`;
+    const IC_FOCUS_OFF = SV('<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M8.5 4v16M15.5 4v16"/>');
+    const IC_FOCUS_ON = SV('<rect x="3" y="4" width="18" height="16" rx="2.5"/>'); // frame with no sidebars = only the script
+    const IC_FS = SV('<path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/>');
+    const IC_FS_EXIT = SV('<path d="M9 4v4a1 1 0 0 1-1 1H4M20 9h-4a1 1 0 0 1-1-1V4M15 20v-4a1 1 0 0 1 1-1h4M4 15h4a1 1 0 0 1 1 1v4"/>');
+    const tools = document.querySelector('.sc-stage-tools'), fsBtn = $('fullscreen-btn');
+    const focusBtn = h(`<button type="button" class="icon-btn sc-focus-btn"></button>`);
+    if (tools && fsBtn) tools.insertBefore(focusBtn, fsBtn);
+    const bothHidden = () => isH('sc-left-hidden') && isH('sc-right-hidden');
+    const renderTools = () => {
+      const on = bothHidden();
+      focusBtn.innerHTML = on ? IC_FOCUS_ON : IC_FOCUS_OFF;
+      focusBtn.title = on ? 'Show both panels' : 'Focus mode: hide both panels'; focusBtn.setAttribute('aria-label', focusBtn.title);
+      focusBtn.setAttribute('aria-pressed', String(on));
+      const fs = !!document.fullscreenElement;
+      if (fsBtn) { fsBtn.innerHTML = fs ? IC_FS_EXIT : IC_FS; fsBtn.title = fs ? 'Exit full screen (F)' : 'Full screen (F)'; fsBtn.setAttribute('aria-label', fsBtn.title); }
+    };
+    focusBtn.onclick = () => { const hide = !bothHidden(); leftSet?.(hide); rightSet?.(hide); renderTools(); };
+    let beforeFs = null;
+    document.addEventListener('fullscreenchange', () => {
+      if (document.fullscreenElement) { beforeFs = { l: isH('sc-left-hidden'), r: isH('sc-right-hidden') }; leftSet?.(true); rightSet?.(true); }
+      else if (beforeFs) { leftSet?.(beforeFs.l); rightSet?.(beforeFs.r); beforeFs = null; }
+      renderTools();
+    });
+    new MutationObserver(renderTools).observe(B, { attributes: true, attributeFilter: ['class'] });
+    renderTools();
+  }
+  // Your own app icon: click exactly on the logo (top left, or in the collapsed Space Cam box) → popup → Change icon
+  // picks an image from this device, centre-cropped to a square, saved in this browser only. The "Space Cam" name and
+  // its font never change. Use default puts the original back. (A Space-apps-wide feature: same behaviour everywhere.)
+  {
+    const lr = $('left-rail'), mainLogo = lr?.querySelector('.brand-logo');
+    if (mainLogo) {
+      const DEFAULT_LOGO = mainLogo.getAttribute('src');
+      const favLink = document.querySelector('link[rel="icon"]'), DEFAULT_FAV = favLink?.getAttribute('href');
+      const applyLogo = () => {
+        const custom = store.get('customLogo', null);
+        document.querySelectorAll('.brand-logo, .sc-rs-logo').forEach(img => { img.src = custom || DEFAULT_LOGO; });
+        if (favLink) favLink.href = custom || DEFAULT_FAV;
+        document.body.classList.toggle('sc-custom-logo', !!custom);
+      };
+      const toSquare = file => new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file), img = new Image();
+        img.onload = () => {
+          const n = 256, side = Math.min(img.naturalWidth, img.naturalHeight);
+          const c = document.createElement('canvas'); c.width = c.height = n;
+          c.getContext('2d').drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, n, n);
+          URL.revokeObjectURL(url); resolve(c.toDataURL('image/png'));
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('That file isn’t an image Chrome can read.')); };
+        img.src = url;
+      });
+      const openIconPopup = () => {
+        const custom = store.get('customLogo', null);
+        let pending = null; // picked but not saved yet
+        const m = modal(`
+          <div class="sc-modal-head"><div class="sc-modal-title">Make it yours</div><button type="button" class="sc-modal-x" data-close aria-label="Close">✕</button></div>
+          <div class="sc-icon-pop">
+            <button type="button" class="sc-icon-pick" aria-label="Choose a new icon" title="Choose a new icon"><img class="sc-icon-prev" alt="Current icon" src="${esc(custom || DEFAULT_LOGO)}"><span class="sc-icon-edit">${ICON.rename}</span></button>
+            <div class="sc-icon-txt"><p class="sc-icon-thanks">Thanks for using Space Cam!</p><p class="sc-icon-free">It’s free for everyone, always. It will never be paid. So go ahead and make it feel like your own.</p><p class="sc-icon-how">Click the icon to pick your logo or a photo, then press Save.</p><p class="sc-icon-contact">Found a bug or something not working? Email me at <a href="mailto:shovonix@gmail.com?subject=Space%20Cam%20feedback">shovonix@gmail.com</a> and I’ll fix it. And if you like Space Cam, tell me too. It really inspires me to build more tools like this.</p><p class="sc-icon-copy">© Shovonix</p></div>
+          </div>
+          <div class="sc-modal-row"><button type="button" class="btn ghost sc-icon-reset" ${custom ? '' : 'hidden'}>Revert to original icon</button><button type="button" class="btn primary sc-icon-save">Save</button></div>
+          <input type="file" accept="image/*" class="sc-icon-file" hidden>`);
+        const fileIn = m.wrap.querySelector('.sc-icon-file'), prev = m.wrap.querySelector('.sc-icon-prev'), reset = m.wrap.querySelector('.sc-icon-reset');
+        m.wrap.querySelector('.sc-icon-pick').onclick = () => fileIn.click();
+        fileIn.onchange = async () => {
+          const f = fileIn.files?.[0]; if (!f) return;
+          try { pending = await toSquare(f); prev.src = pending; reset.hidden = false; }
+          catch (e) { toast(e.message || 'Could not use that image.', 'error'); }
+          fileIn.value = '';
+        };
+        m.wrap.querySelector('.sc-icon-save').onclick = () => {
+          if (pending) { store.set('customLogo', pending); applyLogo(); toast('Icon saved.', 'ok'); }
+          m.close();
+        };
+        reset.onclick = () => { store.set('customLogo', null); applyLogo(); m.close(); toast('Back to the Space Cam icon.', 'ok'); }; // instant
+      };
+      // only the logo itself opens it, and only while the left panel is open (closed or focus mode: the small box just opens the panel)
+      document.addEventListener('click', e => {
+        const img = e.target.closest?.('#left-rail .brand-logo');
+        if (!img || document.body.classList.contains('sc-left-hidden')) return;
+        e.preventDefault(); e.stopPropagation(); openIconPopup();
+      }, true);
+      applyLogo();
+      setTimeout(applyLogo, 600); // the collapsed box copies the logo a moment after load
     }
   }
   // Install app button: hidden while testing on localhost, shown on the live site to anyone who hasn't installed it
@@ -998,7 +1641,7 @@ function init() {
       let shown = -1;
       w.onmessage = e => {
         const m = e.data;
-        if (m.ev === 'progress') { const p = Math.floor(m.p * 10) * 10; if (p !== shown && file.size > 20e6) { shown = p; toast(`Making MP3… ${p}%`); } }
+        if (m.ev === 'progress') { const p = Math.floor(m.p * 10) * 10; if (p !== shown && file.size > 20e6) { shown = p; if (savedEl) updateSavedText(`Making MP3… ${p}%`); else toast(`Making MP3… ${p}%`); } }
         else { w.terminate(); m.ev === 'done' ? resolve(m.blob) : reject(new Error(m.message)); }
       };
       w.onerror = e => { w.terminate(); reject(new Error(e.message || 'MP3 encoder failed')); };
@@ -1651,7 +2294,7 @@ function init() {
   // that timer for good, then it waits for Save / Enter (rename) or Esc / ✕ / a click outside (keep the name).
   // Stopped by an error: one card with the red warning on top, no timer, it waits for OK.
   // While the name box has the cursor, R types into it (the R shortcut ignores text boxes).
-  let savedT = null, savedEl = null, savedFor = null;
+  let savedT = null, savedEl = null, savedFor = null; const cardShown = new WeakSet(); // takes whose saved card already opened at stop
   function closeSaved() { clearTimeout(savedT); savedEl?.remove(); savedEl = savedFor = null; document.removeEventListener('keydown', savedKey, true); }
   function savedKey(e) { if (e.key === 'Escape' && savedEl) { e.preventDefault(); e.stopPropagation(); closeSaved(); } }
   function savedCard(t, where, { error = '', ms = 8000 } = {}) {
@@ -1699,6 +2342,7 @@ function init() {
     input.focus(); input.select();
     if (!error) savedT = setTimeout(closeSaved, ms);
   }
+  function updateSavedText(txt) { const w = savedEl?.querySelector('.sc-saved-where'); if (w) w.textContent = txt; }
   // the save finished while its card is still open: fill in where the files went
   function updateSaved(t, where) {
     if (!savedEl || savedFor !== t) return false;
@@ -1733,11 +2377,22 @@ function init() {
         catch (e) { toast('Could not save the video — it is still safe in the browser: ' + (e?.message || e), 'error'); }
       }
       delete t.saving; saveTakes(); renderTakes();
-      const parts = [t.camera && 'clip on the camera card', t.audio === 'folder' && `MP3 in “${t.folderName}”`, t.audio === 'kept' && 'MP3 in Downloads',
-        t.video === 'folder' && 'video in the folder', t.video === 'kept' && 'video in Downloads'].filter(Boolean);
-      const whereText = parts.length ? parts.join(', ').replace(/^./, c => c.toUpperCase()) : 'Nothing recorded';
+      // one line per place: "Saved in “Folder”" when the MP3 and the video went to the same place
+      const fname = `“${t.folderName || folder?.name || 'the folder'}”`;
+      const at = { folder: [], kept: [] };
+      if (t.audio === 'folder' || t.audio === 'kept') at[t.audio].push('MP3');
+      if (t.video === 'folder' || t.video === 'kept') at[t.video].push('video');
+      const parts = [];
+      for (const [k, place] of [['folder', fname], ['kept', 'Downloads']]) {
+        if (!at[k].length) continue;
+        const onlyHere = !at[k === 'folder' ? 'kept' : 'folder'].length;
+        parts.push(onlyHere ? `saved in ${place}` : `${at[k].join(' + ')} in ${place}`);
+      }
+      if (t.camera) parts.push('clip on the camera card');
+      const whereText = parts.length ? parts.join(' · ').replace(/^./, c => c.toUpperCase()) : 'Nothing recorded';
       if (updateSaved(t, whereText)) return; // its card (error stop) is open: just fill in the line
-      if (take || document.querySelector('.sc-modal')) toast(`${t.label || 'Take'} saved — ${parts.join(', ') || 'nothing recorded'}.`, 'ok'); // a take is rolling or a warning is open: don't cover it
+      if (cardShown.delete(t)) return; // its card was already shown and closed: no second box
+      if (take || document.querySelector('.sc-modal')) toast(`${t.label || 'Take'} — ${parts.join(' · ') || 'nothing recorded'}.`, 'ok'); // a take is rolling or a warning is open: don't cover it
       else savedCard(t, whereText);
     });
     return saveChain;
@@ -1852,11 +2507,20 @@ function init() {
     await w.write(blob); await w.close();
   }
   const hasSample = () => takes.some(t => t.demo) || !!window.spaceCamScripts?.hasDemo();
-  // Temporary: a small "Sample data" button in the Takes header. After the first real recording the samples
-  // remove themselves and the button goes away for good.
+  // Sample data on the live site too, for first-timers. It goes away by itself (remembered in this browser):
+  // after 3 takes of your own or 7 days after the first visit, or right away with its ×. While samples are
+  // loaded, "Remove samples" always stays so they can be cleaned up.
+  if (!store.get('firstSeen', 0)) store.set('firstSeen', Date.now());
+  const sampleX = h(`<button type="button" class="sc-sample-x" title="Hide sample data for good" aria-label="Hide sample data for good">✕</button>`);
+  sampleBtn.after(sampleX);
+  sampleX.onclick = () => { store.set('samplesHidden', true); renderSampleBtn(); };
+  const samplesRetired = () => store.get('samplesHidden', false)
+    || takes.filter(t => !t.demo && !t.recovered).length >= 3
+    || Date.now() - store.get('firstSeen', Date.now()) > 7 * 864e5;
   function renderSampleBtn() {
-    const on = hasSample();
-    sampleBtn.hidden = false; // testing phase: always available (auto-removal after the first take is off for now)
+    const on = hasSample(), retired = samplesRetired();
+    sampleBtn.hidden = !on && retired;
+    sampleX.hidden = on || retired;
     sampleBtn.className = 'sc-sample-btn' + (on ? ' on' : '');
     sampleBtn.textContent = on ? 'Remove samples' : 'Sample data';
     sampleBtn.title = on ? 'Remove the sample takes and scripts' : 'Load sample takes and scripts to try Space Cam';
@@ -1930,12 +2594,13 @@ function init() {
     ui.badge.hidden = !recording; ui.badgeTime.textContent = fmt(s);
     const warn = recording && !!take.limit && s >= take.limit.sec - 60;
     ui.badge.classList.toggle('warn', warn); ui.rec.classList.toggle('warn', warn);
-    ui.ccBadge.hidden = !recording; ui.ccTime.textContent = fmt(s); ui.ccBadge.classList.toggle('warn', warn);
+    ui.ccBadge.hidden = true; sendStageRec();
     if (big) { big.rec.classList.toggle('on', recording); big.recLabel.textContent = recording ? fmt(s) : 'Record'; big.badge.hidden = !recording; big.time.textContent = fmt(s); big.badge.classList.toggle('warn', warn); }
     renderCam(); renderMic();
   }
 
   async function startTake() {
+    closeBig(); // the settings window steps aside for the take
     const camOk = src === 'sony' && cam.state === 'connected' && cam.has('record');
     const vidOk = src === 'mac' && webOn();
     const micOk = audio.state === 'ready';
@@ -1945,7 +2610,24 @@ function init() {
       if ((await askSaveLocation()) === 'cancel') return;
     }
     if ((micOk || vidOk) && folder) await folderOk(true); // ask once while we still have the key press / click
-    if (!micOk) toast(vidOk ? 'No mic in Space Cam — the Mac-camera video will have no sound.' : 'No mic in Space Cam — make sure the camera or an external recorder is recording the sound.');
+    // everything that's connected records, or nothing does: a connected USB camera that can't be started stops the take
+    if (src === 'sony' && cam.state === 'connected' && !camOk) return stopWarning('The camera can’t record from here', 'The camera is connected, but Space Cam can’t start its recording. Put it in movie mode (PC Remote) and press Record again. Nothing was recorded.');
+    // camera on, mic off: ask once whether the camera records the sound itself (then a camera-only take is fine)
+    if (!micOk && (camOk || vidOk) && !sessionStorage.getItem('spaceCam.noMicOk')) {
+      const ok = await new Promise(resolve => {
+        let done = false; const finish = v => { if (!done) { done = true; resolve(v); } };
+        const mac = vidOk;
+        const m = modal(`
+          <div class="sc-modal-head"><div class="sc-modal-title">Your mic is off</div><button type="button" class="sc-modal-x" data-close aria-label="Close">✕</button></div>
+          <p class="sc-modal-p">${mac ? 'The Mac camera will record video without sound. Record anyway, or turn on the mic first?' : 'Is your camera recording the sound itself (its own or a plugged-in mic)? Then you can record without Space Cam’s mic.'}</p>
+          <div class="sc-modal-row"><button type="button" class="btn ghost sc-nomic-mic">Turn on the mic</button><button type="button" class="btn primary sc-ok">${mac ? 'Record without sound' : 'Yes, record without mic'}</button></div>`, { onClose: () => finish(false) });
+        const okBtn = m.wrap.querySelector('.sc-ok'); okBtn.focus();
+        okBtn.onclick = () => { finish(true); m.close(); };
+        m.wrap.querySelector('.sc-nomic-mic').onclick = () => { finish(false); m.close(); try { setRailTab('audio'); } catch {} ui.micOn?.click(); };
+      });
+      if (!ok) return;
+      sessionStorage.setItem('spaceCam.noMicOk', '1'); // asked once per session
+    }
     closeSaved();
     const started = new Date(), no = nextNo(), label = `Take_${no}`;
     let base = label;
@@ -1996,9 +2678,11 @@ function init() {
     }
     if (t.video === 'recording') t.video = v ? 'browser' : 'none';
     takes.push(t); saveTakes(); renderTakes(); renderRec();
+    try { renderSampleBtn(); } catch {} // 3rd take of your own: sample data goes away
     if (reason) { /* stopped by an error or a limit: stopTogether shows one card with the warning */ }
     else if (t.camera && t.audio !== 'browser' && t.video !== 'browser') savedCard(t, 'Clip on the camera card');
-    else toast(`${reason || `${t.label || 'Take'} done`}${t.audio === 'browser' || t.video === 'browser' ? ' — saving…' : t.camera ? ' — clip on the camera card.' : ''}`, 'ok');
+    else if (t.audio === 'browser' || t.video === 'browser') (cardShown.add(t), savedCard(t, 'Saving…')); // one card only: it fills in where the files went when the save is done
+    else toast(`${t.label || 'Take'} done`, 'ok');
     if (t.audio === 'browser' || t.video === 'browser') finishTake(t);
     if (src === 'sony') setTimeout(() => cam.refreshInfo(), 800);
   }
@@ -2092,7 +2776,7 @@ function init() {
     if (k === 'r') { e.preventDefault(); if (!e.repeat) toggleTake(); }
     else if (k === 'a') { e.preventDefault(); if (!e.repeat) afDown(); }
     else if (k === 'arrowleft' || k === 'arrowright') { if (cam.state === 'connected' && cam.has('mf')) { e.preventDefault(); focusBy(k === 'arrowleft' ? -1 : 1); } }
-    else if (k === 'g') { if (cam.state === 'connected') { e.preventDefault(); setGrid(ui.grid.hidden); } }
+    else if (k === 'g') { e.preventDefault(); setGrid(ui.grid.hidden); } // any camera (or none yet: the choice is remembered)
   }
   function onKeyUp(e) { if (e.key.toLowerCase() === 'a') afUp(); }
   document.addEventListener('keydown', onKeyDown);
@@ -2100,4 +2784,6 @@ function init() {
 
   setInterval(() => { if (cam.state === 'connected' && !take) cam.refreshInfo(); }, 60000);
   renderCam(); renderMic(); renderRec();
+  // ready: the body now carries the real panel state; drop the early ones and allow the slide animation again
+  requestAnimationFrame(() => requestAnimationFrame(() => document.documentElement.classList.remove('scp-l', 'scp-r', 'scp-loading')));
 }

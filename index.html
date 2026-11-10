@@ -1,6 +1,33 @@
 <meta charset="UTF-8">
 <script>/* Space Cam: a hard reload (Cmd+Shift+R) skips the service worker, so there is no controller. Remember it: that reload starts disconnected. */try{var nv=performance.getEntriesByType('navigation')[0];if(nv&&nv.type==='reload'&&navigator.serviceWorker&&!navigator.serviceWorker.controller)sessionStorage.setItem('spaceCamHardReload','1');}catch(e){}</script>
 <script>window.coi = { coepCredentialless: () => true };</script>
+<script>/* Space Cam, localhost only: ?fresh = see Voice scroll and the Shooting assistant like a first-time visitor (off, not tried yet). Scripts, takes and other settings stay. */try{if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)&&/[?&]fresh\b/.test(location.search)){['voiceOn','voiceEngine','assistOn','triedVoice','triedAssist'].forEach(function(k){localStorage.removeItem('spaceCam.'+k);});history.replaceState(null,'',location.pathname+location.hash);}}catch(e){}</script>
+<script>
+/* Space Cam: put the side panels in their saved state before the first paint (no open-then-close flash on reload),
+   with no slide animation until the page is ready. studio.js takes over and removes these classes. */
+(function(){
+  if(/^#stage/.test(location.hash)){ // Stage window / preview: show nothing until the page has switched to the Stage layout (no flash of the control panels)
+    document.documentElement.classList.add('scp-stage');
+    setTimeout(function(){ document.documentElement.classList.remove('scp-stage'); }, 3000); // safety net
+    return;
+  }
+  var d = document.documentElement, get = function(k){ try{ return JSON.parse(localStorage.getItem('spaceCam.' + k)); }catch(e){ return null; } };
+  d.classList.add('scp-loading');
+  var lh = get('leftHidden'); if(lh === null || lh) d.classList.add('scp-l'); // first visit: left panel closed, right open
+  if(get('rightHidden')) d.classList.add('scp-r');
+  setTimeout(function(){ d.classList.remove('scp-loading'); }, 4000); // safety net
+})();
+</script>
+<style>
+/* first paint after a reload: panels already in their saved state, no animation, raw contents hidden until arranged */
+html.scp-loading *,html.scp-loading *::before,html.scp-loading *::after{transition:none!important;animation-duration:0s!important}
+html.scp-loading #left-rail > *,html.scp-loading #right-rail > *{visibility:hidden}
+html.scp-l #left-rail{transform:translateX(-104%);visibility:hidden}
+html.scp-stage body:not(.stage-window){visibility:hidden}
+html.scp-l #stage{left:0!important}
+html.scp-r #right-rail{transform:translateX(104%);visibility:hidden}
+html.scp-r #stage{right:0!important}
+</style>
 <script src="coi-serviceworker.js"></script>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -773,8 +800,8 @@ body.touch #screen-note{order:5;margin-top:12px;padding:10px 12px;font-size:12px
   <div id="connected-frame"></div>
   <div id="stage-hint" class="hidden">
     <div id="stage-hint-card">
-      <div class="t" id="stage-hint-title">Staging Teleprompter Preview</div>
-      <div class="s" id="stage-hint-body">Drag this window onto your external display, then click anywhere (or press F) to go fullscreen. Press Play in the control window to start scrolling here. Press <kbd>Esc</kbd> any time to drop out of fullscreen and bring this card back.</div>
+      <div class="t" id="stage-hint-title">Stage window</div>
+      <div class="s" id="stage-hint-body"><ol><li><span>Drag this window onto your prompter screen.</span></li><li><span>Click anywhere or press <kbd>F</kbd> for full screen.</span></li><li><span>Click Play or press <kbd>Space</kbd> in the control window to start scrolling.</span></li></ol><p class="sh-tip"><span class="sh-ic"><span class="sh-c"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 10.5 21 8v8l-5-2.5"/></svg><i></i></span><span class="sh-m"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg><i></i></span></span><span>The <b>camera and mic signal</b> sits top right: grey when idle, lit while recording. Drag it anywhere: it snaps to the edges and the centre. Drag its corner to resize. It stays there next time.</span></p><p class="sh-esc"><kbd>Esc</kbd> leaves full screen and brings this card back.</p></div>
     </div>
   </div>
 
@@ -3281,10 +3308,13 @@ var qrcode = function() {
   // F/Esc, since it's not an actual external display.
   var isPreviewFrame = location.hash === '#stage-preview';
   var isStageWindow = location.hash === '#stage' || isPreviewFrame;
+  var stageDetached = false; // Space Cam: set when the control window disconnects a Stage it couldn't close
   if(isStageWindow) document.body.classList.add('stage-window');
 
   var bc = null;
   try{ bc = new BroadcastChannel('spaceCamSync'); }catch(e){}
+  // Space Cam: the real Stage window says goodbye as it closes, so the control window shows "off" at once
+  if(isStageWindow && !isPreviewFrame) addEventListener('pagehide', function(){ try{ bc && bc.postMessage({type:'bye'}); }catch(e){} });
   var applyingRemote = false; // guards against echo loops when applying an incoming message
   var suppressScrollSync = false; // true right after we set scrollTop ourselves, so the
   var suppressScrollSyncTimer = null; // scroll listener below doesn't re-broadcast our own seek
@@ -3500,7 +3530,7 @@ var qrcode = function() {
     scriptText.appendChild(frag);
     if(!isStageWindow && !text.trim()){
       // Space Cam: no script yet. Recording without a prompter is fine.
-      scriptText.innerHTML = '<div class="para sc-noscript">No script yet. To add one, click <b>+</b> next to Scripts on the left, or click the <b>Add script</b> button. Or just record without one.</div>';
+      scriptText.innerHTML = '<div class="para sc-noscript sc-welcome"><span class="sc-welcome-h">Welcome to Space Cam</span><span class="sc-welcome-s">A camera, teleprompter and microphone that work together. One Record button syncs every recording device in your room.</span><span class="sc-welcome-how">Click <b>Add script</b> below to paste your script, or open the left panel (top left) to pick one. Or just record without one.</span></div>';
     }
     applyViewScale();
     if(keepG !== null && isFinite(keepG)){
@@ -3702,6 +3732,7 @@ var qrcode = function() {
       var boxWidth = stagePreviewFrameWrap.clientWidth || 264;
       stagePreviewFrame.style.width = intrinsic + 'px';
       stagePreviewFrame.style.transform = 'scale(' + (boxWidth / intrinsic) + ')';
+      stagePreviewFrameWrap.style.aspectRatio = intrinsic + ' / 800'; // box takes the stage's real shape, no empty band
     }
     applyViewScale();
   }
@@ -3721,7 +3752,8 @@ var qrcode = function() {
   }
   function updateDim(){
     var paras = scriptText.querySelectorAll('.para');
-    var off = !paras.length || state.dimOn === false || !(state.dimPct > 0) || (typeof editMode !== 'undefined' && editMode);
+    var pctNow = state.dimPct == null ? 55 : state.dimPct; // same default as applyDim (the Stage may not have it yet)
+    var off = !paras.length || state.dimOn === false || !(pctNow > 0) || (typeof editMode !== 'undefined' && editMode);
     var cur = -1;
     if(!off){
       var y = (scroller.scrollTop + scroller.clientHeight * guideFrac) / viewK;
@@ -3732,7 +3764,13 @@ var qrcode = function() {
     dimCur = off ? -2 : cur;
     for(var j = 0; j < paras.length; j++) paras[j].classList.toggle('dim', !off && j !== cur);
   }
-  function scheduleDim(){ if(dimRaf) return; dimRaf = requestAnimationFrame(function(){ dimRaf = 0; updateDim(); }); }
+  // next frame; or after 150 ms if the window isn't painting (covered / in the background), so the highlight never sticks
+  function scheduleDim(){
+    if(dimRaf) return;
+    var run = function(){ if(!dimRaf) return; cancelAnimationFrame(dimRaf); dimRaf = 0; updateDim(); };
+    dimRaf = requestAnimationFrame(run);
+    setTimeout(run, 150);
+  }
   function applyBgOpacity(){
     // A contrast-preview control, not real window transparency (a web page
     // can't make a browser window see-through to the desktop behind it).
@@ -3746,7 +3784,7 @@ var qrcode = function() {
   function applySize(){
     scriptText.style.fontSize = state.fontSize + 'px';
     scheduleDim();
-    scriptText.style.lineHeight = String(state.lineSpacing || 1.5);
+    scriptText.style.lineHeight = '1.5'; // Space Cam: standard line spacing, no control (was state.lineSpacing)
     scriptText.style.setProperty('--para-gap', (state.paraSpacing == null ? 1.1 : state.paraSpacing) + 'em');
     scriptText.classList.toggle('pause-marks', state.pauseMarks !== false);
     var ls = document.getElementById('linesp'), lv = document.getElementById('linesp-val');
@@ -4461,7 +4499,7 @@ var qrcode = function() {
   fullscreenBtn.addEventListener('click', function(){
     try{
       if(!document.fullscreenElement){
-        var fsTarget = isSolo() ? document.documentElement : stage;
+        var fsTarget = (isSolo() || !isStageWindow) ? document.documentElement : stage; // Space Cam: whole page, so the corner buttons stay
         fsTarget.requestFullscreen && fsTarget.requestFullscreen().catch(function(){});
       }else{
         document.exitFullscreen && document.exitFullscreen().catch(function(){});
@@ -4478,6 +4516,7 @@ var qrcode = function() {
   var pedalCaptureActive = false;
 
   function renderPedalKeys(){
+    setTimeout(function(){ if(typeof placePedalPanel === 'function') placePedalPanel(); }, 0); // re-place once the list has its new size
     pedalKeysList.innerHTML = '';
     if(state.pedalKeys.length === 0){
       var empty = document.createElement('div');
@@ -4534,15 +4573,22 @@ var qrcode = function() {
   function togglePedalPanel(e){
     pedalPanel.classList.toggle('show');
     if(pedalPanel.classList.contains('show')){
-      var t = (e && e.currentTarget) || pedalBtn;
-      var r = t.getBoundingClientRect();
-      var w = pedalPanel.offsetWidth || 264;
-      pedalPanel.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left)) + 'px';
-      pedalPanel.style.top = (r.bottom + 8) + 'px';
+      pedalAnchor = (e && e.currentTarget) || pedalBtn;
+      renderPedalKeys();
+      placePedalPanel();
     }
-    if(pedalPanel.classList.contains('show')) renderPedalKeys();
     else endPedalCapture(false);
   }
+  // Space Cam: open below the button if it fits, otherwise above it; always inside the window, right-aligned to the button
+  var pedalAnchor = null;
+  function placePedalPanel(){
+    if(!pedalPanel.classList.contains('show') || !pedalAnchor) return;
+    var r = pedalAnchor.getBoundingClientRect(), w = pedalPanel.offsetWidth || 264, hgt = pedalPanel.offsetHeight || 200;
+    pedalPanel.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.right - w)) + 'px';
+    var below = r.bottom + 8, above = r.top - hgt - 8;
+    pedalPanel.style.top = (below + hgt <= window.innerHeight - 8 ? below : Math.max(8, above)) + 'px';
+  }
+  window.addEventListener('resize', placePedalPanel);
 
   addPedalBtn.addEventListener('click', function(){
     if(pedalCaptureActive){ endPedalCapture(false); return; }
@@ -4566,6 +4612,9 @@ var qrcode = function() {
     displayLabel.textContent = on ? 'Stage connected' : 'Connect stage';
     if(previewDot) previewDot.classList.toggle('on', on);
   }
+  // the Stage (and its mini preview) re-highlights the paragraph on the reading line whenever it moves too —
+  // before, only the control window did, so the Stage's highlight stuck unless something else refreshed it
+  if(isStageWindow){ scroller.addEventListener('scroll', scheduleDim, { passive: true }); window.addEventListener('resize', scheduleDim); }
   if(!isStageWindow){
     var stageWin = null;
     function updateDisplayBtn(){
@@ -4574,9 +4623,13 @@ var qrcode = function() {
     displayBtn.addEventListener('click', function(){
       // Toggle: if we already have the staging window open, this click
       // closes it. Otherwise open a fresh one.
-      if(stageWin && !stageWin.closed){
-        stageWin.close();
+      if((stageWin && !stageWin.closed) || Date.now() - lastHello < 4000){
+        // Space Cam: connected = this click disconnects, even when this window lost track of the Stage
+        // (after a reload, or a Stage opened elsewhere): tell every Stage to close / let go
+        if(stageWin && !stageWin.closed){ try{ stageWin.close(); }catch(e){} }
+        if(bc) bc.postMessage({type:'quitStage'});
         stageWin = null;
+        lastHello = 0; setStageConnected(false); // show off right away, don't wait for the heartbeat
         updateDisplayBtn();
         return;
       }
@@ -4595,7 +4648,7 @@ var qrcode = function() {
         // popup=1 and every other feature. Using a fresh name guarantees a
         // new context every time, so the popup request is never swallowed
         // by some old tab left over from testing an earlier version.
-        w = window.open(url, 'mgdTeleprompterStageV2', 'popup=1,width=1280,height=800,menubar=no,toolbar=no,location=no,status=no');
+        w = window.open(url, 'spaceCamStage' + Date.now(), 'popup=1,width=1280,height=800,left=80,top=80,menubar=no,toolbar=no,location=no,status=no'); // Space Cam: always a new window, never an old tab
       }catch(e){}
       stageWin = w;
       if(!w){
@@ -4620,6 +4673,8 @@ var qrcode = function() {
       });
     }
 
+    // Space Cam: notice a Stage window closed with its own close button within half a second
+    setInterval(function(){ if(stageWin && stageWin.closed){ stageWin = null; lastHello = 0; setStageConnected(false); updateDisplayBtn(); } }, 500);
     // Ping the stage window every few seconds; a reply flips the status dot green.
     setInterval(function(){
       if(bc) bc.postMessage({type:'ping'});
@@ -4856,7 +4911,7 @@ var qrcode = function() {
     try{ openedAsTab = !!(window.opener && window.toolbar && window.toolbar.visible === true); }catch(e0){}
     if(openedAsTab && stageHintTitle && stageHintBody){
       stageHintTitle.textContent = 'This opened as a tab, not a window';
-      stageHintBody.textContent = 'Drag this tab out of Chrome’s tab bar (or right-click it → "Move Tab to New Window") so it’s its own window you can place on your external display. Then click anywhere (or press F) to go fullscreen.';
+      stageHintBody.innerHTML = '<ol><li><span>Drag this tab out of Chrome’s tab bar, or right-click it and choose <b>Move Tab to New Window</b>.</span></li><li><span>Put that window on your prompter screen.</span></li><li><span>Click anywhere or press <kbd>F</kbd> for full screen.</span></li><li><span>Click Play or press <kbd>Space</kbd> in the control window to start scrolling.</span></li></ol><p class="sh-tip"><span class="sh-ic"><span class="sh-c"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 10.5 21 8v8l-5-2.5"/></svg><i></i></span><span class="sh-m"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg><i></i></span></span><span>The <b>camera and mic signal</b> sits top right: grey when idle, lit while recording. Drag it anywhere: it snaps to the edges and the centre. Drag its corner to resize. It stays there next time.</span></p><p class="sh-esc"><kbd>Esc</kbd> leaves full screen and brings this card back.</p>';
     }
     stageHint.classList.remove('hidden');
     stageHint.addEventListener('click', function(){
@@ -5218,10 +5273,15 @@ var qrcode = function() {
         // asking where the control window currently is — answer right
         // away rather than making it wait for the next periodic ping.
         sendSyncReply();
-      }else if(msg.type === 'quitStage' && isStageWindow && !isPreviewFrame){
+      }else if(msg.type === 'quitStage' && isStageWindow && !isPreviewFrame){ /* closing: 'bye' goes out on pagehide */
         try{ window.close(); }catch(e){}
+        // a tab the browser won't let us close: stop answering (so it doesn't show as connected again) and say so
+        stageDetached = true;
+        setTimeout(function(){ if(stageHintTitle && stageHintBody){ stageHintTitle.textContent = 'Disconnected'; stageHintBody.innerHTML = '<p class="sh-esc" style="margin:0;font-size:14px;color:#d6d6d8">The control window disconnected this Stage. You can close this tab, or press <b>Connect stage</b> there to open a new one.</p>'; stageHint.classList.remove('hidden'); } }, 300);
       }else if(msg.type === 'ping' && isStageWindow && !isPreviewFrame){
-        bc.postMessage({type:'hello'});
+        if(!stageDetached) bc.postMessage({type:'hello'});
+      }else if(msg.type === 'bye' && !isStageWindow){ // Space Cam: the Stage window just closed
+        lastHello = 0; setStageConnected(false);
       }else if(msg.type === 'hello' && !isStageWindow){
         lastHello = Date.now();
         setStageConnected(true);
@@ -5502,6 +5562,10 @@ var qrcode = function() {
   if(!isStageWindow) window.spaceCamScripts = {
     addDemo: function(list){
       list.forEach(function(x){ state.scripts.push({ id: genId(), name: x.name, text: x.text, updatedAt: Date.now(), createdAt: Date.now(), demo: true }); });
+      if(!findScript(state.activeScriptId) && state.scripts.length){ // nothing selected yet: show the newest script
+        state.activeScriptId = state.scripts[state.scripts.length - 1].id;
+        if(!stage.classList.contains('hidden')){ applyText(); applyPreviewVisibility(); seekTo(0); }
+      }
       save(); renderScriptTabs();
     },
     removeDemo: function(){
@@ -5564,6 +5628,10 @@ var qrcode = function() {
   }
   var marksClearBtn = null;
   function renderMarksClear(n){
+    if(!marksClearBtn){ // reuse one that's already on the page (never two)
+      var olds = document.querySelectorAll('.sc-marks-clear'); for(var oi = 1; oi < olds.length; oi++) olds[oi].remove();
+      marksClearBtn = olds[0] || null;
+    }
     if(!marksClearBtn){
       marksClearBtn = document.createElement('button');
       marksClearBtn.type = 'button'; marksClearBtn.className = 'sc-marks-clear';
@@ -5573,6 +5641,9 @@ var qrcode = function() {
         var s = activeScript(); if(s){ s.marks = []; save(); renderMarks(); }
       });
       stage.appendChild(marksClearBtn);
+    }
+    { var tools = document.querySelector('.sc-stage-tools'); if(tools && marksClearBtn.parentElement !== tools) tools.prepend(marksClearBtn); // Space Cam: sits in one row with Full screen
+
     }
     marksClearBtn.hidden = !n;
     marksClearBtn.innerHTML = '<span>Clear markers</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>';
@@ -5597,8 +5668,11 @@ var qrcode = function() {
       if(r && r2){ try{ r.setEnd(r2.startContainer, r2.startOffset); if(!r.collapsed) ranges.push(r); }catch(e){} }
       var y = lineY(paras, m.to); if(y === null) return;
       var el = document.createElement('div');
-      el.className = 'sc-mark' + (mi === s.marks.length - 1 ? ' last' : '');
+      el.className = 'sc-mark sc-mark-at' + (mi === s.marks.length - 1 ? ' last' : '');
       el.style.top = y + 'px';
+      // the marker sits where the take stopped (start of that line, on the left), no line across the page
+      { var rr = rangeAt(paras, m.to, 1), bx = rr ? (rr.getClientRects()[0] || rr.getBoundingClientRect()) : null;
+        if(bx) el.style.left = Math.max(0, (bx.left - scriptText.getBoundingClientRect().left) / viewK) + 'px'; }
       // a glowing dot at the end of the line, the take name and length beside it (no box); ✕ shows on hover
       var len = m.sec != null ? Math.floor(m.sec / 60) + ':' + String(m.sec % 60).padStart(2, '0') : '';
       el.innerHTML = '<span class="sc-mark-tag" title="Continue from here"><b></b><button type="button" class="sc-mark-x" aria-label="Remove this marker" title="Remove this marker">✕</button></span><i class="sc-mark-dot"></i>';
@@ -5619,7 +5693,7 @@ var qrcode = function() {
         bar.appendChild(t);
       }
     });
-    if(ranges.length && window.CSS && CSS.highlights && window.Highlight) CSS.highlights.set('sc-read', new Highlight(...ranges));
+    // markers only mark where a take stopped; they never grey out text (that confused which part is live)
   }
   if(!isStageWindow){
     try{ new ResizeObserver(function(){ renderMarks(); }).observe(scriptText); }catch(e){}
@@ -5627,7 +5701,13 @@ var qrcode = function() {
     // Space Cam: recording stopped → the prompter stops scrolling at once
     window.spaceCamPrompter = { pause: function(){ if(playing) pause(); } };
     window.spaceCamMarks = {
-      start: function(){ var s = activeScript(); if(!s || !s.text || !s.text.trim() || stage.classList.contains('hidden')) return null; var sp = spotAtGuide(); if(sp) clearDimFrom(sp); return sp ? { id: s.id, from: sp, sig: textSig(s.text) } : null; },
+      start: function(){ var s = activeScript(); if(!s || !s.text || !s.text.trim() || stage.classList.contains('hidden')) return null; var sp = spotAtGuide();
+        if(sp){
+          // a new take from here replaces what was recorded after this spot: those markers go (the read/grey part before stays)
+          if(s.marks && s.marks.length){ var before = s.marks.length; s.marks = s.marks.filter(function(m){ return cmpSpot(m.to, sp) <= 0; }); if(s.marks.length !== before){ save(); renderMarks(); } }
+          clearDimFrom(sp);
+        }
+        return sp ? { id: s.id, from: sp, sig: textSig(s.text) } : null; },
       stop: function(tok, take, sec, takeId){
         if(!tok) return null;
         var s = findScript(tok.id); if(!s || textSig(s.text) !== tok.sig) return null;
@@ -5646,172 +5726,311 @@ var qrcode = function() {
     };
   }
 
+  // ---- Voice scroll (Space Cam) ----
+  // Follows your reading: Chrome's speech recognition hears you, the last few spoken words are matched IN ORDER
+  // against the next ~40 words of the script (fuzzy, so accents and small mishearings still count), and the
+  // line with the matched word glides onto the reading line. Needs 2+ words lining up before it moves, so a
+  // stray "the" can't jump ahead. Silence = no movement. Re-reading a bit goes back. The Stage follows via seekTo.
+  (function(){
+    var btn = document.getElementById('voice-scroll-btn');
+    var statusEl = document.getElementById('voice-scroll-status');
+    var sec = document.getElementById('voice-scroll-sec');
+    if(!btn || isStageWindow) return;
+    var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if(!SR){ btn.disabled = true; btn.title = 'Voice scroll needs Chrome or Edge'; if(statusEl) statusEl.textContent = 'Needs Chrome or Edge.'; return; }
+    // Accent: Automatic (browser language if it's English, else US) · US · UK · Australia · Non-native English
+    // (Non-native uses Chrome's English model that copes best with non-native accents)
+    var LANGS = [['auto','Automatic'],['en-US','English (US)'],['en-GB','English (UK)'],['en-AU','English (Australia)'],['nonnative','Non-native English']];
+    var lang = 'auto'; try{ lang = JSON.parse(localStorage.getItem('spaceCam.voiceLang')) || 'auto'; }catch(e){}
+    if(lang === 'en-IN') lang = 'nonnative';
+    if(!LANGS.some(function(l){ return l[0] === lang; })) lang = 'auto';
+    function speechLang(){
+      if(lang === 'nonnative') return 'en-IN';
+      if(lang === 'auto'){ var n = (navigator.languages || [navigator.language || '']).find(function(x){ return /^en-/i.test(x); }); return n || 'en-US'; }
+      return lang;
+    }
+    var accRow = document.createElement('label'); accRow.className = 'vs-accent';
+    accRow.innerHTML = '<span><svg viewBox="0 0 24 24" class="sc-ic" aria-hidden="true"><path d="M4 5h16v10H10l-4 4v-4H4z"/><path d="M8 9h8M8 12h5"/></svg>Accent</span><select class="sc-select" aria-label="Voice scroll accent">' + LANGS.map(function(l){ return '<option value="'+l[0]+'">'+l[1]+'</option>'; }).join('') + '</select>';
+    if(sec) sec.insertBefore(accRow, statusEl || null);
+    var accSel = accRow.querySelector('select'); accSel.value = lang; accRow.hidden = true; // shows while Voice scroll is on
+    // Engine: Google (online, Chrome's speech service) or On this Mac (offline, Vosk; a 41 MB model downloaded once
+    // into the browser's storage, then it works without internet and nothing leaves the Mac)
+    var engine = 'local'; try{ engine = JSON.parse(localStorage.getItem('spaceCam.voiceEngine')) || 'local'; }catch(e){} // offline by default
+    var engRow = document.createElement('label'); engRow.className = 'vs-accent';
+    engRow.innerHTML = '<span><svg viewBox="0 0 24 24" class="sc-ic" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9.5 9.5h5v5h-5zM9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/></svg>Engine</span><select class="sc-select" aria-label="Voice scroll engine"><option value="google">Google</option><option value="local">On this Mac (offline)</option></select>';
+    var dlRow = document.createElement('div'); dlRow.className = 'vs-dl';
+    dlRow.innerHTML = '<button type="button" class="btn vs-dl-btn">Download offline voice</button><span class="vs-dl-bar" hidden><i></i></span><span class="vs-dl-note"></span><span class="vs-dl-what">Downloads the offline speech engine and English voice model: 41 MB, once. It stays in this browser, works without internet, and nothing you say leaves your Mac.</span>';
+    if(sec){ sec.insertBefore(engRow, accRow); sec.insertBefore(dlRow, statusEl || null); }
+    var engSel = engRow.querySelector('select'); engSel.value = engine;
+    var dlBtn = dlRow.querySelector('.vs-dl-btn'), dlBar = dlRow.querySelector('.vs-dl-bar'), dlFill = dlBar.querySelector('i'), dlNote = dlRow.querySelector('.vs-dl-note');
+    engRow.hidden = true; dlRow.hidden = true; setTimeout(function(){ renderEngine(); }, 0);
+    var MODEL_URL = new URL('models/vosk-model-small-en-us-0.15.tar.gz', location.href).href, MODEL_CACHE = 'spacecam-voice-v1';
+    var modelReady = false;
+    function hasModel(){ return (window.caches ? caches.open(MODEL_CACHE).then(function(c){ return c.match(MODEL_URL); }).then(function(r){ return !!r; }) : Promise.resolve(false)).catch(function(){ return false; }); }
+    // Engine always shows (so you can switch or download before turning Voice scroll on); Accent only for Google
+    function renderEngine(){
+      engRow.hidden = false;
+      accRow.hidden = engine !== 'google';
+      // greyed out while Voice scroll is off; active once it's on
+      [engRow, accRow, dlRow].forEach(function(r){ r.classList.toggle('vs-off', !active); });
+      engSel.disabled = accSel.disabled = !active;
+      if(!dlBar || dlBar.hidden) dlBtn.disabled = !active;
+      if(engine === 'local'){ hasModel().then(function(has){ modelReady = has; dlRow.hidden = has; }); } else dlRow.hidden = true;
+      dlRow.classList.remove('vs-off'); if(!dlBar || dlBar.hidden) dlBtn.disabled = false; // download works any time (you choose when)
+    }
+    engSel.addEventListener('change', function(){ engine = engSel.value; try{ localStorage.setItem('spaceCam.voiceEngine', JSON.stringify(engine)); }catch(e){} renderEngine(); if(active){ stopEngines(); start(); } });
+    dlBtn.addEventListener('click', function(){
+      dlBtn.disabled = true; dlBar.hidden = false; dlFill.style.width = '0%'; dlNote.textContent = 'Downloading…';
+      fetch(MODEL_URL).then(function(res){
+        if(!res.ok) throw new Error('HTTP ' + res.status);
+        var total = +res.headers.get('content-length') || 41184862, got = 0, chunks = [], rd = res.body.getReader();
+        function pump(){ return rd.read().then(function(r){ if(r.done) return; chunks.push(r.value); got += r.value.length; var pc = Math.min(100, Math.round(got / total * 100)); dlFill.style.width = pc + '%'; dlNote.textContent = pc + '%'; return pump(); }); }
+        return pump().then(function(){ return new Blob(chunks, { type: 'application/gzip' }); });
+      }).then(function(blob){
+        try{ navigator.storage && navigator.storage.persist && navigator.storage.persist(); }catch(e){}
+        return caches.open(MODEL_CACHE).then(function(c){ return c.put(MODEL_URL, new Response(blob, { headers: { 'Content-Type': 'application/gzip', 'Content-Length': String(blob.size) } })); });
+      }).then(function(){
+        modelReady = true; dlRow.hidden = true; dlNote.textContent = ''; dlBar.hidden = true; dlBtn.disabled = false; setStatus(active ? 'Offline voice ready.' : '');
+        if(active && engine === 'local'){ stopEngines(); start(); }
+      }).catch(function(e){ dlBtn.disabled = false; dlBar.hidden = true; dlNote.textContent = 'Download failed (' + (e && e.message || e) + '). Try again.'; });
+    });
+    accSel.addEventListener('change', function(){ lang = accSel.value; try{ localStorage.setItem('spaceCam.voiceLang', JSON.stringify(lang)); }catch(e){} if(active){ restart(); } });
+
+    // ---- words of the script, with where they sit in the text (positions are measured when needed) ----
+    var words = [], wordsDirty = true;
+    var NUM = {zero:'0',one:'1',two:'2',three:'3',four:'4',five:'5',six:'6',seven:'7',eight:'8',nine:'9',ten:'10',eleven:'11',twelve:'12',twenty:'20',thirty:'30',forty:'40',fifty:'50',hundred:'100'};
+    function norm(w){ w = String(w).toLowerCase().replace(/[’']/g,'').replace(/[^a-z0-9]/g,''); return NUM[w] || w; }
+    function buildWords(){
+      words = [];
+      var walker = document.createTreeWalker(scriptText, NodeFilter.SHOW_TEXT, null);
+      var node, re = /[A-Za-z0-9’']+/g, m;
+      while((node = walker.nextNode())){
+        if(node.parentElement && node.parentElement.closest('.sc-mark, .sc-mark-tag, button')) continue;
+        re.lastIndex = 0;
+        while((m = re.exec(node.nodeValue))){ var n = norm(m[0]); if(n) words.push({ n: n, node: node, a: m.index, b: m.index + m[0].length }); }
+      }
+      wordsDirty = false;
+    }
+    new MutationObserver(function(){ wordsDirty = true; }).observe(scriptText, { childList: true, subtree: true, characterData: true });
+    function wordRect(i){ var w = words[i]; if(!w || !w.node.isConnected) return null; var r = document.createRange(); try{ r.setStart(w.node, w.a); r.setEnd(w.node, w.b); }catch(e){ return null; } var rects = r.getClientRects(); return rects[0] || r.getBoundingClientRect(); }
+
+    // ---- fuzzy word match: same word, one letter off (longer words), or same consonant skeleton ----
+    function lev(a, b){ if(Math.abs(a.length - b.length) > 2) return 9; var p = [], i, j; for(j = 0; j <= b.length; j++) p[j] = j; for(i = 1; i <= a.length; i++){ var prev = p[0]; p[0] = i; for(j = 1; j <= b.length; j++){ var t = p[j]; p[j] = Math.min(p[j] + 1, p[j-1] + 1, prev + (a[i-1] === b[j-1] ? 0 : 1)); prev = t; } } return p[b.length]; }
+    function skel(w){ return w[0] + w.slice(1).replace(/[aeiouyhw]/g,'').replace(/(.)\1+/g,'$1'); }
+    function same(a, b){
+      if(a === b) return true;
+      var L = Math.min(a.length, b.length);
+      if(L >= 4 && lev(a, b) <= 1) return true;
+      if(L >= 7 && lev(a, b) <= 2) return true;
+      if(L >= 4 && skel(a) === skel(b)) return true;
+      return false;
+    }
+    // how many of the spoken words (in order) line up with the script ending at word j (j must match the last spoken word)
+    function scoreAt(spoken, j){
+      if(!same(spoken[spoken.length - 1], words[j].n)) return 0;
+      var score = 1, si = spoken.length - 2, wi = j - 1, skips = 0;
+      while(si >= 0 && wi >= 0 && wi >= j - spoken.length - 3){
+        if(same(spoken[si], words[wi].n)){ score++; si--; wi--; }
+        else if(si > 0 && same(spoken[si - 1], words[wi].n)){ si--; skips++; }   // an extra spoken word ("um")
+        else if(wi > 0 && same(spoken[si], words[wi - 1].n)){ wi--; skips++; }   // a skipped script word
+        else { si--; wi--; skips++; }
+        if(skips > 2) break;
+      }
+      return score;
+    }
+    var pos = -1; // last matched word
+    function wordAtGuide(){
+      if(!words.length) return -1;
+      var sr = scroller.getBoundingClientRect(), gy = sr.top + scroller.clientHeight * guideFrac, best = 0;
+      for(var i = 0; i < words.length; i += 3){ var r = wordRect(i); if(!r) continue; if(r.top <= gy) best = i; else break; }
+      return best;
+    }
+    // speech arrives ~½–1 s late: aim a few words past what was heard (by your pace) and keep coasting while you
+    // keep reading; stop shortly after the last match (silence)
+    var pace = 0, lastHitT = 0, hitPos = -1, shownIdx = -1, LAG = 0.5, COAST = 0.8, MAXLEAD = 4, RAMP0 = 0.3, RAMP1 = 0.9; // tuned 2026-11-10 with timed test speech: on your line ~70%, next line early only near line ends, behind ~1%
+    function aimAhead(){
+      if(pos < 0 || !words.length) return;
+      var since = lastHitT ? (performance.now() - lastHitT) / 1000 : 0;
+      var extra = pace ? pace * (LAG + Math.min(since, COAST)) : 0;
+      var idx = Math.min(words.length - 1, pos + Math.min(MAXLEAD, Math.round(extra)));
+      if(idx < shownIdx - 1 && pos < shownIdx - 3) shownIdx = -1; // you went back to re-read
+      if(idx !== shownIdx && idx >= shownIdx - 1){ shownIdx = idx; glideToWord(idx); }
+    }
+    setInterval(function(){ if(active && pace && lastHitT && performance.now() - lastHitT < COAST * 1000) aimAhead(); }, 120);
+    function match(transcript){
+      transcript = String(transcript).replace(/\[unk\]/gi, ' ');
+      if(wordsDirty) buildWords();
+      if(!words.length) return;
+      var spoken = transcript.split(/\s+/).map(norm).filter(Boolean).slice(-6);
+      if(spoken.length < 1) return;
+      if(pos < 0) pos = wordAtGuide();
+      var lo = Math.max(0, pos - 150), hi = Math.min(words.length - 1, pos + 80), best = -1, bestScore = 0, bestDist = 1e9;
+      for(var j = lo; j <= hi; j++){
+        var sc = scoreAt(spoken, j); if(!sc) continue;
+        var dist = j >= pos ? j - pos : (pos - j) * 3; // forward is more likely than back
+        var need = j < pos - 12 ? 4 : j < pos - 1 ? 3 : j > pos + 40 ? 3 : (spoken.length >= 2 ? 2 : 1); // big jumps need more words to agree
+        if(sc === 1 && !(j > pos && j <= pos + 3 && words[j].n.length >= 3)) continue; // one word alone only if it's one of the next three (and not a tiny word)
+        if(sc < need && sc !== 1) continue;
+        if(sc > bestScore || (sc === bestScore && dist < bestDist)){ best = j; bestScore = sc; bestDist = dist; }
+      }
+      if(best < 0) return;
+      var now = performance.now();
+      if(best > pos && pos >= 0 && lastHitT){ // learn the reading pace (words per second) from how fast matches move
+        var dt = (now - lastHitT) / 1000;
+        if(dt > 0.15 && dt < 3){ var inst = (best - pos) / dt; inst = Math.max(0.8, Math.min(5, inst)); pace = pace ? pace * 0.7 + inst * 0.3 : inst; }
+      }
+      if(best !== pos){ lastHitT = now; hitPos = best; }
+      pos = best; aimAhead(); flashHit();
+    }
+
+    // ---- glide: the line with the word eases onto the reading line ----
+    var target = null, glideRaf = 0, lastGlide = 0;
+    function glideToWord(i){
+      var r = wordRect(i); if(!r) return;
+      var sr = scroller.getBoundingClientRect();
+      // look ahead: the further along its line the word is, the more the text moves up, so by the last words of a
+      // line the NEXT line is already on the reading line (bright and readable before you get there)
+      var tr = scriptText.getBoundingClientRect(), cs = getComputedStyle(scriptText);
+      var left = tr.left + (parseFloat(cs.paddingLeft) || 0) * viewK, right = tr.right - (parseFloat(cs.paddingRight) || 0) * viewK;
+      var frac = right > left ? Math.max(0, Math.min(1, (r.left - left) / (right - left))) : 0;
+      var lineH = r.height * 1.5; // line spacing is fixed at 1.5
+      var ahead = Math.max(0, Math.min(1, (frac - RAMP0) / (RAMP1 - RAMP0))) * lineH; // the next line rises as you near the end of this one
+      var y = scroller.scrollTop + (r.top + r.height / 2 - sr.top) + ahead;
+      target = Math.max(0, y - scroller.clientHeight * guideFrac);
+      if(document.hidden){ seekTo(target); target = null; return; } // window not visible: animations pause, so go straight there
+      if(!glideRaf){ lastGlide = 0; glideRaf = requestAnimationFrame(glide); }
+    }
+    function glide(t){
+      if(target === null){ glideRaf = 0; return; }
+      var dt = lastGlide ? Math.min(0.05, (t - lastGlide) / 1000) : 0.016; lastGlide = t;
+      var cur = scroller.scrollTop, d = target - cur;
+      if(Math.abs(d) < 0.6){ seekTo(target); target = null; glideRaf = 0; return; }
+      seekTo(cur + d * Math.min(1, dt * 7));
+      glideRaf = requestAnimationFrame(glide);
+    }
+
+    // ---- recognition ----
+    var recog = null, active = false, startedAt = 0;
+    // a small box under the switch: green dot (glows while listening, flashes on every match) + what it heard
+    var liveDot = null, liveText = null;
+    if(statusEl){ statusEl.innerHTML = '<i class="vs-dot" aria-hidden="true"></i><span class="vs-said"></span>'; liveDot = statusEl.querySelector('.vs-dot'); liveText = statusEl.querySelector('.vs-said'); }
+    function setStatus(t){ if(!statusEl) return; liveText.textContent = t || ''; statusEl.classList.toggle('vs-empty', !t); statusEl.classList.toggle('vs-live', !!active); }
+    var hitT = 0;
+    function flashHit(){ if(!liveDot) return; liveDot.classList.remove('hit'); void liveDot.offsetWidth; liveDot.classList.add('hit'); clearTimeout(hitT); hitT = setTimeout(function(){ liveDot.classList.remove('hit'); }, 460); }
+    setStatus('');
+    // listen through the mic that's on in Space Cam (a copy of its track, so the recording is never touched).
+    // Chrome versions that can't take a track simply ignore it and use the Mac's default mic.
+    var micCopy = null, micName = '';
+    function micTrack(){
+      var m = window.spaceCamMic && window.spaceCamMic();
+      if(!m){ if(micCopy){ micCopy.stop(); micCopy = null; } micName = ''; return null; }
+      if(!micCopy || micCopy.readyState !== 'live' || micName !== m.label){ if(micCopy) micCopy.stop(); micCopy = m.track.clone(); micName = m.label; }
+      return micCopy;
+    }
+    function begin(){ var t = micTrack(); if(t){ try{ recog.start(t); return; }catch(e){ if(!(e instanceof TypeError)) throw e; } } recog.start(); }
+    function startGoogle(){
+      recog = new SR(); recog.lang = speechLang(); recog.continuous = true; recog.interimResults = true; recog.maxAlternatives = 1;
+      recog.onresult = function(e){
+        var txt = '';
+        for(var i = e.resultIndex; i < e.results.length; i++) txt += ' ' + e.results[i][0].transcript;
+        txt = txt.trim(); if(!txt) return;
+        setStatus('Heard: “' + txt.split(/\s+/).slice(-6).join(' ') + '”');
+        match(txt);
+      };
+      var me = recog;
+      recog.onerror = function(e){
+        if(me !== recog || engine !== 'google') return;
+        if(e.error === 'not-allowed' || e.error === 'service-not-allowed'){ setStatus('Allow the microphone for this site in Chrome, then turn Voice scroll on again.'); stop(); }
+        else if(e.error === 'network'){ setStatus('Voice scroll needs an internet connection (Chrome’s speech service).'); }
+        else if(e.error === 'audio-capture'){ setStatus('No microphone found.'); stop(); }
+      };
+      recog.onend = function(){ if(active){ setTimeout(function(){ if(active){ try{ begin(); }catch(ex){} } }, Date.now() - startedAt < 1000 ? 600 : 0); startedAt = Date.now(); } };
+      try{ begin(); startedAt = Date.now(); setStatus(micName ? 'Listening through ' + micName + '… start reading.' : 'Space Cam’s mic is off, so this uses the Mac’s default mic. Start reading.'); }catch(ex){ setStatus('Could not start: ' + ex.message); stop(); }
+    }
+    // ---- On this Mac: Vosk in a worker, listening only for the words in this script ----
+    var vosk = { model: null, loading: null, ctx: null, node: null, src: null, rec: null };
+    function loadVoskLib(){
+      if(window.Vosk) return Promise.resolve(window.Vosk);
+      return new Promise(function(ok, bad){ var sc = document.createElement('script'); sc.src = 'lib/vosk/vosk.js'; sc.onload = function(){ ok(window.Vosk); }; sc.onerror = function(){ bad(new Error('Could not load the offline voice engine')); }; document.head.appendChild(sc); });
+    }
+    function loadModel(){
+      if(vosk.model) return Promise.resolve(vosk.model);
+      if(vosk.loading) return vosk.loading;
+      vosk.loading = Promise.all([loadVoskLib(), caches.open(MODEL_CACHE).then(function(c){ return c.match(MODEL_URL); })]).then(function(r){
+        if(!r[1]) throw new Error('not downloaded');
+        return r[1].blob().then(function(b){ var u = URL.createObjectURL(b); return r[0].createModel(u).then(function(m){ URL.revokeObjectURL(u); vosk.model = m; return m; }); });
+      }).finally(function(){ vosk.loading = null; });
+      return vosk.loading;
+    }
+    function startLocal(){
+      if(!modelReady){ hasModel().then(function(has){ modelReady = has; if(has && active && engine === 'local') startLocal(); else { dlRow.hidden = false; setStatus('Download the offline voice first (button above), then it starts. Or switch Engine to Google.'); } }); return; }
+      setStatus('Starting the offline voice…');
+      loadModel().then(function(model){
+        if(!active || engine !== 'local') return;
+        var t = micTrack();
+        if(!t){ setStatus('Waiting for the mic: turn it on in the Mic tab above.'); setTimeout(function(){ if(active && engine === 'local' && !vosk.rec) startLocal(); }, 1500); return; } // no surprise mic prompt
+        var getStream = Promise.resolve(new MediaStream([t]));
+        return getStream.then(function(stream){
+          if(!active || engine !== 'local'){ stream.getTracks().forEach(function(x){ if(x !== micCopy) x.stop(); }); return; }
+          if(!t) vosk.ownStream = stream;
+          if(wordsDirty) buildWords();
+          // listen only for this script's words (plus number words for digits in the script)
+          var SPOKEN = {}; Object.keys(NUM).forEach(function(k){ SPOKEN[NUM[k]] = k; });
+          var vocab = []; var seen = {}; words.forEach(function(w){ var v = /^[a-z']+$/.test(w.n) ? w.n : SPOKEN[w.n]; if(v && !seen[v]){ seen[v] = 1; vocab.push(v); } });
+          vocab.push('[unk]');
+          var ctx = new AudioContext(); // the mic's own rate (forcing 16 kHz can fail in Chrome); Vosk resamples
+          var rec = new model.KaldiRecognizer(ctx.sampleRate, JSON.stringify(vocab));
+          rec.on('partialresult', function(m){ var p = m.result && m.result.partial; if(p){ setStatus('Heard: “' + p.split(/\s+/).slice(-6).join(' ') + '”'); match(p); } });
+          rec.on('result', function(m){ var p = m.result && m.result.text; if(p){ match(p); } });
+          var src = ctx.createMediaStreamSource(stream), node = ctx.createScriptProcessor(4096, 1, 1);
+          node.onaudioprocess = function(e){ try{ rec.acceptWaveform(e.inputBuffer); }catch(err){} };
+          src.connect(node); node.connect(ctx.destination); // the processor only runs when connected; it outputs silence
+          vosk.ctx = ctx; vosk.node = node; vosk.src = src; vosk.rec = rec;
+          setStatus((micName ? 'Listening offline through ' + micName : 'Listening offline (Mac’s default mic)') + '… start reading.');
+        });
+      }).catch(function(e){ setStatus('Offline voice could not start: ' + (e && e.message || e) + '. Voice scroll stays on; switch Engine to Google or try again.'); });
+    }
+    function stopLocal(){
+      try{ vosk.node && vosk.node.disconnect(); vosk.src && vosk.src.disconnect(); }catch(e){}
+      try{ vosk.rec && vosk.rec.remove(); }catch(e){}
+      try{ vosk.ctx && vosk.ctx.close(); }catch(e){}
+      if(vosk.ownStream){ vosk.ownStream.getTracks().forEach(function(x){ x.stop(); }); vosk.ownStream = null; }
+      vosk.ctx = vosk.node = vosk.src = vosk.rec = null;
+    }
+    function stopEngines(){
+      if(recog){ recog.onend = recog.onerror = recog.onresult = null; try{ recog.abort(); }catch(e){} recog = null; } // a stopped listener's late errors must not switch Voice scroll off
+      stopLocal();
+    }
+    function start(){ if(engine === 'local') startLocal(); else startGoogle(); }
+    function restart(){ stopEngines(); if(active) start(); }
+    function stop(){
+      active = false; btn.setAttribute('aria-pressed','false'); btn.classList.remove('active');
+      stopEngines();
+      target = null; setStatus(''); renderEngine();
+      if(micCopy){ micCopy.stop(); micCopy = null; }
+    }
+    // off until you turn it on (then remembered): offline voice, downloads on first use, listens once Space Cam's mic is on
+    function voicePref(v){ if(v === undefined){ try{ return !!JSON.parse(localStorage.getItem('spaceCam.voiceOn')); }catch(e){ return false; } } try{ localStorage.setItem('spaceCam.voiceOn', JSON.stringify(!!v)); }catch(e){} }
+    function activate(){
+      if(active) return;
+      active = true; btn.setAttribute('aria-pressed','true'); btn.classList.add('active'); renderEngine();
+      if(playing) pause(); // your voice drives the scroll now
+      buildWords(); pos = wordAtGuide(); shownIdx = pos; lastHitT = 0; // pace is kept between takes (it's yours)
+      start();
+    }
+    btn.addEventListener('click', function(){
+      if(active){ voicePref(false); stop(); return; }
+      voicePref(true); try{ localStorage.setItem('spaceCam.triedVoice', 'true'); document.body.classList.add('sc-tried-voice'); }catch(e){} activate();
+    });
+    if(voicePref()) setTimeout(activate, 1200);
+    // tapping a word or jumping elsewhere: start matching from the new spot
+    scroller.addEventListener('wheel', function(){ if(active){ pos = -1; shownIdx = -1; lastHitT = 0; } }, { passive: true });
+    scriptText.addEventListener('click', function(){ if(active) setTimeout(function(){ pos = -1; shownIdx = -1; lastHitT = 0; }, 0); });
+    window.spaceCamVoice = { get pace(){ return pace; }, tune: function(o){ if(o.LAG != null) LAG = o.LAG; if(o.COAST != null) COAST = o.COAST; if(o.MAXLEAD != null) MAXLEAD = o.MAXLEAD; if(o.RAMP0 != null) RAMP0 = o.RAMP0; if(o.RAMP1 != null) RAMP1 = o.RAMP1; }, stop: stop, get on(){ return active; }, feed: function(t){ match(t); }, get pos(){ return pos; }, word: function(i){ return words[i] && words[i].n; } }; // feed: test without a mic
+  })();
+
   window.claude = window.claude || {};
   if(window.claude.hot){
-    // ---- Voice scroll ----
-(function(){
-  var btn = document.getElementById('voice-scroll-btn');
-  var statusEl = document.getElementById('voice-scroll-status');
-  if(!btn) return;
-
-  var SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if(!SpeechRecognition){
-    btn.disabled = true;
-    btn.title = 'Speech recognition not supported in this browser';
-    if(statusEl) statusEl.textContent = 'Not supported in this browser.';
-    return;
-  }
-
-  var recog = null;
-  var active = false;
-
-  // Build a flat word list from the rendered script paragraphs, with their DOM positions.
-  // Each entry: { word, norm, el, wordIndex }
-  function buildWordIndex(){
-    var out = [];
-    var paras = document.querySelectorAll('#script-text .para');
-    if(!paras.length){
-      // fallback: entire scriptText
-      var t = document.getElementById('script-text');
-      if(t) paras = [t];
-    }
-    paras.forEach(function(para){
-      var text = para.textContent || '';
-      var words = text.split(/\s+/).filter(Boolean);
-      words.forEach(function(w, i){
-        out.push({ norm: w.toLowerCase().replace(/[^a-z0-9']/g,''), el: para, paraWordIndex: i, global: out.length });
-      });
-    });
-    return out;
-  }
-
-  // Find the word index closest to the current guide position
-  function currentWordIndex(wordList){
-    var scroller = document.getElementById('scroller');
-    if(!scroller || !wordList.length) return 0;
-    var gfrac = (typeof guideFrac !== 'undefined') ? guideFrac : 0.5;
-    var guideY = scroller.scrollTop + scroller.clientHeight * gfrac;
-    // Find the para whose top is just above guideY
-    var best = 0;
-    for(var i = wordList.length - 1; i >= 0; i--){
-      var rect = wordList[i].el.getBoundingClientRect();
-      var scrollerRect = scroller.getBoundingClientRect();
-      var elAbsTop = scroller.scrollTop + rect.top - scrollerRect.top;
-      if(elAbsTop <= guideY){
-        best = i;
-        break;
-      }
-    }
-    return best;
-  }
-
-  var wordList = [];
-  var matchPtr = 0;    // next expected word index
-  var WINDOW = 30;     // how many words ahead to scan for a match
-
-  function normalise(s){ return s.toLowerCase().replace(/[^a-z0-9']/g,''); }
-
-  function handleTranscript(transcript, isFinal){
-    if(!wordList.length) wordList = buildWordIndex();
-    var spoken = transcript.split(/\s+/).filter(Boolean).map(normalise).filter(Boolean);
-    if(!spoken.length) return;
-
-    // Try to match the last 1–3 spoken words against wordList starting near matchPtr
-    var lookAhead = Math.min(WINDOW, wordList.length - matchPtr);
-    for(var offset = 0; offset < lookAhead; offset++){
-      var idx = matchPtr + offset;
-      if(idx >= wordList.length) break;
-      var candidate = normalise(wordList[idx].norm);
-      // Match if any spoken word matches the candidate
-      for(var s = 0; s < spoken.length; s++){
-        if(spoken[s] && candidate && spoken[s] === candidate){
-          matchPtr = idx + 1;
-          scrollToWord(wordList[idx]);
-          return;
-        }
-      }
-    }
-  }
-
-  function scrollToWord(entry){
-    var scroller = document.getElementById('scroller');
-    if(!scroller) return;
-    var gfrac = (typeof guideFrac !== 'undefined') ? guideFrac : 0.5;
-    var scrollerRect = scroller.getBoundingClientRect();
-    var rect = entry.el.getBoundingClientRect();
-    // Target: put the paragraph's top at the guide line
-    var elAbsTop = scroller.scrollTop + rect.top - scrollerRect.top;
-    var target = elAbsTop - scroller.clientHeight * gfrac + rect.height * 0.5;
-    if(typeof seekTo === 'function'){
-      seekTo(target);
-    } else {
-      scroller.scrollTop = target;
-    }
-    // Flash highlight on the paragraph
-    entry.el.classList.add('voice-match');
-    setTimeout(function(){ entry.el.classList.remove('voice-match'); }, 400);
-  }
-
-  function startRecog(){
-    wordList = buildWordIndex();
-    matchPtr = currentWordIndex(wordList);
-    recog = new SpeechRecognition();
-    recog.lang = 'en-US';
-    recog.continuous = true;
-    recog.interimResults = true;
-    recog.maxAlternatives = 1;
-    recog.onresult = function(e){
-      for(var i = e.resultIndex; i < e.results.length; i++){
-        handleTranscript(e.results[i][0].transcript, e.results[i].isFinal);
-      }
-    };
-    recog.onerror = function(e){
-      if(e.error === 'not-allowed'){
-        if(statusEl) statusEl.textContent = 'Mic access denied.';
-        stopVoice();
-      } else if(e.error !== 'no-speech'){
-        if(statusEl) statusEl.textContent = 'Error: ' + e.error;
-      }
-    };
-    recog.onend = function(){
-      // Auto-restart unless we stopped intentionally
-      if(active){
-        try{ recog.start(); } catch(ex){}
-      }
-    };
-    try{
-      recog.start();
-      if(statusEl) statusEl.textContent = 'Listening…';
-    } catch(ex){
-      if(statusEl) statusEl.textContent = 'Could not start: ' + ex.message;
-      stopVoice();
-    }
-  }
-
-  function stopVoice(){
-    active = false;
-    btn.setAttribute('aria-pressed','false');
-    btn.classList.remove('active');
-    if(recog){ try{ recog.stop(); }catch(ex){} recog = null; }
-    if(statusEl) statusEl.textContent = '';
-  }
-
-  btn.addEventListener('click', function(){
-    if(active){ stopVoice(); return; }
-    active = true;
-    btn.setAttribute('aria-pressed','true');
-    btn.classList.add('active');
-    startRecog();
-  });
-
-  // Rebuild word index when script text changes
-  var scriptText = document.getElementById('script-text');
-  if(scriptText){
-    var mo = new MutationObserver(function(){ wordList = []; });
-    mo.observe(scriptText, { childList: true, subtree: true, characterData: true });
-  }
-})();
-
 window.claude.hot.snapshot(function(){ return { state: state }; });
     var boot = function(data){
       if(data && data.state) Object.assign(state, data.state);
@@ -5822,5 +6041,5 @@ window.claude.hot.snapshot(function(){ return { state: state }; });
 </script>
 <!-- Bump ?v= on every deploy so browsers load the new files instead of cached ones.
      studio.js passes the same ?v= on to every file it loads (engines, workers). -->
-<link rel="stylesheet" href="studio.css?v=2026-11-09b">
-<script type="module" src="studio.js?v=2026-11-09b"></script>
+<link rel="stylesheet" href="studio.css?v=2026-11-10-v1.0">
+<script type="module" src="studio.js?v=2026-11-10-v1.0"></script>

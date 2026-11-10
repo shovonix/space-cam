@@ -256,6 +256,27 @@ export const CamCore = class CamCore extends EventTarget {
     return this.#set('manualfocus', v, v < 0 ? 'Focus near' : 'Focus far', true);
   }
 
+  // ---------- exposure settings (ISO, shutter, aperture, white balance, exposure comp.) ----------
+  // Uses the camera's own choice lists, so only values the body accepts are offered. Some need the mode dial on M.
+  static SETTINGS = { iso: ['iso'], shutter: ['shutterspeed', 'shutterspeed2'], aperture: ['f-number', 'aperture'], wb: ['whitebalance'], ev: ['exposurecompensation'] };
+  #settingWidget(key) { for (const n of CamCore.SETTINGS[key] || []) if (this.#widgets[n]) return this.#widgets[n]; return null; }
+  /** { key: { value, choices, readonly } } for the settings this camera exposes with a choice list. */
+  settings() {
+    const out = {};
+    for (const key of Object.keys(CamCore.SETTINGS)) {
+      const w = this.#settingWidget(key);
+      if (w && Array.isArray(w.choices) && w.choices.length) out[key] = { value: w.value, choices: w.choices.slice(), readonly: !!w.readonly };
+    }
+    return out;
+  }
+  async setSetting(key, value) {
+    const w = this.#settingWidget(key);
+    if (!w || w.readonly || this.recording) return false;
+    const ok = await this.#set(w.name, value, `Set ${key} ${value}`, true);
+    if (ok) { w.value = value; this.#emitInfo(); }
+    return ok;
+  }
+
   // ---------- helpers ----------
   async #set(name, value, label, quiet = false) {
     if (!this.#camera) return false;

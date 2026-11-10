@@ -1,0 +1,6 @@
+# Big offline-engine files: not in git (option B, 2026-11-10). They're copied to the VPS by hand — see models/README.md.
+models/*.tar.gz
+models/*.tflite
+lib/vosk/vosk.js
+lib/mediapipe/wasm/
+.DS_Store

@@ -907,9 +907,20 @@ function init() {
   function fillCamProblem(box, kind, title, detail = '') {
     box.hidden = false;
     if (kind === 'unsupported') { box.innerHTML = `<b>${title}</b><p>Open Space Cam in Chrome or Edge on a Mac to control the camera.</p>`; return; }
-    box.innerHTML = `<b>${title}</b><p>Follow the setup steps below, then try again.</p>${detail ? `<small>Camera said: ${detail.replace(/</g, '&lt;')}</small>` : ''}`;
+    // the fix right here, ready to copy: macOS's camera service (ptpcamerad) is the usual reason a camera won't connect
+    const fix = `<p>${kind === 'feed' ? 'Unplug any other USB camera (one at a time). Then paste this in Terminal, unplug and replug the camera:' : 'macOS’s camera service is usually in the way. Paste this in Terminal, then unplug and replug the camera:'}</p>
+      <div class="sc-cmd"><code>${escA(FIX_CMD)}</code><button type="button" data-copy="${escA(FIX_CMD)}">Copy</button></div>`;
+    box.innerHTML = `<b>${title}</b>${fix}<p>Still stuck? Follow the setup steps below.</p>${detail ? `<small>Camera said: ${detail.replace(/</g, '&lt;')}</small>` : ''}`;
+    box.querySelectorAll('[data-copy]').forEach(b => b.onclick = async e => {
+      e.preventDefault();
+      const label = b.textContent; try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = 'Copied'; setTimeout(() => (b.textContent = label), 1500); } catch { toast('Could not copy.', 'error'); }
+    });
     ui.help.open = ui.help2.open = true;
   }
+  // Connected but the picture never draws (two USB cameras plugged in, or macOS's camera service in the way): say so, with the fix
+  { let bad = 0;
+    ui.img.addEventListener('error', () => { if (src !== 'sony' || cam.state !== 'connected' || !ui.img.getAttribute('src')) return; if (++bad === 8) showCamProblem('feed', 'Camera connected, but no picture'); });
+    ui.img.addEventListener('load', () => { if (bad >= 8) { ui.problem.hidden = ui.problem2.hidden = true; } bad = 0; }); }
   if (cam.state === 'unsupported') showCamProblem('unsupported', "This browser can't control USB cameras.");
 
   // Connect camera: connects whichever camera is picked in the dropdown.

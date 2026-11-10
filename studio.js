@@ -918,9 +918,24 @@ function init() {
     ui.help.open = ui.help2.open = true;
   }
   // Connected but the picture never draws (two USB cameras plugged in, or macOS's camera service in the way): say so, with the fix
+  // Connected but no picture after a fresh plug-in: the camera often still holds a half-open session. Reconnect once
+  // by itself with a USB reset (what a reload used to do). Only once a minute, so it can never loop.
+  let feedOk = false, feedT = 0, lastFix = 0;
+  async function fixFeed() {
+    if (src !== 'sony' || cam.state !== 'connected' || feedOk || take || cam.recording) return;
+    if (Date.now() - lastFix < 60000) return showCamProblem('feed', 'Camera connected, but no picture');
+    lastFix = Date.now(); console.warn('[Space Cam] no picture after connecting: reconnecting once with a USB reset');
+    camUserOff = true; await cam.disconnect().catch(() => {});
+    await new Promise(r => setTimeout(r, 800));
+    if (store.get('camAuto', false)) await cam.connect({ pick: false, reset: true });
+  }
+  cam.addEventListener('state', e => {
+    clearTimeout(feedT);
+    if (e.detail.state === 'connected') { feedOk = false; feedT = setTimeout(fixFeed, 6000); }
+  });
   { let bad = 0;
-    ui.img.addEventListener('error', () => { if (src !== 'sony' || cam.state !== 'connected' || !ui.img.getAttribute('src')) return; if (++bad === 8) showCamProblem('feed', 'Camera connected, but no picture'); });
-    ui.img.addEventListener('load', () => { if (bad >= 8) { ui.problem.hidden = ui.problem2.hidden = true; } bad = 0; }); }
+    ui.img.addEventListener('error', () => { if (src !== 'sony' || cam.state !== 'connected' || !ui.img.getAttribute('src')) return; if (++bad === 8) fixFeed(); });
+    ui.img.addEventListener('load', () => { feedOk = true; clearTimeout(feedT); if (bad >= 8) { ui.problem.hidden = ui.problem2.hidden = true; } bad = 0; }); }
   if (cam.state === 'unsupported') showCamProblem('unsupported', "This browser can't control USB cameras.");
 
   // Connect camera: connects whichever camera is picked in the dropdown.

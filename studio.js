@@ -744,7 +744,7 @@ function init() {
   };
 
   // ------------------------------------------------------------------ alert sounds
-  // Short synthesized beeps (no sound files): start = two rising tones (Rise), stop = two falling (Fall), error = one low buzz (Buzz). Prompter play/pause stays silent.
+  // Short synthesized beeps (no sound files): start = two rising tones (Rise), stop = two falling (Fall), error = two soft low knocks (Knock). Prompter play/pause stays silent.
   // One switch in the right rail turns them all on or off.
   let sfxCtx = null, sfxLastErr = 0;
   const sfxOn = kind => store.get('snd_' + kind, store.get('sounds', true)); // each sound has its own switch (old single switch is the default)
@@ -755,12 +755,12 @@ function init() {
     if (!force && !sfxOn(kind)) return;
     if (kind === 'error') { const n = performance.now(); if (n - sfxLastErr < 1500) return; sfxLastErr = n; } // one alarm per problem
     sfxWake(); if (!sfxCtx) return;
-    const tones = { start: [[660, 0, .09], [990, .11, .12]], stop: [[880, 0, .09], [520, .11, .14]], error: [[150, 0, .5]] }[kind];
+    const tones = { start: [[660, 0, .09], [990, .11, .12]], stop: [[880, 0, .09], [520, .11, .14]], error: [[220, 0, .07], [196, .12, .09]] }[kind];
     const t0 = sfxCtx.currentTime + .02;
     for (const [f, at, dur] of tones || []) {
       const o = sfxCtx.createOscillator(), g = sfxCtx.createGain();
-      o.type = kind === 'error' ? 'sawtooth' : 'sine'; o.frequency.value = f;
-      const v = kind === 'error' ? .08 : .2;
+      o.type = kind === 'error' ? 'triangle' : 'sine'; o.frequency.value = f;
+      const v = kind === 'error' ? .3 : .2;
       g.gain.setValueAtTime(0, t0 + at); g.gain.linearRampToValueAtTime(v, t0 + at + .01); g.gain.setValueAtTime(v, t0 + at + dur - .03); g.gain.linearRampToValueAtTime(0, t0 + at + dur);
       o.connect(g).connect(sfxCtx.destination); o.start(t0 + at); o.stop(t0 + at + dur + .02);
     }

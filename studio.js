@@ -918,16 +918,19 @@ function init() {
     ui.help.open = ui.help2.open = true;
   }
   // Connected but the picture never draws (two USB cameras plugged in, or macOS's camera service in the way): say so, with the fix
-  // Connected but no picture after a fresh plug-in: the camera often still holds a half-open session. Reconnect once
-  // by itself with a USB reset (what a reload used to do). Only once a minute, so it can never loop.
-  let feedOk = false, feedT = 0, lastFix = 0;
+  // Connected but no picture after a fresh plug-in: the camera library in this page holds on to the old, dead session,
+  // and only a fresh page clears it (that's why a reload always fixed it). So reload by itself, once: never while
+  // recording or saving, and at most once a minute (remembered across the reload), so it can never loop.
+  let feedOk = false, feedT = 0;
   async function fixFeed() {
-    if (src !== 'sony' || cam.state !== 'connected' || feedOk || take || cam.recording) return;
-    if (Date.now() - lastFix < 60000) return showCamProblem('feed', 'Camera connected, but no picture');
-    lastFix = Date.now(); console.warn('[Space Cam] no picture after connecting: reconnecting once with a USB reset');
-    camUserOff = true; await cam.disconnect().catch(() => {});
-    await new Promise(r => setTimeout(r, 800));
-    if (store.get('camAuto', false)) await cam.connect({ pick: false, reset: true });
+    if (src !== 'sony' || cam.state !== 'connected' || feedOk) return;
+    const last = Number(sessionStorage.getItem('spaceCam.feedReload') || 0);
+    if (take || cam.recording || takes.some(t => t.saving) || Date.now() - last < 60000) return showCamProblem('feed', 'Camera connected, but no picture');
+    sessionStorage.setItem('spaceCam.feedReload', String(Date.now()));
+    console.warn('[Space Cam] no picture after connecting: reloading once to get it');
+    toast('Getting the camera picture…');
+    await cam.release();
+    location.reload();
   }
   cam.addEventListener('state', e => {
     clearTimeout(feedT);

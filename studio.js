@@ -827,9 +827,10 @@ function init() {
   function renderMacCam() {
     const on = webOn(), busyW = web.state === 'connecting';
     ui.empty.hidden = on; ui.img.hidden = true; ui.vid.hidden = !on; ui.info.hidden = true; ui.disconnect.hidden = !on;
-    if (on) for (const v of [ui.vid, ui.ccVid]) if (v.srcObject && v.paused) v.play().catch(() => {}); // iPhone leaves a video paused if play() ran while it was hidden
     { const ps = $('scPrevSet'); if (ps) { ps.disabled = !on; ps.title = on ? 'Focus, exposure and framing on the big screen' : 'Turn the camera on first'; } } if (!on && src === 'mac') closeBig?.();
     centerCam.hidden = !on; document.body.classList.toggle('sc-cam-bg', on);
+    // iPhone leaves a video paused if play() ran while it was hidden: play once both are shown, and again a moment later
+    if (on) { const kick = () => { for (const v of [ui.vid, ui.ccVid]) if (v.srcObject && v.paused) v.play().catch(() => {}); }; kick(); requestAnimationFrame(kick); setTimeout(kick, 400); }
     ui.connect.disabled = busyW || !WebcamCore.supported;
     ui.connect.disabled = busyW || !WebcamCore.supported;
     ui.connect.textContent = busyW ? 'Starting…' : 'Connect camera';
@@ -963,6 +964,10 @@ function init() {
   // right-rail box takes the Mac camera's real ratio too
   const vidRatio = () => { if (ui.vid.videoWidth && src === 'mac') ui.preview.style.aspectRatio = `${ui.vid.videoWidth} / ${ui.vid.videoHeight}`; };
   ui.vid.addEventListener('loadedmetadata', vidRatio); ui.vid.addEventListener('resize', vidRatio);
+  // last resort on iPhone: the first tap anywhere starts any camera video that is still paused
+  const wakeVids = () => { for (const v of [ui.vid, ui.ccVid]) if (v.srcObject && v.paused) v.play().catch(() => {}); };
+  document.addEventListener('pointerdown', wakeVids, true);
+  for (const v of [ui.vid, ui.ccVid]) v.addEventListener('loadedmetadata', () => v.play().catch(() => {}));
   // ---- Camera dropdown: USB cameras that are plugged in (and allowed before) + every camera the Mac sees ----
   const usbName = d => { const n = cameraName(d?.productName || ''); return n === 'Connected' ? (d?.manufacturerName ? `${d.manufacturerName} camera` : 'USB camera') : n; };
   async function fillCamPick() {

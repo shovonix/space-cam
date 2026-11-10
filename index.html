@@ -801,7 +801,7 @@ body.touch #screen-note{order:5;margin-top:12px;padding:10px 12px;font-size:12px
   <div id="stage-hint" class="hidden">
     <div id="stage-hint-card">
       <div class="t" id="stage-hint-title">Stage window</div>
-      <div class="s" id="stage-hint-body"><ol><li><span>Drag this window onto your prompter screen.</span></li><li><span>Click anywhere or press <kbd>F</kbd> for full screen.</span></li><li><span>Click Play or press <kbd>Space</kbd> in the control window to start scrolling.</span></li></ol><p class="sh-tip"><span class="sh-ic"><span class="sh-c"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 10.5 21 8v8l-5-2.5"/></svg><i></i></span><span class="sh-m"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg><i></i></span></span><span>The <b>camera and mic signal</b> sits top right: grey when idle, lit while recording. Drag it anywhere: it snaps to the edges and the centre. Drag its corner to resize. It stays there next time.</span></p><p class="sh-esc"><kbd>Esc</kbd> leaves full screen and brings this card back.</p></div>
+      <div class="s" id="stage-hint-body"><ol><li><span>Drag this window onto your prompter screen.</span></li><li><span>Click anywhere or press <kbd>F</kbd> for full screen.</span></li><li><span>Click Play or press <kbd>Space</kbd> in the control window to start scrolling.</span></li></ol><p class="sh-tip"><span class="sh-ic"><span class="sh-c"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 10.5 21 8v8l-5-2.5"/></svg><i></i></span><span class="sh-m"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg><i></i></span></span><span>The <b>camera and mic signal</b> sits top centre: grey when idle, lit while recording. Drag it anywhere: it snaps to the edges and the centre. Drag its corner to resize. It stays there next time.</span></p><p class="sh-esc"><kbd>Esc</kbd> leaves full screen and brings this card back.</p></div>
     </div>
   </div>
 
@@ -4911,7 +4911,7 @@ var qrcode = function() {
     try{ openedAsTab = !!(window.opener && window.toolbar && window.toolbar.visible === true); }catch(e0){}
     if(openedAsTab && stageHintTitle && stageHintBody){
       stageHintTitle.textContent = 'This opened as a tab, not a window';
-      stageHintBody.innerHTML = '<ol><li><span>Drag this tab out of Chrome’s tab bar, or right-click it and choose <b>Move Tab to New Window</b>.</span></li><li><span>Put that window on your prompter screen.</span></li><li><span>Click anywhere or press <kbd>F</kbd> for full screen.</span></li><li><span>Click Play or press <kbd>Space</kbd> in the control window to start scrolling.</span></li></ol><p class="sh-tip"><span class="sh-ic"><span class="sh-c"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 10.5 21 8v8l-5-2.5"/></svg><i></i></span><span class="sh-m"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg><i></i></span></span><span>The <b>camera and mic signal</b> sits top right: grey when idle, lit while recording. Drag it anywhere: it snaps to the edges and the centre. Drag its corner to resize. It stays there next time.</span></p><p class="sh-esc"><kbd>Esc</kbd> leaves full screen and brings this card back.</p>';
+      stageHintBody.innerHTML = '<ol><li><span>Drag this tab out of Chrome’s tab bar, or right-click it and choose <b>Move Tab to New Window</b>.</span></li><li><span>Put that window on your prompter screen.</span></li><li><span>Click anywhere or press <kbd>F</kbd> for full screen.</span></li><li><span>Click Play or press <kbd>Space</kbd> in the control window to start scrolling.</span></li></ol><p class="sh-tip"><span class="sh-ic"><span class="sh-c"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 10.5 21 8v8l-5-2.5"/></svg><i></i></span><span class="sh-m"><svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg><i></i></span></span><span>The <b>camera and mic signal</b> sits top centre: grey when idle, lit while recording. Drag it anywhere: it snaps to the edges and the centre. Drag its corner to resize. It stays there next time.</span></p><p class="sh-esc"><kbd>Esc</kbd> leaves full screen and brings this card back.</p>';
     }
     stageHint.classList.remove('hidden');
     stageHint.addEventListener('click', function(){
@@ -6042,5 +6042,5 @@ window.claude.hot.snapshot(function(){ return { state: state }; });
 </script>
 <!-- Bump ?v= on every deploy so browsers load the new files instead of cached ones.
      studio.js passes the same ?v= on to every file it loads (engines, workers). -->
-<link rel="stylesheet" href="studio.css?v=2026-11-10-v1.1e">
-<script type="module" src="studio.js?v=2026-11-10-v1.1e"></script>
+<link rel="stylesheet" href="studio.css?v=2026-11-10-v1.2">
+<script type="module" src="studio.js?v=2026-11-10-v1.2"></script>

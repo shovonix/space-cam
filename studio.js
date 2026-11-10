@@ -146,9 +146,9 @@ function initStageCam() {
       lastUrl = u;
     }
   };
-  // REC + audio signal, top right of the Stage (not mirrored: it sits outside the script)
+  // REC + audio signal, top centre of the Stage (not mirrored: it sits outside the script)
   const { el: ind, set: setInd } = recIndicator(); stage.append(ind);
-  floatOnStage(stage, ind, 'spaceCam.stageRecPos', { ax: 'right', ay: 'top' });
+  floatOnStage(stage, ind, 'spaceCam.stageRecPos', { ax: 'center', ay: 'top' }); // starts top centre (drag to move; the spot is remembered)
   // Shooting assistant tips on the Stage too: a floating card, bottom centre by default, drag / resize like the signal
   const tipCard = document.createElement('div'); tipCard.className = 'sc-stage-tip'; tipCard.hidden = true; tipCard.setAttribute('aria-live', 'polite');
   tipCard.innerHTML = '<span class="sc-st-ic"></span><span class="sc-st-txt"></span>';

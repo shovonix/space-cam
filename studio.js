@@ -121,8 +121,8 @@ function initStageCam() {
   const copy = () => { for (const p of ['inset', 'left', 'top', 'width', 'height', 'transform']) layer.style[p] = scroller.style[p]; };
   new MutationObserver(copy).observe(scroller, { attributes: true, attributeFilter: ['style'] });
   copy();
-  let stream = null, devId = null, lastUrl = null;
-  const stopStream = () => { stream?.getTracks().forEach(t => t.stop()); stream = null; devId = null; vid.srcObject = null; };
+  let stream = null, devId = null, lastUrl = null, shared = false;
+  const stopStream = () => { if (!shared) stream?.getTracks().forEach(t => t.stop()); stream = null; devId = null; shared = false; vid.srcObject = null; }; // never stop the page's own camera stream
   let ch; try { ch = new BroadcastChannel('spaceCamCam'); } catch { return; }
   ch.onmessage = async ({ data: m }) => {
     if (!m) return;
@@ -133,7 +133,12 @@ function initStageCam() {
       layer.dataset.src = m.on ? m.src : 'off';
       if (!m.on || m.src !== 'mac') stopStream();
       if (!m.on || m.src !== 'usb') img.removeAttribute('src');
-      if (m.on && m.src === 'mac' && (!stream || devId !== (m.deviceId || ''))) {
+      // This page already has the camera open (phone: control window = Stage): show that same stream.
+      // Phones allow only one camera stream; opening a second one turns the first black.
+      const own = window.spaceCamWebStream?.();
+      if (m.on && m.src === 'mac' && own?.active) {
+        if (stream !== own) { stopStream(); stream = own; shared = true; devId = m.deviceId || ''; vid.srcObject = own; vid.play().catch(() => {}); }
+      } else if (m.on && m.src === 'mac' && (!stream || !stream.active || devId !== (m.deviceId || ''))) {
         stopStream();
         try {
           stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { deviceId: m.deviceId ? { exact: m.deviceId } : undefined, width: { ideal: 1280 }, height: { ideal: 720 } } });
@@ -189,7 +194,9 @@ function init() {
   // Which camera you picked in the Camera dropdown: 'usb' (a camera over USB in PC Remote mode, controlled with gphoto2:
   // Sony tested, other brands may work) or 'mac:<deviceId>' (FaceTime, iPhone, webcam, OBS…).
   // Internally src 'sony' = the USB camera path, 'mac' = the browser camera path.
-  let camPick = String(store.get('camPick', 'usb')).replace(/^sony$/, 'usb');
+  const isPhone = matchMedia('(max-width: 760px), (pointer: coarse) and (max-width: 1366px)').matches || /iPhone|iPad|Android/.test(navigator.userAgent);
+  const MACCAM = isPhone ? 'Phone camera' : 'Mac camera'; // the browser camera: the phone's own camera on a phone
+  let camPick = String(store.get('camPick', isPhone ? 'mac:' : 'usb')).replace(/^sony$/, 'usb'); // phone: its own camera by default
   let src = camPick.startsWith('mac') ? 'mac' : 'sony';
   document.body.dataset.src = src;
   const webOn = () => web.state === 'connected';
@@ -426,7 +433,7 @@ function init() {
     const camOn = src === 'mac' ? web.state === 'connected' : cam.state === 'connected';
     const camRec = (src === 'mac' && web.recording) || (src !== 'mac' && cam.recording);
     const camBad = !camOn && src !== 'mac' && (cam.state === 'disconnected' || !ui.problem.hidden);
-    const camName = src === 'mac' ? 'Mac camera' : cameraName(cam.model).replace(/ ·.*/, '');
+    const camName = src === 'mac' ? MACCAM : cameraName(cam.model).replace(/ ·.*/, '');
     dot('cam', camRec ? 'rec' : camOn ? 'ok' : camBad ? 'bad' : '', 'Camera: ' + (camRec ? 'recording' : camOn ? camName : camBad ? 'disconnected' : 'off'));
     const aOn = audio.state !== 'off';
     if (aOn) railMicBad = false;
@@ -825,10 +832,10 @@ function init() {
     ui.connect.disabled = busyW || !WebcamCore.supported;
     ui.connect.disabled = busyW || !WebcamCore.supported;
     ui.connect.textContent = busyW ? 'Starting…' : 'Connect camera';
-    ui.connectSub.textContent = WebcamCore.supported ? (ui.camPick.selectedOptions[0]?.textContent || 'Mac camera') : 'Needs Chrome or Edge';
+    ui.connectSub.textContent = WebcamCore.supported ? (ui.camPick.selectedOptions[0]?.textContent || MACCAM) : 'Needs Chrome or Edge';
     ui.gridBtn.disabled = false; ui.big.disabled = true; ui.big.title = 'Big preview works with the Sony';
     ui.disconnect.textContent = 'Turn off Mac camera';
-    ui.camState.textContent = web.recording ? 'Recording' : on ? 'Mac camera' : busyW ? 'Starting' : 'Off';
+    ui.camState.textContent = web.recording ? 'Recording' : on ? MACCAM : busyW ? 'Starting' : 'Off';
     ui.camState.className = 'sc-state' + (web.recording ? ' rec' : on ? ' on' : '');
   }
   let camUserOff = false; // true between your own 'off' and the camera reporting disconnected
@@ -922,6 +929,7 @@ function init() {
   };
 
   // ---- Mac camera (instead of the Sony) ----
+  window.spaceCamWebStream = () => web.stream; // the Stage layer in this same page reuses it
   web.addEventListener('state', () => {
     const s = web.stream;
     for (const v of [ui.vid, ui.ccVid]) if (v.srcObject !== s) { v.srcObject = s; if (s) v.play().catch(() => {}); }
@@ -941,12 +949,12 @@ function init() {
     if (cam.state === 'connected') opts.push(['usb', `${cameraName(cam.model)} (USB)`]);
     else if (usb.length) opts.push(['usb', `${usbName(usb[0])} (USB)`]);
     // Before camera access is allowed, Chrome hides the names, so they show as one "Mac camera" entry.
-    if (vids.length && vids.every(d => !d.label)) opts.push(['mac:', 'Mac camera']);
+    if (vids.length && vids.every(d => !d.label)) opts.push(['mac:', MACCAM]);
     else vids.forEach((d, i) => opts.push(['mac:' + d.deviceId, d.label || `Camera ${i + 1}`]));
     // the open camera (or the saved pick) must stay in the list
     const cur = src === 'mac' && webOn() ? 'mac:' + web.deviceId : camPick;
     if (cur.startsWith('mac') && !opts.some(o => o[0] === cur)) {
-      const generic = opts.find(o => o[0] === 'mac:'); if (generic) generic[0] = cur; else opts.push([cur, web.label || 'Mac camera']);
+      const generic = opts.find(o => o[0] === 'mac:'); if (generic) generic[0] = cur; else opts.push([cur, web.label || MACCAM]);
     }
     if (CamCore.supported) opts.push(['usb:add', 'Add USB camera…']);
     ui.camPick.replaceChildren(...opts.map(([v, t]) => { const o = document.createElement('option'); o.value = v; o.textContent = t; return o; }));
@@ -1439,6 +1447,44 @@ function init() {
       setRight(!!store.get('rightHidden', false)); // also sets the gear's look and label
     }
   }
+  // ---- Phone (narrow screens): the script takes the whole screen; the side panels are drawers over it ----
+  {
+    const phoneQ = matchMedia('(max-width: 760px), (pointer: coarse) and (max-width: 1366px)'); // phones and tablets (touch, up to iPad Pro size)
+    const applyPhone = () => {
+      const on = phoneQ.matches;
+      document.body.classList.toggle('sc-phone', on);
+      if (on) { leftSet?.(true); rightSet?.(true); } // start with both drawers closed
+    };
+    applyPhone(); phoneQ.addEventListener('change', applyPhone);
+    // tap the script (or anywhere outside an open drawer) to close it
+    $('stage').addEventListener('pointerdown', e => {
+      if (!document.body.classList.contains('sc-phone')) return;
+      if (e.target.closest('.sc-stage-tools, #bottombar, .sc-assist-tip')) return;
+      if (!document.body.classList.contains('sc-left-hidden')) leftSet?.(true);
+      if (!document.body.classList.contains('sc-right-hidden')) rightSet?.(true);
+    }, true);
+    // swipe in from the left edge = left panel, from the right edge = right panel
+    let sw = null;
+    document.addEventListener('touchstart', e => {
+      if (!document.body.classList.contains('sc-phone') || e.touches.length !== 1) { sw = null; return; }
+      const x = e.touches[0].clientX, w = innerWidth;
+      sw = x < 28 ? { side: 'left', x, y: e.touches[0].clientY } : x > w - 28 ? { side: 'right', x, y: e.touches[0].clientY } : null;
+    }, { passive: true });
+    document.addEventListener('touchmove', e => {
+      if (!sw) return;
+      const dx = e.touches[0].clientX - sw.x, dy = Math.abs(e.touches[0].clientY - sw.y);
+      if (dy > 60) { sw = null; return; } // a vertical scroll, not a swipe
+      if (sw.side === 'left' && dx > 50) { leftSet?.(false); sw = null; }
+      else if (sw.side === 'right' && dx < -50) { rightSet?.(false); sw = null; }
+    }, { passive: true });
+    // opening one drawer closes the other
+    new MutationObserver(() => {
+      if (!document.body.classList.contains('sc-phone')) return;
+      const l = !document.body.classList.contains('sc-left-hidden'), r = !document.body.classList.contains('sc-right-hidden');
+      if (l && r) (document.body.dataset.lastOpen === 'left' ? leftSet : rightSet)?.(true); // close the one that was open before
+      document.body.dataset.lastOpen = r ? 'right' : l ? 'left' : '';
+    }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  }
   // Focus mode + full screen (top right, next to Clear markers):
   //  - Focus: closes both side panels; click again to open both. Two icons for the two states.
   //  - Full screen: the whole page goes full screen with both panels closed (the Space Cam box and the gear stay, to
@@ -1791,11 +1837,11 @@ function init() {
       const inFolder = t.audio === 'folder' || t.video === 'folder';
       const browserOnly = t.audio === 'browser' || t.video === 'browser';
       const sub = [whenLabel(t.startedAt), t.seconds != null ? fmt(t.seconds) : ''].filter(Boolean).join(' · ');
-      const right = browserOnly && folder ? `<button type="button" class="btn primary sc-take-save">${ICON.save}<span>Save to folder</span></button>` : '';
+      const right = isPhone && hasVideo && (t.video === 'kept' || t.video === 'browser') ? `<button type="button" class="btn primary sc-take-photos">${ICON.save}<span>${t.photos ? 'Save to Photos again' : 'Save to Photos'}</span></button>` : browserOnly && folder ? `<button type="button" class="btn primary sc-take-save">${ICON.save}<span>Save to folder</span></button>` : '';
       // where the files are, in words: the chosen folder's name, Downloads, or not saved yet
       const tdir = inFolder ? await takeDir(t) : null;
       if (cur !== t) return;
-      const savedIn = t.demo ? 'Sample take' : inFolder ? `Saved in “${esc(tdir?.name || t.folderName || 'your folder')}”` : (t.audio === 'kept' || t.video === 'kept' || t.audio === 'saved') ? 'Saved in Downloads' : browserOnly ? 'Not saved to a folder yet' : t.demo ? 'Sample take' : '';
+      const savedIn = t.demo ? 'Sample take' : inFolder ? `Saved in “${esc(tdir?.name || t.folderName || 'your folder')}”` : isPhone && t.video === 'kept' ? (t.photos ? 'Saved to Photos and Downloads' : 'Saved to Downloads') : (t.audio === 'kept' || t.video === 'kept' || t.audio === 'saved') ? 'Saved in Downloads' : browserOnly ? 'Not saved to a folder yet' : t.demo ? 'Sample take' : '';
       pane.innerHTML = `
         <div class="sc-modal-head">
           <div class="sc-take-namebox"><div class="sc-take-nameline"><input class="sc-take-name" value="${esc(takeLabel(t))}" maxlength="80" spellcheck="false" aria-label="Take name — click to rename" title="Click to rename"><button type="button" class="sc-take-namepen" title="Rename" aria-label="Rename">${ICON.rename}</button></div><div class="sc-modal-name">${esc(sub)}</div></div>
@@ -1844,6 +1890,7 @@ function init() {
       const wireRow = () => {
         row.querySelector('.sc-take-del').onclick = askDelete;
         row.querySelector('.sc-take-save')?.addEventListener('click', async () => { m.close(); await saveTake(t); });
+        row.querySelector('.sc-take-photos')?.addEventListener('click', () => saveToPhotos(t));
         const sb = row.querySelector('.sc-take-rename-save'); if (sb) { saveBtn = sb; sb.hidden = !changed(); sb.onclick = doRename; }
       };
       wireRow();
@@ -2057,6 +2104,15 @@ function init() {
     return true;
   }
   // Mac-camera video of a take
+  // Phone: the take (one MP4, picture + sound) stays in the browser; the share sheet puts it in Photos / the gallery.
+  async function saveToPhotos(t) {
+    let file; try { file = await web.getStoredFile(t.videoName); } catch { return toast('This take’s video is no longer on the phone.', 'error'); }
+    const name = (t.label ? safeFileName(t.label, { ...t, audio: 'none' }).replace(/\.mp3$/i, '') : t.videoName.replace(/\.[a-z0-9]+$/i, '')) + (/\.[a-z0-9]+$/i.exec(t.videoName)?.[0] || '.mp4');
+    const f = new File([file], name, { type: file.type || 'video/mp4' });
+    if (navigator.canShare?.({ files: [f] })) {
+      try { await navigator.share({ files: [f] }); t.photos = true; saveTakes(); renderTakes(); } catch (e) { if (e?.name !== 'AbortError') toast('Could not open the share sheet: ' + (e?.message || e), 'error'); }
+    } else { downloadBlob(f, name); t.photos = true; saveTakes(); renderTakes(); toast(`${name} saved.`, 'ok'); }
+  }
   async function downloadVideo(t, quiet = false) {
     let file; try { file = await web.getStoredFile(t.videoName); } catch { return toast('This take’s video is no longer in the browser.', 'error'), false; }
     const ext = /\.[a-z0-9]+$/i.exec(t.videoName)?.[0] || '.mp4';
@@ -2291,6 +2347,7 @@ function init() {
     } catch (e) { if (e?.name !== 'AbortError') toast('Could not save: ' + (e?.message || e), 'error'); }
   }
   async function saveVideo(t) {
+    if (isPhone) { await downloadVideo(t, true); t.video = 'kept'; return; } // phone: one MP4 (picture + sound) saved once, by itself; Save to Photos from the card
     if (await folderOk(false)) {
       const fin = await freeName(folder, t.videoName);
       await web.moveToFolder(t.videoName, folder, fin); t.videoName = fin; t.video = 'folder'; t.folderName = folder.name; await idb.set('dir:' + t.id, folder);
@@ -2323,6 +2380,7 @@ function init() {
           </span>
           ${error ? '' : '<button type="button" class="sc-modal-x" aria-label="Close">✕</button>'}
         </div>
+        ${isPhone && t.videoName ? '<button type="button" class="btn primary sc-saved-photos">Save to Photos</button>' : ''}
         ${error ? '<div class="sc-saved-foot"><span class="sc-saved-hint"><kbd>Enter</kbd> OK</span><button type="button" class="btn primary sc-saved-save">OK</button></div>'
                 : '<span class="sc-saved-hint"><kbd>Enter</kbd> save · <kbd>Esc</kbd> keep the name · <span class="sc-saved-left">keeps it in 8 s</span></span><i class="sc-saved-bar"></i>'}
       </div></div>`);
@@ -2344,6 +2402,7 @@ function init() {
     input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); commit(); } else if (e.key !== 'Escape') hold(); });
     input.addEventListener('input', hold);
     savedEl.querySelector('.sc-saved-save').onclick = commit;
+    savedEl.querySelector('.sc-saved-photos')?.addEventListener('click', () => { hold(); saveToPhotos(t); });
     savedEl.querySelector('.sc-modal-x')?.addEventListener('click', closeSaved);
     if (!error) savedEl.addEventListener('mousedown', e => { if (e.target === savedEl) closeSaved(); });
     document.addEventListener('keydown', savedKey, true);
@@ -2398,6 +2457,7 @@ function init() {
         parts.push(onlyHere ? `saved in ${place}` : `${at[k].join(' + ')} in ${place}`);
       }
       if (t.camera) parts.push('clip on the camera card');
+      if (isPhone && t.video === 'kept') parts.splice(0, parts.length, /iPhone|iPad|Macintosh/.test(navigator.userAgent) ? 'Saved to Downloads (Files) · Save to Photos puts it in Photos' : 'Saved to Downloads (shows in the gallery)');
       const whereText = parts.length ? parts.join(' · ').replace(/^./, c => c.toUpperCase()) : 'Nothing recorded';
       if (updateSaved(t, whereText)) return; // its card (error stop) is open: just fill in the line
       if (cardShown.delete(t)) return; // its card was already shown and closed: no second box
@@ -2612,23 +2672,24 @@ function init() {
     closeBig(); // the settings window steps aside for the take
     const camOk = src === 'sony' && cam.state === 'connected' && cam.has('record');
     const vidOk = src === 'mac' && webOn();
-    const micOk = audio.state === 'ready';
-    if (!camOk && !micOk && !vidOk) return toast('Connect the camera or enable a microphone first.', 'error');
+    const micReady = audio.state === 'ready';
+    const micOk = micReady && !(isPhone && vidOk); // phone: the mic goes into the MP4, no separate audio file
+    if (!camOk && !micReady && !vidOk) return toast('Connect the camera or enable a microphone first.', 'error');
     if (player && !player.audio.paused) { player.audio.pause(); } // a take playing back would end up in the new recording
-    if ((micOk || vidOk) && !folder && !store.get('folderChoice', '')) { // first take: ask once where takes go
+    if (!isPhone && (micOk || vidOk) && !folder && !store.get('folderChoice', '')) { // first take: ask once where takes go
       if ((await askSaveLocation()) === 'cancel') return;
     }
-    if ((micOk || vidOk) && folder) await folderOk(true); // ask once while we still have the key press / click
+    if (!isPhone && (micOk || vidOk) && folder) await folderOk(true); // ask once while we still have the key press / click
     // everything that's connected records, or nothing does: a connected USB camera that can't be started stops the take
     if (src === 'sony' && cam.state === 'connected' && !camOk) return stopWarning('The camera can’t record from here', 'The camera is connected, but Space Cam can’t start its recording. Put it in movie mode (PC Remote) and press Record again. Nothing was recorded.');
     // camera on, mic off: ask once whether the camera records the sound itself (then a camera-only take is fine)
-    if (!micOk && (camOk || vidOk) && !sessionStorage.getItem('spaceCam.noMicOk')) {
+    if (!micReady && (camOk || vidOk) && !sessionStorage.getItem('spaceCam.noMicOk')) {
       const ok = await new Promise(resolve => {
         let done = false; const finish = v => { if (!done) { done = true; resolve(v); } };
         const mac = vidOk;
         const m = modal(`
           <div class="sc-modal-head"><div class="sc-modal-title">Your mic is off</div><button type="button" class="sc-modal-x" data-close aria-label="Close">✕</button></div>
-          <p class="sc-modal-p">${mac ? 'The Mac camera will record video without sound. Record anyway, or turn on the mic first?' : 'Is your camera recording the sound itself (its own or a plugged-in mic)? Then you can record without Space Cam’s mic.'}</p>
+          <p class="sc-modal-p">${mac ? `The ${MACCAM.toLowerCase()} will record video without sound. Record anyway, or turn on the mic first?` : 'Is your camera recording the sound itself (its own or a plugged-in mic)? Then you can record without Space Cam’s mic.'}</p>
           <div class="sc-modal-row"><button type="button" class="btn ghost sc-nomic-mic">Turn on the mic</button><button type="button" class="btn primary sc-ok">${mac ? 'Record without sound' : 'Yes, record without mic'}</button></div>`, { onClose: () => finish(false) });
         const okBtn = m.wrap.querySelector('.sc-ok'); okBtn.focus();
         okBtn.onclick = () => { finish(true); m.close(); };
@@ -2642,7 +2703,7 @@ function init() {
     let base = label;
     if (takes.some(t => t.name === `${base}.wav` || t.name === `${base}.mp3` || (t.videoName || '').startsWith(base + '.'))) base = `${label} (${pad(started.getHours())}${pad(started.getMinutes())}${pad(started.getSeconds())})`;
     const name = `${base}.wav`;
-    const micTrack = micOk ? audio.stream?.getAudioTracks()[0] : null;
+    const micTrack = micReady ? audio.stream?.getAudioTracks()[0] : null;
     const [a, c, v] = await Promise.all([micOk ? audio.startRecording(name) : false, camOk ? cam.startRecording() : false, vidOk ? web.startRecording(base, micTrack) : null]);
     // Everything starts together or nothing does: a take with the camera rolling but no audio (or the other way round)
     // can't be synced later. Undo whatever did start, and say what failed.

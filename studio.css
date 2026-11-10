@@ -1527,3 +1527,79 @@ input[type=range]::-webkit-slider-thumb{box-shadow:0 0 3px rgba(255,255,255,.12)
 /* download cards: start under the switch name (not the icon), end with the switches; a line says what's inside */
 #right-rail .vs-dl{margin:2px 0 8px 24px!important;width:calc(100% - 24px)}
 #right-rail .vs-dl-what{display:block;width:100%;margin-top:5px;font-size:11px;line-height:1.4;color:#8a8a8f}
+/* ---- Phone (≤760px): script full screen, side panels as drawers on top, compact bottom bar ---- */
+@media (max-width:760px), (pointer:coarse) and (max-width:1366px){
+  body.sc-phone:not(.stage-window) #stage{left:0!important;right:0!important}
+  body.sc-phone #left-rail,body.sc-phone #right-rail{width:min(88vw,360px)!important;z-index:60;box-shadow:0 0 60px rgba(0,0,0,.75)}
+  body.sc-phone #display-btn{display:none!important} /* no second display on a phone */
+  body.sc-phone #bottombar .cap-side,body.sc-phone #bottombar button{min-width:0!important;height:44px}
+  body.sc-phone #progress-wrap{left:16px!important;right:16px!important}
+  body.sc-phone .sc-stage-tools{top:10px!important;right:10px!important;gap:6px}
+  body.sc-phone .sc-stage-tools .sc-marks-clear{display:none!important}
+  body.sc-phone .sc-rail-show{top:10px!important;left:10px!important}
+  body.sc-phone .sc-rshow{top:10px!important;right:10px!important}
+  body.sc-phone .sc-wave-center{left:16px!important;right:16px!important}
+  body.sc-phone .sc-assist-tip{top:64px;max-width:calc(100% - 24px)}
+  body.sc-phone .sc-camset{width:calc(100% - 24px)!important;flex-wrap:wrap}
+}
+@media (max-width:760px), (pointer:coarse) and (max-width:1366px){
+  body.sc-phone .sc-stage-tools{right:60px!important}
+  body.sc-phone .sc-stage-tools .sc-focus-btn,body.sc-phone .sc-stage-tools #fullscreen-btn{display:none!important}
+  body.sc-phone #bottombar{justify-content:space-between!important}
+  body.sc-phone #bottombar #edit-toggle span,body.sc-phone #bottombar .cap-side:not(.sc-rec) span{display:none!important}
+  body.sc-phone #bottombar > *{flex:0 0 auto}
+  body.sc-phone #bottombar .cap-side.sc-rec{flex:1 1 auto!important;max-width:none;justify-content:center}
+}
+@media (max-width:760px), (pointer:coarse) and (max-width:1366px){
+  body.sc-phone #edit-btn{min-width:0!important;width:auto!important;padding:0 14px!important}
+  body.sc-phone #edit-btn span{display:none!important}
+}
+/* Phone: no Stage window, no Camera settings / Big preview, no save folder (takes go to Photos) */
+@media (max-width:760px), (pointer:coarse) and (max-width:1366px){
+  body.sc-phone .only-dual:not(.sc-tab), body.sc-phone #stage-preview-box, body.sc-phone .sc-connsw[data-k="pr"],
+  body.sc-phone #scPrevSet, body.sc-phone #scBig, body.sc-phone .sc-save-loc{display:none!important}
+}
+
+/* Phone polish: compact top row, even bottom bar */
+@media (max-width:760px), (pointer:coarse) and (max-width:1366px){
+  body.sc-phone #bottombar{align-items:center}
+  body.sc-phone #bottombar .sep, body.sc-phone #bottombar > i, body.sc-phone #bottombar > span:empty{display:none!important}
+}
+/* Phone: slimmer drawers; notices small at the top instead of big in the middle; popups as bottom sheets */
+@media (max-width:760px), (pointer:coarse) and (max-width:1366px){
+  body.sc-phone #left-rail,body.sc-phone #right-rail{width:min(70vw,280px)!important}
+  body.sc-phone .sc-keys-wrap{display:none!important} /* no keyboard on a phone */
+  body.sc-phone .sc-toast{top:calc(env(safe-area-inset-top) + 62px)!important;bottom:auto!important;left:12px!important;right:12px!important;transform:none!important;min-width:0!important;max-width:none!important;width:auto!important;padding:10px 10px 10px 12px!important;gap:10px!important;border-radius:14px!important;animation:scPhoneDrop .2s ease-out!important}
+  body.sc-phone .sc-toast-ic{width:26px;height:26px}
+  body.sc-phone .sc-toast-ic svg{width:15px;height:15px}
+  body.sc-phone .sc-toast-txt b{font-size:13.5px}
+  body.sc-phone .sc-toast-txt span{font-size:12px}
+  body.sc-phone .sc-saved{align-items:flex-start!important;padding:calc(env(safe-area-inset-top) + 62px) 12px 12px!important;background:transparent!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;pointer-events:none}
+  body.sc-phone .sc-saved-card{pointer-events:auto;width:100%!important;padding:12px!important;gap:10px!important;animation:scPhoneDrop .2s ease-out!important}
+  body.sc-phone .sc-take-thumb.sc-saved-thumb{width:64px;height:40px}
+  body.sc-phone .sc-saved-hint{display:none!important}
+  body.sc-phone .sc-modal{align-items:flex-end!important;padding:12px!important;padding-bottom:max(12px,env(safe-area-inset-bottom))!important;background:rgba(0,0,0,.55)!important}
+  body.sc-phone .sc-modal-card{width:100%!important;max-height:calc(100dvh - 80px)!important;overflow:auto;padding:16px!important;gap:12px!important;border-radius:18px!important;animation:scPhoneRise .2s ease-out!important}
+}
+@keyframes scPhoneDrop{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:none}}
+@keyframes scPhoneRise{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:none}}
+/* Phone top row: logo + name + version, and every top button the same 44 px height */
+@media (max-width:760px), (pointer:coarse) and (max-width:1366px){
+  body.sc-phone .sc-rail-show{top:calc(env(safe-area-inset-top) + 10px)!important;left:10px!important;height:44px;padding:0 10px 0 6px!important;gap:9px!important;border-radius:12px!important;box-sizing:border-box}
+  body.sc-phone .sc-rs-logo{width:32px;height:32px;border-radius:8px}
+  body.sc-phone:not(.stage-window).prompting.sc-right-hidden .sc-rshow, body.sc-phone .sc-rshow{top:calc(env(safe-area-inset-top) + 10px)!important;right:10px!important;width:44px!important;height:44px!important;border-radius:12px!important}
+  body.sc-phone .sc-rshow svg{width:20px;height:20px}
+  body.sc-phone .sc-stage-tools{top:calc(env(safe-area-inset-top) + 10px)!important;right:62px!important;left:auto!important;transform:none!important;height:44px;align-items:center}
+  body.sc-phone .sc-stage-tools .sc-stage-rec{height:44px;box-sizing:border-box;border-radius:12px}
+  /* bottom bar: only as wide as it needs, centred: Edit · Play · Record */
+  body.sc-phone #bottombar{left:50%!important;right:auto!important;transform:translateX(-50%)!important;width:auto!important;max-width:calc(100vw - 24px)!important;gap:10px!important;padding:6px 8px!important;bottom:max(12px,env(safe-area-inset-bottom))!important;align-items:center}
+  body.sc-phone #bottombar #edit-btn{width:46px!important;height:46px!important;padding:0!important;border-radius:50%!important;flex:none;justify-content:center}
+  body.sc-phone #bottombar #play{width:54px!important;height:54px!important;flex:none}
+  body.sc-phone #bottombar .cap-side.sc-rec{flex:none!important;width:auto!important;min-width:0!important;height:46px!important;padding:0 18px!important;border-radius:23px!important;justify-content:center}
+}
+/* Phone: smaller camera preview, no Shooting assistant (desktop-only) */
+@media (max-width:760px), (pointer:coarse) and (max-width:1366px){
+  body.sc-phone #scPreview{max-height:34vh;aspect-ratio:auto!important;height:auto}
+  body.sc-phone #scPreview video,body.sc-phone #scPreview img{max-height:34vh;object-fit:contain}
+  body.sc-phone .sc-new-assist, body.sc-phone .sc-swgrid:has(#scAssistLight), body.sc-phone .sc-assist-dl{display:none!important}
+}

@@ -14,6 +14,7 @@
   var d = document.documentElement, get = function(k){ try{ return JSON.parse(localStorage.getItem('spaceCam.' + k)); }catch(e){ return null; } };
   d.classList.add('scp-loading');
   var lh = get('leftHidden'); if(lh === null || lh) d.classList.add('scp-l'); // first visit: left panel closed, right open
+  if(matchMedia('(max-width: 760px), (pointer: coarse) and (max-width: 1366px)').matches){ d.classList.add('scp-l'); d.classList.add('scp-r'); } // phone: both drawers start closed
   if(get('rightHidden')) d.classList.add('scp-r');
   setTimeout(function(){ d.classList.remove('scp-loading'); }, 4000); // safety net
 })();
@@ -31,7 +32,7 @@ html.scp-r #stage{right:0!important}
 </style>
 <script src="coi-serviceworker.js"></script>
 <!-- Space Cam styles in the head: nothing paints unstyled on reload (keep its ?v= the same as studio.js at the bottom) -->
-<link rel="stylesheet" href="studio.css?v=2026-11-10-v1.2b">
+<link rel="stylesheet" href="studio.css?v=2026-11-10-v1.2j">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#0A0A0B">
@@ -3644,12 +3645,13 @@ var qrcode = function() {
     // whoever's operating it isn't reading backwards. Only the stage window
     // (#stage hash route, on the external display) ever gets transformed;
     // the control window just reflects the toggle state on its buttons.
-    if(isStageWindow || isTouch() || isSingle()){
+    var scPhone = matchMedia('(max-width: 760px), (pointer: coarse) and (max-width: 1366px)').matches && !isStageWindow; // Space Cam phone/tablet: this screen is the Stage
+    if(isStageWindow || isTouch() || isSingle() || scPhone){
       var sx = state.mirrored ? -1 : 1;
       var sy = state.flipped ? -1 : 1;
       // Rotation only applies to the real stage window (a physically turned
       // monitor); the mini preview stays upright so it keeps fitting its box.
-      var rot = ((location.hash === '#stage' && !isPreviewFrame) || isSingle()) ? ((state.rotation || 0) % 360) : 0;
+      var rot = ((location.hash === '#stage' && !isPreviewFrame) || isSingle() || scPhone) ? ((state.rotation || 0) % 360) : 0;
       var sideways = rot % 180 !== 0;
       // Transform the scroll viewport (not the text block): it flips around
       // the viewport's own centre, which is exactly where the guide line
@@ -6045,4 +6047,4 @@ window.claude.hot.snapshot(function(){ return { state: state }; });
 </script>
 <!-- Bump ?v= on every deploy so browsers load the new files instead of cached ones.
      studio.js passes the same ?v= on to every file it loads (engines, workers). -->
-<script type="module" src="studio.js?v=2026-11-10-v1.2b"></script>
+<script type="module" src="studio.js?v=2026-11-10-v1.2j"></script>

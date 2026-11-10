@@ -514,7 +514,8 @@ function init() {
     // floating Stage preview over the script (like the camera's small box), on by default, drag anywhere
     // a key is 'Space', ['Space','Space'] (press twice) or 'Hold Space' (word + key)
     const kb = k => Array.isArray(k) ? k.map(x => `<kbd>${x}</kbd>`).join('') : k.startsWith('Hold ') ? `<i>Hold</i><kbd>${k.slice(5)}</kbd>` : `<kbd>${k}</kbd>`;
-    const keys = list => h(`<div class="sc-keys">${list.map(([k, t]) => `<span><b>${kb(k)}</b><em>${t}</em></span>`).join('')}</div>`);
+    // keys sit behind one quiet row at the bottom; they pop up on hover / focus / click (saves space in every tab)
+    const keys = list => { const w = h(`<div class="sc-keys-wrap"><button type="button" class="sc-keys-btn"><svg viewBox="0 0 24 24" class="sc-ic" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10"/></svg>Keyboard shortcuts</button><div class="sc-keys">${list.map(([k, t]) => `<span><b>${kb(k)}</b><em>${t}</em></span>`).join('')}</div></div>`); w.querySelector('.sc-keys-btn').onclick = () => w.classList.toggle('open'); return w; };
     const grp = t => h(`<div class="sc-grp">${t}</div>`);
     // sync icon sits right of the Connect stage switch (no separate row): more room further down
     const prHead = h(`<div class="sc-prhead"></div>`); prHead.append(swPr);
@@ -573,7 +574,7 @@ function init() {
     camSec.append(h(`<div class="sc-grp sc-grp-new sc-new-assist">Shooting assistant <span class="sc-new">New</span></div>`));
     { const sw = h(`<button type="button" class="tbtn" id="scAssist" aria-pressed="false"><span data-help="Tips while you set up and record: too dark, too bright, noisy room, mic too loud or quiet, camera battery. With the face detector also: off-center framing, headroom, focus missing your face, light behind you. Everything runs on this Mac; nothing is sent anywhere."><svg viewBox="0 0 24 24" class="sc-ic" aria-hidden="true"><path d="M12 3l1.6 3.9L17.5 8.5l-3.9 1.6L12 14l-1.6-3.9L6.5 8.5l3.9-1.6z"/><path d="M18 14l.8 1.9 1.9.8-1.9.8L18 19.4l-.8-1.9-1.9-.8 1.9-.8zM6 15l.6 1.4 1.4.6-1.4.6L6 19l-.6-1.4L4 17l1.4-.6z"/></svg>Shooting assistant</span></button>`);
       camSec.append(swList(sw));
-      camSec.append(h(`<div class="vs-dl sc-assist-dl" hidden><button type="button" class="btn vs-dl-btn">Download face detector</button><span class="vs-dl-bar" hidden><i></i></span><span class="vs-dl-note"></span><span class="vs-dl-what">Downloads the face detection engine and model: ${FACE_MB} MB, once. It stays in this browser and runs on your Mac. It adds framing, headroom, focus and backlight tips; light and sound tips work without it.</span></div>`)); }
+      camSec.append(h(`<div class="vs-dl sc-assist-dl" hidden><button type="button" class="btn vs-dl-btn" data-help="Downloads the face detection engine and model: ${FACE_MB} MB, once. It stays in this browser and runs on your Mac. It adds framing, headroom, focus and backlight tips; light and sound tips work without it.">Download face detector · ${FACE_MB} MB</button><span class="vs-dl-bar" hidden><i></i></span><span class="vs-dl-note"></span></div>`)); }
     camSec.append(keys([['R', 'Record'], ['Hold A', 'Autofocus'], ['← →', 'Focus near / far'], ['G', 'Grid lines']]));
     $('shortcuts-hint')?.classList.add('sc-gone');
     // hide what the switches and the center panel already cover

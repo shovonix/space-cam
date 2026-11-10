@@ -1492,3 +1492,26 @@ body:not(.sc-tried-voice) #right-rail #voice-scroll-btn > span svg,body:not(.sc-
 .sc-stage-rec.cam-on .sc-sr-cam i,.sc-stage-rec.mic-on .sc-sr-mic i{animation:none!important}
 .sc-stage-rec.cam-on.blk .sc-sr-cam i{visibility:hidden}
 .sc-stage-rec.mic-on.mic-talk.blk .sc-sr-mic i{visibility:hidden}
+/* ---- right panel: less crowded ---- */
+:root{--rail-r:340px}
+#right-rail{width:var(--rail-r)!important}
+body:not(.stage-window):not(.sc-right-hidden) #stage{right:var(--rail-r)!important}
+.sc-tools,.sc-stage-tools{right:16px}
+/* compact download rows: one small button, details in its hover note */
+.vs-dl-btn{height:34px!important;min-height:0!important;font-size:12.5px!important;border-radius:9px!important;background:transparent!important;border:1px dashed #44444a!important;color:#d6d6d8!important}
+.vs-dl-btn:hover{border-color:#fff!important;color:#fff!important}
+.vs-dl{margin:4px 0 6px!important}
+/* keys behind one row; they pop up above it */
+.sc-keys-wrap{position:relative;margin-top:auto;padding:10px 0 14px;border-top:1px solid var(--hair)}
+.sc-keys-btn{display:inline-flex;align-items:center;gap:8px;background:none;border:0;color:#9a9aa0;font:500 12px 'Public Sans',system-ui,sans-serif;cursor:pointer;padding:4px 0}
+.sc-keys-btn:hover{color:#fff}
+.sc-keys-wrap > .sc-keys{position:absolute!important;left:0;right:0;bottom:calc(100% - 6px);z-index:20;margin:0!important;padding:12px 14px!important;border:1px solid rgba(255,255,255,.16)!important;border-radius:12px;background:#1B1B1D;box-shadow:0 14px 40px rgba(0,0,0,.6);opacity:0;visibility:hidden;transform:translateY(4px);transition:opacity .15s,transform .15s,visibility .15s}
+.sc-keys-wrap:hover > .sc-keys,.sc-keys-wrap:focus-within > .sc-keys,.sc-keys-wrap.open > .sc-keys{opacity:1;visibility:visible;transform:none}
+#right-rail[data-tab="camera"] > #scCamSec > .sc-keys-wrap,#right-rail[data-tab="prompter"] > .sec[data-rt="prompter"] > .sc-keys-wrap{margin-top:auto!important}
+#right-rail[data-tab="prompter"] > .sec[data-rt="prompter"]:has(> .sc-keys-wrap){flex:1 0 auto;display:flex!important;flex-direction:column}
+/* a touch more room between sections */
+#right-rail .sc-grp{margin-top:12px!important;padding-top:12px!important}
+/* fewer lines: only one thin line above each section heading (and the tab underline); no line under each row */
+#right-rail .sc-swb,#right-rail .sc-swb.sc-connsw,#right-rail .sc-prhead,#right-rail .sc-row{border-bottom:0!important}
+#right-rail .sc-keys-wrap{border-top:0!important}
+#right-rail .sc-grp{border-top:1px solid var(--hair)!important}

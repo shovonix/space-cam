@@ -31,6 +31,11 @@ export const CamCore = class CamCore extends EventTarget {
   #lastStatsT = 0;
   #frameMsAvg = 0;
   #usbDevice = null;
+  // web-gphoto2 keeps ONE WebAssembly engine per page. After an unplug, a USB reset or a failed try that engine can
+  // still point at the old, gone camera, and every later try on the same page fails until a reload. So after any of
+  // those, the next connect loads a fresh engine (lib/camera.js under a new URL = its own engine), lib/ untouched.
+  #dirty = false;
+  #fresh = 0;
 
   state = 'idle';
   model = '';
@@ -71,21 +76,37 @@ export const CamCore = class CamCore extends EventTarget {
       }
       const devices = await navigator.usb.getDevices();
       this.#usbDevice = devices[0] || null;
+      // a stale engine may still have the camera open: let go of it at the USB level first
+      if (this.#dirty) for (const d of devices) { try { if (d.opened) await d.close(); } catch {} }
       // After a reload the camera can still hold the old page's session and never answer. A USB reset clears it.
       if (reset && this.#usbDevice) await this.#usbReset(this.#usbDevice);
-      this.#camera = new Camera();
+      const camera = await this.#newCamera();
+      this.#camera = camera;
       let timer;
       const timeout = new Promise((_, rej) => (timer = setTimeout(() => rej(new Error('timeout: camera did not answer')), 15000)));
-      try { await Promise.race([(async () => { await this.#camera.connect(); await this.#readWidgets(); })(), timeout]); }
+      const work = (async () => { await camera.connect(); await this.#readWidgets(); })();
+      try { await Promise.race([work, timeout]); }
+      catch (e) { work.then(() => camera.disconnect(), () => camera.disconnect()).catch(() => {}); throw e; } // a late answer must not keep the camera open
       finally { clearTimeout(timer); }
+      this.#dirty = false;
       this.#setState('connected');
       this.#log(`Connected: ${this.model || 'camera'}`, 'ok');
       return true;
     } catch (e) {
-      this.#camera = null;
+      try { await this.#camera?.disconnect(); } catch {}
+      this.#camera = null; this.#dirty = true; // next try: fresh engine
+      this.#log(`Connect failed: ${e?.message || e}`, 'warn');
       this.#setState('idle');
       return this.#fail(...this.#classify(e));
     }
+  }
+
+  async #newCamera() {
+    if (!this.#dirty) return new Camera();
+    const v = new URL(import.meta.url).searchParams.get('v') || '';
+    const { Camera: Fresh } = await import(`./lib/camera.js?v=${encodeURIComponent(v)}&engine=${++this.#fresh}`);
+    this.#log(`Fresh camera engine (#${this.#fresh})`);
+    return new Fresh();
   }
 
   async #usbReset(d) {
@@ -115,7 +136,7 @@ export const CamCore = class CamCore extends EventTarget {
   #teardown(nextState) {
     this.#previewOn = false;
     try { this.#camera?.disconnect(); } catch {}
-    this.#camera = null;
+    this.#camera = null; this.#dirty = true; // reconnecting after an unplug / off: fresh engine
     this.#widgets = {};
     if (this.recording) { this.recording = false; this.recordStartedAt = 0; }
     this.#setState(nextState);

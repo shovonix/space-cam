@@ -1,7 +1,7 @@
 <meta charset="UTF-8">
 <script>/* Space Cam: a hard reload (Cmd+Shift+R) skips the service worker, so there is no controller. Remember it: that reload starts disconnected. */try{var nv=performance.getEntriesByType('navigation')[0];if(nv&&nv.type==='reload'&&navigator.serviceWorker&&!navigator.serviceWorker.controller)sessionStorage.setItem('spaceCamHardReload','1');}catch(e){}</script>
 <script>window.coi = { coepCredentialless: () => true };</script>
-<script>/* Space Cam, localhost only: ?fresh = see Voice scroll and the Shooting assistant like a first-time visitor (off, not tried yet). Scripts, takes and other settings stay. */try{if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)&&/[?&]fresh\b/.test(location.search)){['voiceOn','voiceEngine','assistOn','triedVoice','triedAssist'].forEach(function(k){localStorage.removeItem('spaceCam.'+k);});history.replaceState(null,'',location.pathname+location.hash);}}catch(e){}</script>
+<script>/* Space Cam, localhost only: ?fresh = see Voice scroll and the Shooting assistant like a first-time visitor (off, not tried yet). Scripts, takes and other settings stay. */try{if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)&&/[?&]fresh\b/.test(location.search)){['voiceOn','voiceEngine','assistOn','assistLight','assistFrame','triedVoice','triedAssist','triedLight','triedFrame'].forEach(function(k){localStorage.removeItem('spaceCam.'+k);});history.replaceState(null,'',location.pathname+location.hash);}}catch(e){}</script>
 <script>
 /* Space Cam: put the side panels in their saved state before the first paint (no open-then-close flash on reload),
    with no slide animation until the page is ready. studio.js takes over and removes these classes. */
@@ -6041,5 +6041,5 @@ window.claude.hot.snapshot(function(){ return { state: state }; });
 </script>
 <!-- Bump ?v= on every deploy so browsers load the new files instead of cached ones.
      studio.js passes the same ?v= on to every file it loads (engines, workers). -->
-<link rel="stylesheet" href="studio.css?v=2026-11-10-v1.0e">
-<script type="module" src="studio.js?v=2026-11-10-v1.0e"></script>
+<link rel="stylesheet" href="studio.css?v=2026-11-10-v1.0f">
+<script type="module" src="studio.js?v=2026-11-10-v1.0f"></script>

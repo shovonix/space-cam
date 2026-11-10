@@ -8,7 +8,7 @@ const { CamCore } = await import('./cam-core.js' + V);
 const { AudioCore } = await import('./audio-core.js' + V);
 const { WebcamCore } = await import('./webcam-core.js' + V);
 const { AssistCore, FACE_MB } = await import('./assist-core.js' + V);
-try { if (localStorage.getItem('spaceCam.triedVoice')) document.body.classList.add('sc-tried-voice'); if (JSON.parse(localStorage.getItem('spaceCam.triedAssist'))) document.body.classList.add('sc-tried-assist'); } catch {}
+try { if (localStorage.getItem('spaceCam.triedVoice')) document.body.classList.add('sc-tried-voice'); if (JSON.parse(localStorage.getItem('spaceCam.triedLight'))) document.body.classList.add('sc-tried-light'); if (JSON.parse(localStorage.getItem('spaceCam.triedFrame'))) document.body.classList.add('sc-tried-frame'); } catch {}
 
 // The stage window (#stage) and its mini preview (#stage-preview) are plain prompter views; the only thing
 // studio.js adds there is the optional camera layer behind the text ("Camera on Stage").
@@ -572,9 +572,12 @@ function init() {
     appSec.querySelector('.sec-title')?.remove();
     // Shooting assistant: tips about light, sound, framing and focus (face detector downloaded once, offline)
     camSec.append(h(`<div class="sc-grp sc-grp-new sc-new-assist">Shooting assistant <span class="sc-new">New</span></div>`));
-    { const sw = h(`<button type="button" class="tbtn" id="scAssist" aria-pressed="false"><span data-help="Tips while you set up and record: too dark, too bright, noisy room, mic too loud or quiet, camera battery. With the face detector also: off-center framing, headroom, focus missing your face, light behind you. Everything runs on this Mac; nothing is sent anywhere."><svg viewBox="0 0 24 24" class="sc-ic" aria-hidden="true"><path d="M12 3l1.6 3.9L17.5 8.5l-3.9 1.6L12 14l-1.6-3.9L6.5 8.5l3.9-1.6z"/><path d="M18 14l.8 1.9 1.9.8-1.9.8L18 19.4l-.8-1.9-1.9-.8 1.9-.8zM6 15l.6 1.4 1.4.6-1.4.6L6 19l-.6-1.4L4 17l1.4-.6z"/></svg>Shooting assistant</span></button>`);
-      camSec.append(swList(sw));
-      camSec.append(h(`<div class="vs-dl sc-assist-dl" hidden><button type="button" class="btn vs-dl-btn" data-help="Downloads the face detection engine and model: ${FACE_MB} MB, once. It stays in this browser and runs on your Mac. It adds framing, headroom, focus and backlight tips; light and sound tips work without it.">Download face detector · ${FACE_MB} MB</button><span class="vs-dl-bar" hidden><i></i></span><span class="vs-dl-note"></span></div>`)); }
+    { const SUN = '<svg viewBox="0 0 24 24" class="sc-ic" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>';
+      const FRAME = '<svg viewBox="0 0 24 24" class="sc-ic" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><circle cx="12" cy="10" r="2.5"/><path d="M8 17c.7-2.2 2.2-3.3 4-3.3s3.3 1.1 4 3.3"/></svg>';
+      const swL = h(`<button type="button" class="tbtn" id="scAssistLight" aria-pressed="true"><span data-help="Tips while you set up and record: too dark, blown out, noisy room, mic too quiet, too loud or silent, camera battery. Runs on this Mac, no download.">${SUN}Lighting assistant</span></button>`);
+      const swF = h(`<button type="button" class="tbtn" id="scAssistFrame" aria-pressed="false"><span data-help="Tips about you in the picture: off-centre, headroom, focus missing your face, light behind you. Needs the face detector (download below, 10 MB, once); it runs on this Mac.">${FRAME}Framing assistant</span></button>`);
+      camSec.append(swList(swL, swF));
+      camSec.append(h(`<div class="vs-dl sc-assist-dl" hidden><button type="button" class="btn vs-dl-btn" data-help="Downloads the face detection engine and model: ${FACE_MB} MB, once. It stays in this browser and runs on your Mac. The Framing assistant needs it.">Download face detector · ${FACE_MB} MB</button><span class="vs-dl-bar" hidden><i></i></span><span class="vs-dl-note"></span></div>`)); }
     camSec.append(keys([['R', 'Record'], ['Hold A', 'Autofocus'], ['← →', 'Focus near / far'], ['G', 'Grid lines']]));
     $('shortcuts-hint')?.classList.add('sc-gone');
     // hide what the switches and the center panel already cover
@@ -1062,24 +1065,28 @@ function init() {
     tipCard.hidden = false;
   });
   tipCard.querySelector('.sc-assist-x').onclick = () => { if (tipId) assist.snooze(tipId); };
-  const assistBtn = $('scAssist'), assistDl = camSec.querySelector('.sc-assist-dl'); let assistAutoDl = false;
-  const assistOn = () => !!store.get('assistOn', true); // on by default: light, sound and battery tips need no download; face tips start after you download the face detector
+  const lightBtn = $('scAssistLight'), frameBtn = $('scAssistFrame'), assistDl = camSec.querySelector('.sc-assist-dl');
+  const lightOn = () => !!store.get('assistLight', true);  // Lighting assistant: on by default (no download)
+  const frameOn = () => !!store.get('assistFrame', false); // Framing assistant: off until you turn it on (needs the face detector)
+  const assistOn = () => lightOn() || frameOn();
   async function renderAssist() {
     const on = assistOn();
-    if (on) document.body.classList.add('sc-tried-assist'); // it's on: no 'try me' glow
-    assistBtn?.setAttribute('aria-pressed', String(on));
+    lightBtn?.setAttribute('aria-pressed', String(lightOn())); frameBtn?.setAttribute('aria-pressed', String(frameOn()));
+    assist.light = lightOn(); assist.frame = frameOn();
     const ready = await AssistCore.faceReady();
     assistDl.hidden = ready; // the download shows whenever it isn't downloaded yet, on or off: you choose when
     if (!on) { tipCard.hidden = true; sendTip(); return; }
-    if (ready && !assist.faceOn) assist.loadFace().catch(() => {});
+    if (ready && frameOn() && !assist.faceOn) assist.loadFace().catch(() => {});
 
   }
-  if (assistBtn) assistBtn.onclick = () => { store.set('assistOn', !assistOn()); if (assistOn()) { store.set('triedAssist', true); document.body.classList.add('sc-tried-assist'); } renderAssist(); };
+  // the first click on each switch ends its 'try me' glow (Lighting glows too, though it starts on)
+  if (lightBtn) lightBtn.onclick = () => { store.set('assistLight', !lightOn()); store.set('triedLight', true); document.body.classList.add('sc-tried-light'); renderAssist(); };
+  if (frameBtn) frameBtn.onclick = () => { store.set('assistFrame', !frameOn()); store.set('triedFrame', true); document.body.classList.add('sc-tried-frame'); renderAssist(); };
   { const b = assistDl.querySelector('.vs-dl-btn'), bar = assistDl.querySelector('.vs-dl-bar'), fill = bar.querySelector('i'), note = assistDl.querySelector('.vs-dl-note');
     b.onclick = async () => {
       b.disabled = true; bar.hidden = false; fill.style.width = '0%'; note.textContent = 'Downloading…';
       try { await AssistCore.downloadFace(p => { fill.style.width = Math.round(p * 100) + '%'; note.textContent = Math.round(p * 100) + '%'; });
-        note.textContent = 'Starting the face detector…'; await assist.loadFace(); assistDl.hidden = true; }
+        note.textContent = frameOn() ? 'Starting the face detector…' : ''; if (frameOn()) await assist.loadFace(); assistDl.hidden = true; }
       catch (e) { note.textContent = 'Download failed (' + (e?.message || e) + '). Try again.'; }
       b.disabled = false; bar.hidden = true;
     };

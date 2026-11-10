@@ -1517,3 +1517,7 @@ body:not(.stage-window):not(.sc-right-hidden) #stage{right:var(--rail-r)!importa
 #right-rail .sc-grp{border-top:1px solid var(--hair)!important}
 /* the one help note: solid and above everything (the wave, the script, the bottom bar) */
 .sc-tipbox{z-index:2000!important;background:#1B1B1D!important;opacity:1!important}
+/* Lighting / Framing assistant switches: icon + name, and the same soft white glow until each is clicked once */
+#scAssistLight > span,#scAssistFrame > span{display:inline-flex;align-items:center;gap:8px}
+body:not(.sc-tried-light) #right-rail #scAssistLight > span,body:not(.sc-tried-frame) #right-rail #scAssistFrame > span{color:#d6d6d8;animation:scBreathText2 6s ease-in-out infinite!important}
+body:not(.sc-tried-light) #right-rail #scAssistLight > span svg,body:not(.sc-tried-frame) #right-rail #scAssistFrame > span svg{stroke:#9a9aa0!important;animation:scBreathIc2 6s ease-in-out infinite!important}

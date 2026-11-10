@@ -47,6 +47,8 @@ export class AssistCore extends EventTarget {
   #seen = new Map(); #shown = null; #snoozed = new Map(); #batt = null;
   #rms = []; #peaks = []; #clips = [];
   recording = false;
+  light = true;  // Lighting assistant: light, sound, battery (no download)
+  frame = false; // Framing assistant: framing, headroom, focus, backlight (face detector)
 
   static async faceReady() {
     try { const c = await caches.open(CACHE); for (const f of Object.values(FILES)) if (!(await c.match(abs(f)))) return false; return true; } catch { return false; }
@@ -104,7 +106,7 @@ export class AssistCore extends EventTarget {
   analyze(src, { camera = 'mac' } = {}) {
     const now = performance.now(), found = new Set();
     // --- audio (needs ~8 s of history) ---
-    if (this.#rms.length > 40 && now - this.#rms[0][0] > 8000 && now - this.#rms[this.#rms.length - 1][0] < 1500) { // mic on and live
+    if (this.light && this.#rms.length > 40 && now - this.#rms[0][0] > 8000 && now - this.#rms[this.#rms.length - 1][0] < 1500) { // mic on and live
       const r = this.#rms.map(x => x[1]).sort((a, b) => a - b), floor = r[Math.floor(r.length * 0.1)];
       const loudest = r[r.length - 1];
       // speaking = a good part of the last ~12 s clearly above the room (not a cough or a keyboard click)
@@ -118,10 +120,10 @@ export class AssistCore extends EventTarget {
         if (speak > -70 && speak < -32) found.add('quiet');      // you're talking, but it comes in low
       }
     }
-    if (this.#clips.length >= 2) found.add('clipping');
+    if (this.light && this.#clips.length >= 2) found.add('clipping');
     // --- battery (Sony) ---
     const b = parseInt(String(this.#batt || '').replace(/[^\d]/g, ''), 10);
-    if (camera === 'sony' && b > 0 && b <= 20) found.add('battery');
+    if (this.light && camera === 'sony' && b > 0 && b <= 20) found.add('battery');
     // --- picture ---
     const w = src && (src.videoWidth || src.naturalWidth), hgt = src && (src.videoHeight || src.naturalHeight);
     let face = null;
@@ -134,10 +136,10 @@ export class AssistCore extends EventTarget {
       let sum = 0, white = 0;
       for (let i = 0, j = 0; i < px.length; i += 4, j++) { const l = 0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2]; lum[j] = l; sum += l; if (l >= 250) white++; }
       const mean = sum / lum.length;
-      if (mean < 38) found.add('dark'); // the real camera frame (black and white / visibility only change the view behind the text)
-      if (white / lum.length > 0.12) found.add('bright');
+      if (this.light && mean < 38) found.add('dark'); // the real camera frame (black and white / visibility only change the view behind the text)
+      if (this.light && white / lum.length > 0.12) found.add('bright');
       // --- face (optional) ---
-      if (this.#face) {
+      if (this.frame && this.#face) {
         try {
           const d = this.#face.detect(this.#cv).detections || [];
           const best = d.sort((a, b) => (b.boundingBox.width * b.boundingBox.height) - (a.boundingBox.width * a.boundingBox.height))[0];

@@ -1030,20 +1030,24 @@ function init() {
   renderPedal();
 
   // Reconnect by itself after a reload (or when the camera is plugged back in), unless you pressed Disconnect.
-  async function autoConnect() {
+  // Only the tab you're looking at reconnects by itself. Two Space Cam tabs (say the live site and localhost) would
+  // otherwise take turns: each reconnect resets the USB, which drops the other tab, which reconnects, and so on.
+  async function autoConnect(fromPlug = false) {
     if (src !== 'sony' || !store.get('camAuto', false) || cam.state === 'connected' || cam.state === 'connecting' || cam.state === 'unsupported') return;
+    if (document.hidden) { document.addEventListener('visibilitychange', () => autoConnect(fromPlug), { once: true }); return; }
     if (!(await cam.hasPermittedDevice())) return;
     // After a reload macOS's camera service often grabs the camera for a moment, so keep trying for ~20 s.
+    // A camera that was just plugged in starts fresh: no USB reset (a reset re-plugs it, and that would loop).
     for (let i = 0; i < 10; i++) {
-      if (!store.get('camAuto', false) || cam.state === 'connected') return;
-      if (cam.state !== 'connecting') await cam.connect({ pick: false, reset: i === 0 });
+      if (!store.get('camAuto', false) || cam.state === 'connected' || document.hidden) return;
+      if (cam.state !== 'connecting') await cam.connect({ pick: false, reset: fromPlug ? i === 2 : i === 0 });
       if (cam.state === 'connected' || cam.lastErrorKind !== 'busy') return; // only 'busy' is worth retrying
       await new Promise(r => setTimeout(r, 2000));
     }
   }
   if (CamCore.supported) {
     autoConnect();
-    navigator.usb.addEventListener('connect', () => setTimeout(autoConnect, 1200));
+    navigator.usb.addEventListener('connect', () => setTimeout(() => autoConnect(true), 1200));
   }
 
   // focus
@@ -1352,8 +1356,12 @@ function init() {
     renderWave();
   }
   async function openMic(id) {
-    const ok = await audio.open(id ?? store.get('micId', ''));
-    if (ok) { store.set('micId', audio.deviceId); store.set('micAuto', true); await fillMics(); }
+    const want = id ?? store.get('micId', '');
+    let ok = false;
+    try { ok = await audio.open(want); } catch (e) { toast('Could not open that mic: ' + (e?.message || e), 'error'); }
+    if (ok) { store.set('micId', audio.deviceId); store.set('micAuto', true); }
+    else console.warn('[Space Cam] mic did not open:', want, [...ui.mic.options].map(o => o.text));
+    await fillMics(); // the list shows the mic that is really open (or the one you picked, if none is)
     renderRec();
   }
   ui.micOn.onclick = () => openMic();

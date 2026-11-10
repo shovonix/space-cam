@@ -1522,3 +1522,5 @@ body:not(.stage-window):not(.sc-right-hidden) #stage{right:var(--rail-r)!importa
 body:not(.sc-tried-frame) #right-rail #scAssistFrame > span{color:#d6d6d8;animation:scBreathText2 6s ease-in-out infinite!important}
 body:not(.sc-tried-frame) #right-rail #scAssistFrame > span svg{stroke:#9a9aa0!important;animation:scBreathIc2 6s ease-in-out infinite!important}
 /* Lighting assistant: no glow (it's already on); only Framing assistant and Voice scroll glow until tried */
+/* slider knobs: a much softer glow */
+input[type=range]::-webkit-slider-thumb{box-shadow:0 0 3px rgba(255,255,255,.12)!important}

@@ -1063,9 +1063,10 @@ function init() {
   });
   tipCard.querySelector('.sc-assist-x').onclick = () => { if (tipId) assist.snooze(tipId); };
   const assistBtn = $('scAssist'), assistDl = camSec.querySelector('.sc-assist-dl'); let assistAutoDl = false;
-  const assistOn = () => !!store.get('assistOn', false); // off until you turn it on (then remembered); the face detector downloads on first use
+  const assistOn = () => !!store.get('assistOn', true); // on by default: light, sound and battery tips need no download; face tips start after you download the face detector
   async function renderAssist() {
     const on = assistOn();
+    if (on) document.body.classList.add('sc-tried-assist'); // it's on: no 'try me' glow
     assistBtn?.setAttribute('aria-pressed', String(on));
     const ready = await AssistCore.faceReady();
     assistDl.hidden = ready; // the download shows whenever it isn't downloaded yet, on or off: you choose when

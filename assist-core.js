@@ -78,7 +78,7 @@ export class AssistCore extends EventTarget {
       const get = async f => { const r = await c.match(abs(f)); if (!r) throw new Error('not downloaded'); return r; };
       const [js, wasm, model] = await Promise.all([get(FILES.js), get(FILES.wasm), get(FILES.model)]);
       const jsUrl = URL.createObjectURL(await js.blob()), wasmUrl = URL.createObjectURL(await wasm.blob());
-      const { FaceDetector } = await import('./lib/mediapipe/vision_bundle.mjs' + (new URL(import.meta.url).search));
+      const { FaceDetector } = await import('./lib/mediapipe/vision_bundle.js' + (new URL(import.meta.url).search));
       this.#face = await FaceDetector.createFromOptions({ wasmLoaderPath: jsUrl, wasmBinaryPath: wasmUrl }, {
         baseOptions: { modelAssetBuffer: new Uint8Array(await model.arrayBuffer()) }, runningMode: 'IMAGE', minDetectionConfidence: 0.5,
       });

@@ -966,7 +966,7 @@ function init() {
     }
     renderCam();
   }
-  ui.camPick.onchange = async () => {
+  ui.camPick.onchange = async () => { ui.camPick.blur();
     const next = ui.camPick.value;
     if (take) { ui.camPick.value = camPick; return toast('Stop recording first.', 'error'); }
     if (next === 'usb:add') {
@@ -1198,11 +1198,21 @@ function init() {
   ui.big.onclick = openBig;
 
   // ------------------------------------------------------------------ audio
-  async function fillMics() {
-    const devs = await audio.listDevices();
-    ui.mic.replaceChildren(...devs.map(d => new Option(d.label, d.id)));
+  let micsSeen = null; // mic ids already in the list; a new one (just plugged in) gets picked by itself
+  async function fillMics(e) {
+    const devs = e?.detail?.devices || await audio.listDevices();
+    const fresh = micsSeen ? devs.filter(d => d.id && d.id !== 'default' && d.id !== 'communications' && !micsSeen.has(d.id)) : [];
+    if (devs.some(d => d.id)) micsSeen = new Set(devs.map(d => d.id));
+    const same = ui.mic.options.length === devs.length && devs.every((d, i) => ui.mic.options[i].value === d.id && ui.mic.options[i].text === d.label);
+    if (!same && document.activeElement !== ui.mic) ui.mic.replaceChildren(...devs.map(d => new Option(d.label, d.id))); // never rebuild the list while it's open
     const keep = audio.deviceId || store.get('micId', ''); // mic off: still show the mic you picked
     if (keep && devs.some(d => d.id === keep)) ui.mic.value = keep;
+    if (fresh.length && !take && audio.state !== 'recording') { // a mic was just plugged in (e.g. a RØDE): use it
+      const d = fresh[fresh.length - 1];
+      store.set('micId', d.id);
+      if (audio.state === 'ready') { await openMic(d.id); toast(`Switched to ${d.label}.`, 'ok'); }
+      else { ui.mic.value = d.id; toast(`${d.label} found. Turn the mic on to use it.`, 'ok'); }
+    }
   }
   audio.addEventListener('devices', fillMics);
   audio.addEventListener('state', e => renderMic());
@@ -1344,7 +1354,7 @@ function init() {
   }
   ui.cMicBtn.onclick = () => (audio.state !== 'off' ? closeMic() : openMic());
   ui.micOff.onclick = closeMic;
-  ui.mic.onchange = () => openMic(ui.mic.value);
+  ui.mic.onchange = () => { ui.mic.blur(); openMic(ui.mic.value); }; // the list closes and lets go of the focus ring
   if (!AudioCore.supported) { ui.micOn.disabled = ui.cMicBtn.disabled = true; ui.micOn.querySelector('span').textContent = ui.cMicBtn.querySelector('span').textContent = 'Audio needs Chrome'; }
   renderMic();
   // Re-open the mic automatically if permission was already given in an earlier visit.

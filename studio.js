@@ -1529,7 +1529,7 @@ function init() {
   // "+" next to Scripts: blank New script popup to paste a script
   { const nb = $('new-script-btn'); if (nb) { nb.innerHTML = '<svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>'; nb.title = 'New script'; nb.setAttribute('aria-label', 'New script'); } }
   // the "Two screens" note left the left panel; the same help shows when you hover Connect stage
-  { const db = $('display-btn'); if (db) { db.removeAttribute('title'); db.dataset.tip = 'Opens the Stage window for your prompter screen (second display). It shows the mirrored view the camera reads; this window stays readable.'; } }
+  { const db = $('display-btn'); if (db) { db.removeAttribute('title'); db.dataset.help = 'Opens the Stage window for your prompter screen (second display). It shows the mirrored view the camera reads; this window stays readable.'; } }
   $('scFolderRow').onclick = async () => {
     if (folder && !(await folderOk(false))) { await folderOk(true); renderFolder(); flushWaiting(); return; }
     pickFolder();

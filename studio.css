@@ -1515,3 +1515,5 @@ body:not(.stage-window):not(.sc-right-hidden) #stage{right:var(--rail-r)!importa
 #right-rail .sc-swb,#right-rail .sc-swb.sc-connsw,#right-rail .sc-prhead,#right-rail .sc-row{border-bottom:0!important}
 #right-rail .sc-keys-wrap{border-top:0!important}
 #right-rail .sc-grp{border-top:1px solid var(--hair)!important}
+/* the one help note: solid and above everything (the wave, the script, the bottom bar) */
+.sc-tipbox{z-index:2000!important;background:#1B1B1D!important;opacity:1!important}

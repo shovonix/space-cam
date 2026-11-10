@@ -1074,7 +1074,7 @@ function init() {
     lightBtn?.setAttribute('aria-pressed', String(lightOn())); frameBtn?.setAttribute('aria-pressed', String(frameOn()));
     assist.light = lightOn(); assist.frame = frameOn();
     const ready = await AssistCore.faceReady();
-    assistDl.hidden = ready; // the download shows whenever it isn't downloaded yet, on or off: you choose when
+    assistDl.hidden = ready || !frameOn(); // the download shows only once Framing assistant is on (and it isn't downloaded yet)
     if (!on) { tipCard.hidden = true; sendTip(); return; }
     if (ready && frameOn() && !assist.faceOn) assist.loadFace().catch(() => {});
 

@@ -5759,7 +5759,7 @@ var qrcode = function() {
     var engRow = document.createElement('label'); engRow.className = 'vs-accent';
     engRow.innerHTML = '<span><svg viewBox="0 0 24 24" class="sc-ic" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9.5 9.5h5v5h-5zM9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3"/></svg>Engine</span><select class="sc-select" aria-label="Voice scroll engine"><option value="google">Google</option><option value="local">On this Mac (offline)</option></select>';
     var dlRow = document.createElement('div'); dlRow.className = 'vs-dl';
-    dlRow.innerHTML = '<button type="button" class="btn vs-dl-btn" data-help="Downloads the offline speech engine and English voice model: 41 MB, once. It stays in this browser, works without internet, and nothing you say leaves your Mac.">Download offline voice · 41 MB</button><span class="vs-dl-bar" hidden><i></i></span><span class="vs-dl-note"></span>';
+    dlRow.innerHTML = '<button type="button" class="btn vs-dl-btn" data-help="Downloads the offline speech engine and English voice model: 41 MB, once. It stays in this browser, works without internet, and nothing you say leaves your Mac.">Download offline voice · 41 MB</button><span class="vs-dl-bar" hidden><i></i></span><span class="vs-dl-note"></span><span class="vs-dl-what">Vosk English speech model (small) + engine. Works offline.</span>';
     if(sec){ sec.insertBefore(engRow, accRow); sec.insertBefore(dlRow, statusEl || null); }
     var engSel = engRow.querySelector('select'); engSel.value = engine;
     var dlBtn = dlRow.querySelector('.vs-dl-btn'), dlBar = dlRow.querySelector('.vs-dl-bar'), dlFill = dlBar.querySelector('i'), dlNote = dlRow.querySelector('.vs-dl-note');
@@ -6041,5 +6041,5 @@ window.claude.hot.snapshot(function(){ return { state: state }; });
 </script>
 <!-- Bump ?v= on every deploy so browsers load the new files instead of cached ones.
      studio.js passes the same ?v= on to every file it loads (engines, workers). -->
-<link rel="stylesheet" href="studio.css?v=2026-11-10-v1.1">
-<script type="module" src="studio.js?v=2026-11-10-v1.1"></script>
+<link rel="stylesheet" href="studio.css?v=2026-11-10-v1.1b">
+<script type="module" src="studio.js?v=2026-11-10-v1.1b"></script>

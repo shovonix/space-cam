@@ -1524,3 +1524,6 @@ body:not(.sc-tried-frame) #right-rail #scAssistFrame > span svg{stroke:#9a9aa0!i
 /* Lighting assistant: no glow (it's already on); only Framing assistant and Voice scroll glow until tried */
 /* slider knobs: a much softer glow */
 input[type=range]::-webkit-slider-thumb{box-shadow:0 0 3px rgba(255,255,255,.12)!important}
+/* download cards: start under the switch name (not the icon), end with the switches; a line says what's inside */
+#right-rail .vs-dl{margin:2px 0 8px 24px!important;width:calc(100% - 24px)}
+#right-rail .vs-dl-what{display:block;width:100%;margin-top:5px;font-size:11px;line-height:1.4;color:#8a8a8f}

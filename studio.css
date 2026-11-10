@@ -1599,7 +1599,6 @@ input[type=range]::-webkit-slider-thumb{box-shadow:0 0 3px rgba(255,255,255,.12)
 }
 /* Phone: smaller camera preview, no Shooting assistant (desktop-only) */
 @media (max-width:760px), (pointer:coarse) and (max-width:1366px){
-  body.sc-phone #scPreview{max-height:34vh;aspect-ratio:auto!important;height:auto}
-  body.sc-phone #scPreview video,body.sc-phone #scPreview img{max-height:34vh;object-fit:contain}
+  body.sc-phone #scPreview{max-height:34vh} /* keeps its shape (the video inside is absolutely placed), just never taller than a third of the screen */
   body.sc-phone .sc-new-assist, body.sc-phone .sc-swgrid:has(#scAssistLight), body.sc-phone .sc-assist-dl{display:none!important}
 }

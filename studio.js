@@ -827,6 +827,7 @@ function init() {
   function renderMacCam() {
     const on = webOn(), busyW = web.state === 'connecting';
     ui.empty.hidden = on; ui.img.hidden = true; ui.vid.hidden = !on; ui.info.hidden = true; ui.disconnect.hidden = !on;
+    if (on) for (const v of [ui.vid, ui.ccVid]) if (v.srcObject && v.paused) v.play().catch(() => {}); // iPhone leaves a video paused if play() ran while it was hidden
     { const ps = $('scPrevSet'); if (ps) { ps.disabled = !on; ps.title = on ? 'Focus, exposure and framing on the big screen' : 'Turn the camera on first'; } } if (!on && src === 'mac') closeBig?.();
     centerCam.hidden = !on; document.body.classList.toggle('sc-cam-bg', on);
     ui.connect.disabled = busyW || !WebcamCore.supported;

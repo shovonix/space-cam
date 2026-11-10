@@ -884,7 +884,7 @@ function init() {
   const SETUP_FIX = `
     <summary>First time on a Mac? One-time setup</summary>
     <ol>
-      <li>Camera: <b>USB Connection → PC Remote</b>, Ctrl w/ Smartphone → Off. Use a data cable, not charge-only.</li>
+      <li>Camera: <b>USB Connection → PC Remote</b>, <b>USB Power Supply → Off</b>, Ctrl w/ Smartphone → Off. Switch the camera on before plugging in (off or on USB power it only charges, and Chrome can’t see it). Use a data cable, plugged straight into the Mac.</li>
       <li>macOS grabs cameras for Photos and Image Capture, which blocks Space Cam. Paste this in Terminal <b>once</b>, then close Terminal. No restart needed:
         <div class="sc-cmd"><code>${escA(FIX_CMD)}</code><button type="button" data-copy="${escA(FIX_CMD)}">Copy</button></div>
         <button type="button" class="sc-mini-btn sc-agent" data-copy="${escA(AGENT_PROMPT)}" data-done="Prompt copied">Copy fix for your AI agent</button>
@@ -908,7 +908,8 @@ function init() {
     box.hidden = false;
     if (kind === 'unsupported') { box.innerHTML = `<b>${title}</b><p>Open Space Cam in Chrome or Edge on a Mac to control the camera.</p>`; return; }
     // the fix right here, ready to copy: macOS's camera service (ptpcamerad) is the usual reason a camera won't connect
-    const fix = `<p>${kind === 'feed' ? 'Unplug any other USB camera (one at a time). Then paste this in Terminal, unplug and replug the camera:' : 'macOS’s camera service is usually in the way. Paste this in Terminal, then unplug and replug the camera:'}</p>
+    const tip = kind === 'feed' ? '' : '<p>First check the camera: switched on, <b>USB Power Supply → Off</b>, <b>USB Connection → PC Remote</b>. Otherwise it only charges and Chrome can’t see it.</p>';
+    const fix = tip + `<p>${kind === 'feed' ? 'Unplug any other USB camera (one at a time). Then paste this in Terminal, unplug and replug the camera:' : 'macOS’s camera service is usually in the way. Paste this in Terminal, then unplug and replug the camera:'}</p>
       <div class="sc-cmd"><code>${escA(FIX_CMD)}</code><button type="button" data-copy="${escA(FIX_CMD)}">Copy</button></div>`;
     box.innerHTML = `<b>${title}</b>${fix}<p>Still stuck? Follow the setup steps below.</p>${detail ? `<small>Camera said: ${detail.replace(/</g, '&lt;')}</small>` : ''}`;
     box.querySelectorAll('[data-copy]').forEach(b => b.onclick = async e => {

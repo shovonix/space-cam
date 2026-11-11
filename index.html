@@ -32,7 +32,7 @@ html.scp-r #stage{right:0!important}
 </style>
 <script src="coi-serviceworker.js"></script>
 <!-- Space Cam styles in the head: nothing paints unstyled on reload (keep its ?v= the same as studio.js at the bottom) -->
-<link rel="stylesheet" href="studio.css?v=2026-11-11i">
+<link rel="stylesheet" href="studio.css?v=2026-11-11j">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#0A0A0B">
@@ -304,8 +304,9 @@ body:not(.stage-window) #stage:not(.editing) #script-text{cursor:pointer}
 .para:last-child{margin-bottom:0}
 
 body:not(.stage-window) #stage::after{
-  content:"";position:absolute;left:0;right:0;bottom:0;height:180px;
-  background:linear-gradient(transparent, rgba(0,0,0,.88));pointer-events:none;z-index:3;
+  content:"";position:absolute;left:0;right:0;bottom:0;height:200px;
+  /* Space Cam: dark by the progress line (104–122px up), so scrolling text fades out before it crosses the line */
+  background:linear-gradient(rgba(0,0,0,0), rgba(0,0,0,.92) 38%, rgba(0,0,0,.96));pointer-events:none;z-index:3;
 }
 /* ---- Reading progress + bottom capsule (control only) ---- */
 #progress-wrap{
@@ -858,12 +859,12 @@ body.touch #screen-note{order:5;margin-top:12px;padding:10px 12px;font-size:12px
 <!-- What's new: edit before every deploy (see CLAUDE.md). Shown in the update notice and once after the reload. Plain words, one line each. -->
 <script type="application/json" id="sc-changes">
 {
-  "added": [],
+  "added": [
+    "A first-time welcome that reads like a real script on the prompter: press Space or Play to see it scroll."
+  ],
   "fixed": [
-    "Camera on Stage shows on the Stage window too (it showed only in the small preview), using the same camera as this window.",
-    "Smoother Camera on Stage with the A7 III: the Stage gets every frame, 24 a second. Camera settings shows the camera's full frame rate for focusing.",
-    "The version moved to the bottom line of the left panel, beside the copyright. Click it for What's new.",
-    "The Stage's camera and mic signal no longer flickers red and green when Space Cam is open in more than one window."
+    "The progress line sits clear of the bottom buttons and the mic wave, and the script fades out before it reaches the line.",
+    "The top buttons, the settings gear and the sun / moon button are all the same size and line up."
   ]
 }
 </script>
@@ -3674,7 +3675,14 @@ var qrcode = function() {
     scriptText.appendChild(frag);
     if(!isStageWindow && !text.trim()){
       // Space Cam: no script yet. Recording without a prompter is fine.
-      scriptText.innerHTML = '<div class="para sc-noscript sc-welcome"><span class="sc-welcome-h">Welcome to Space Cam</span><span class="sc-welcome-s">A camera, teleprompter and microphone that work together. One Record button syncs every recording device in your room.</span><span class="sc-welcome-how">Click <b>Add script</b> below to paste your script, or open the left panel (top left) to pick one. Or just record without one.</span></div>';
+      // First view looks like the real prompter: script-sized lines on the reading line, not small notes.
+      // Play scrolls it, so a first visitor tries the prompter straight away.
+      scriptText.innerHTML = ['Welcome to Space Cam.',
+        'Press Space or Play to see your script scroll like this.',
+        'Click <b>Add script</b> below to paste your own. Or just record without one.',
+        'Connect your camera and mic on the right. Press R, and camera, mic and prompter start together.',
+        'Your words stay big and clear, right on the reading line, while you look into the lens.']
+        .map(function(t, i){ return '<div class="para sc-noscript sc-welcome-p' + (i ? ' sc-welcome-next' : '') + '">' + t + '</div>'; }).join('');
     }
     applyViewScale();
     if(keepG !== null && isFinite(keepG)){
@@ -5600,7 +5608,7 @@ var qrcode = function() {
   });
 
   // ---- Build/version indicator (control window top bar) ----
-  var APP_VERSION = 'v1.8.2'; // bump with each deploy (1.1, 1.2 …): shows in the logo chip, and open copies get the "new version" toast
+  var APP_VERSION = 'v1.8.3'; // bump with each deploy (1.1, 1.2 …): shows in the logo chip, and open copies get the "new version" toast
   if(buildMeta && !isStageWindow){
     buildMeta.textContent = APP_VERSION;
     // the version lives on the bottom line now, beside the copyright: "Space Cam v1.8.1 © shovonix"
@@ -6248,4 +6256,4 @@ window.claude.hot.snapshot(function(){ return { state: state }; });
 </script>
 <!-- Bump ?v= on every deploy so browsers load the new files instead of cached ones.
      studio.js passes the same ?v= on to every file it loads (engines, workers). -->
-<script type="module" src="studio.js?v=2026-11-11i"></script>
+<script type="module" src="studio.js?v=2026-11-11j"></script>

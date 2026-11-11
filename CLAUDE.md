@@ -1,6 +1,6 @@
 # Space Cam
 
-One page for a solo recording: camera control + audio recording + teleprompter. Live at https://spacecam.shovonix.dev (cam.shovonix.dev redirects). Chrome or Edge on a Mac, built and tested with a Sony A7 III.
+One page for a solo recording: camera control + audio recording + teleprompter. Live at https://spacecam.shovonix.dev. (The old address cam.shovonix.dev was shut down on 11 Nov 2026: site deleted, no longer answers.) Chrome or Edge on a Mac, built and tested with a Sony A7 III.
 
 ## What's in this repo
 - `index.html` — prompter page, forked from Space Prompter v3.5 (Dual Monitor only).
@@ -35,9 +35,9 @@ No build step.
 
 ## Workflow
 - Work on the Mac in `~/Sites/space/space-cam`. Commit small, push to `main`.
-- Live files: `/home/cam/htdocs/cam.shovonix.dev` (CloudPanel site user `cam`). There's no separate spacecam site folder, so spacecam.shovonix.dev is presumably served from this one; check the nginx vhost before changing domains.
-- Deploy: push to `main`, then on the VPS run `deploy-space cam` as root. It pulls `main` as user `cam` over SSH with the read-only deploy key `~cam/.ssh/spacecam_deploy`, fast-forward only.
-- Git data lives outside the web root at `/home/cam/space-cam.git`. `CLAUDE.md` and `.claude/` are excluded from the live folder via sparse-checkout (`/home/cam/space-cam.git/info/sparse-checkout`: `/*`, `!/CLAUDE.md`, `!/.claude/`). `deploy-space` doesn't touch that file. To exclude another path, append `!/<path>` as user `cam`, then run `git read-tree -mu HEAD` with the same `--git-dir`/`--work-tree`.
+- Live files: `/home/spacecam/htdocs/spacecam.shovonix.dev` (CloudPanel site `spacecam.shovonix.dev`, site user `spacecam`, its own Let's Encrypt certificate renewed by CloudPanel). Moved there from the old cam.shovonix.dev site on 11 Nov 2026; a backup of the old site is at `/root/cam-site-backup-20261111.tgz` on the VPS.
+- Deploy: push to `main`, then on the VPS run `deploy-space cam` as root. It pulls `main` as user `spacecam` over SSH with the read-only deploy key `~spacecam/.ssh/spacecam_deploy`, fast-forward only. (The target is still called `cam` in `/usr/local/bin/deploy-space`.)
+- Git data lives outside the web root at `/home/spacecam/space-cam.git` (its work tree is set in `config.worktree`). `CLAUDE.md` and `.claude/` are excluded from the live folder via sparse-checkout (`/home/spacecam/space-cam.git/info/sparse-checkout`: `/*`, `!/CLAUDE.md`, `!/.claude/`). `deploy-space` doesn't touch that file. To exclude another path, append `!/<path>` as user `spacecam`, then run `git read-tree -mu HEAD` with the same `--git-dir`/`--work-tree`.
 - Never edit the live files on the VPS directly.
 
 ## Versions

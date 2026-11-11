@@ -1614,8 +1614,12 @@ input[type=range]::-webkit-slider-thumb{box-shadow:0 0 3px rgba(255,255,255,.12)
   body:not(.sc-phone):not(.stage-window) #left-rail,
   body:not(.sc-phone):not(.stage-window) #right-rail{zoom:1.15;width:calc(345px / 1.15)!important}
   body:not(.sc-phone):not(.stage-window) #bottombar{zoom:1.12}
+  /* bigger bottom bar: the progress line sits just above it, and the mic wave strip moves up so they don't collide */
+  body:not(.sc-phone):not(.stage-window) #progress-wrap{bottom:116px}
+  body:not(.sc-phone):not(.stage-window) .sc-wave-center{transform:translateY(-14px)}
   body:not(.sc-phone):not(.stage-window) .sc-stage-tools,
-  body:not(.sc-phone):not(.stage-window) .sc-rail-show{zoom:1.12}
+  body:not(.sc-phone):not(.stage-window) .sc-rail-show,
+  body:not(.sc-phone):not(.stage-window) .sc-rshow{zoom:1.12} /* the gear too, so it lines up with the top buttons */
 }
 /* Stage window card: everything left-aligned (the prompter's centred hint text was leaking in) */
 #stage-hint-card,#stage-hint-card *{text-align:left!important}
@@ -1632,3 +1636,9 @@ body:not(.sc-phone) #bottombar{background:rgba(14,14,15,.94)}
 .brand-text .name{font-size:19px!important}
 .sc-rs-text b{font-size:17px!important}
 body.sc-phone .sc-rs-text b{font-size:15px!important}
+/* First view (no script yet): the welcome reads like a real script, at the script's own size; lines after the first are dimmed like "fade other lines" */
+.sc-noscript.sc-welcome-p{font-size:1em!important;color:var(--fg)}
+.sc-noscript.sc-welcome-p.sc-welcome-next{color:var(--fg);opacity:.42}
+.sc-noscript.sc-welcome-p b{font-weight:inherit;text-decoration:underline;text-underline-offset:.12em;text-decoration-thickness:.06em}
+/* sun / moon button: same size as Focus and Full screen */
+.sc-stage-tools .sc-theme-btn{width:44px;height:44px;border-radius:12px;background:rgba(20,20,22,.7)!important;border-color:var(--hair)!important}

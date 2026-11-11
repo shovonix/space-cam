@@ -3,7 +3,7 @@
 A camera, teleprompter and microphone that work together. One Record button syncs every recording device in your room.
 Built on the Space Prompter design. Chrome or Edge on a Mac. Built and tested with a Sony A7 III.
 
-- App: https://spacecam.shovonix.dev (cam.shovonix.dev redirects here)
+- App: https://spacecam.shovonix.dev
 - Camera diagnostics: `/test/` lists every setting and action the camera exposes
 
 ## What it does

@@ -65,13 +65,16 @@ export class AudioCore extends EventTarget {
   async open(deviceId = '') {
     await this.close();
     try {
-      this.#stream = await navigator.mediaDevices.getUserMedia({
+      const ask = id => navigator.mediaDevices.getUserMedia({
         audio: {
-          deviceId: deviceId ? { exact: deviceId } : undefined,
+          deviceId: id ? { exact: id } : undefined,
           echoCancellation: false, noiseSuppression: false, autoGainControl: false,
           channelCount: { ideal: 2 }, sampleRate: { ideal: 48000 },
         },
       });
+      // A saved mic that's gone (unplugged, or Chrome gave it a new id) → OverconstrainedError: use the default mic instead
+      try { this.#stream = await ask(deviceId); }
+      catch (e) { if (!deviceId || !/Overconstrained|NotFound/.test(e?.name)) throw e; this.#stream = await ask(''); }
     } catch (e) {
       return this.#fail(e?.name === 'NotAllowedError' ? 'Microphone access was blocked. Allow it in the address bar, then try again.' : `Could not open the microphone: ${e?.message || e}`);
     }

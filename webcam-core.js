@@ -45,10 +45,13 @@ export class WebcamCore extends EventTarget {
     await this.close();
     this.#setState('connecting');
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({
+      const ask = id => navigator.mediaDevices.getUserMedia({
         audio: false,
-        video: { deviceId: deviceId ? { exact: deviceId } : undefined, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
+        video: { deviceId: id ? { exact: id } : undefined, width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } },
       });
+      // A saved camera that's gone (or got a new id) → OverconstrainedError: use the default camera instead
+      try { this.stream = await ask(deviceId); }
+      catch (e) { if (!deviceId || !/Overconstrained|NotFound/.test(e?.name)) throw e; this.stream = await ask(''); }
     } catch (e) {
       this.#setState('off');
       return this.#fail(e?.name === 'NotAllowedError' ? 'Camera access was blocked. Allow the camera for this site in Chrome (and in macOS Privacy & Security → Camera).' : 'Could not open the Mac camera: ' + (e?.message || e));

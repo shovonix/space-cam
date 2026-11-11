@@ -126,8 +126,9 @@ function initStageCam() {
   const isMini = location.hash === '#stage-preview'; let miniT = 0;
   const stopStream = () => { if (!shared) stream?.getTracks().forEach(t => t.stop()); stream = null; devId = null; shared = false; vid.srcObject = null; }; // never stop the page's own camera stream
   let ch; try { ch = new BroadcastChannel('spaceCamCam'); } catch { return; }
-  let myWin = ''; try { myWin = sessionStorage.getItem('spaceCamWin') || ''; } catch {} // the control window that opened this Stage (see init)
-  const fromOther = m => !!(myWin && m?.win && m.win !== myWin);
+  // the control window this Stage belongs to: the one that opened it (Stage window) or holds it (mini preview)
+  const myWin = () => { try { return (window.opener && window.opener.spaceCamWinId) || (window.parent !== window && window.parent.spaceCamWinId) || ''; } catch { return ''; } };
+  const fromOther = m => { const w = myWin(); return !!(w && m?.win && m.win !== w); };
   ch.onmessage = async ({ data: m }) => {
     if (!m) return;
     if (m.type === 'cfg') {
@@ -175,7 +176,7 @@ function initStageCam() {
   const recMsg = m => { recSeen = performance.now(); setInd(m); };
   setInterval(() => { if (performance.now() - recSeen > 1500){ setInd({ rec: false }); tipCard.hidden = true; } }, 500); // control window gone or stopped: grey, no tip
   const prev = ch.onmessage; ch.onmessage = e => { if (fromOther(e.data)) return; if (e.data?.type === 'rec') return recMsg(e.data); if (e.data?.type === 'tip') return tipMsg(e.data.tip); prev(e); };
-  ch.postMessage({ type: 'hello', win: myWin });
+  ch.postMessage({ type: 'hello', win: myWin() });
   addEventListener('pagehide', stopStream);
 }
 
@@ -214,7 +215,9 @@ function init() {
   // Every Space Cam window (installed app, browser tabs) shares this channel. Tag what this window sends, so its own
   // Stage and mini preview ignore the others: before, a camera on in another window made the signal flip and its tips show here.
   // The id lives in sessionStorage: the Stage window (window.open) gets a copy, the mini preview (iframe) shares it.
-  let winId = ''; try { winId = sessionStorage.getItem('spaceCamWin') || (crypto.randomUUID?.() || String(Math.random()).slice(2)); sessionStorage.setItem('spaceCamWin', winId); } catch {}
+  // A new id every load (not kept in sessionStorage: Chrome copies that into duplicated / reopened tabs, so two
+  // windows could share one id and their Stage flickered red / green). The Stage reads it live from its opener.
+  const winId = (crypto.randomUUID?.() || String(Math.random()).slice(2)); window.spaceCamWinId = winId;
   if (stageCamCh && winId) { const rawPost = stageCamCh.postMessage.bind(stageCamCh); stageCamCh.postMessage = m => rawPost({ ...m, win: winId }); }
   let stageCamLast = '', stageFrameT = 0;
   function sendStageCam(force = false) {

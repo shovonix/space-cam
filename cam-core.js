@@ -206,7 +206,7 @@ export const CamCore = class CamCore extends EventTarget {
   }
 
   // ---------- preview ----------
-  /** Live view speed limit (frames per second). 15 is smooth for framing and keeps the Mac cool; 30 while focusing. */
+  /** Live view speed limit (frames per second). 15 keeps the Mac cool; studio raises it (24 for the Stage, no limit in Camera settings). */
   previewFps = 15;
   startPreview() {
     if (!this.#camera) return;

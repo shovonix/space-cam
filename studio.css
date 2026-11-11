@@ -1628,3 +1628,7 @@ body:not(.sc-phone) #bottombar{background:rgba(14,14,15,.94)}
 .brand-text,.sc-rs-text{justify-content:center}
 #left-rail .copyright{cursor:pointer}
 #left-rail .copyright:hover{opacity:.9}
+/* "Space Cam" beside the logo a bit bigger (11 Nov): open panel, collapsed chip and phone */
+.brand-text .name{font-size:19px!important}
+.sc-rs-text b{font-size:17px!important}
+body.sc-phone .sc-rs-text b{font-size:15px!important}

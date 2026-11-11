@@ -122,7 +122,7 @@ function initStageCam() {
   new MutationObserver(copy).observe(scroller, { attributes: true, attributeFilter: ['style'] });
   copy();
   let stream = null, devId = null, lastUrl = null, shared = false;
-  // the small Stage preview in the control window: it's tiny, so ~3 camera frames a second are plenty (heat)
+  // the small Stage preview in the control window: it's tiny, so 10 camera frames a second are plenty (heat)
   const isMini = location.hash === '#stage-preview'; let miniT = 0;
   const stopStream = () => { if (!shared) stream?.getTracks().forEach(t => t.stop()); stream = null; devId = null; shared = false; vid.srcObject = null; }; // never stop the page's own camera stream
   let ch; try { ch = new BroadcastChannel('spaceCamCam'); } catch { return; }
@@ -154,7 +154,7 @@ function initStageCam() {
         } catch { layer.hidden = true; }
       }
     } else if (m.type === 'frame' && m.blob && layer.dataset.src === 'usb') {
-      if (isMini) { const t = performance.now(); if (t - miniT < 330) return; miniT = t; }
+      if (isMini) { const t = performance.now(); if (t - miniT < 100) return; miniT = t; } // small preview: 10 fps
       const u = URL.createObjectURL(m.blob); img.src = u;
       if (lastUrl) URL.revokeObjectURL(lastUrl);
       lastUrl = u;
@@ -1202,9 +1202,9 @@ function init() {
   csQ('.sc-cs-near').onclick = () => { markDirty(); focusBy(-1); }; csQ('.sc-cs-far').onclick = () => { markDirty(); focusBy(1); };
   csQ('.sc-cs-save').onclick = () => closeBig();
   const camSetOn = () => document.body.classList.contains('sc-camset-on');
-  // USB live view speed: 15 fps keeps the Mac cool; 24 while the Stage shows the camera (prompter glass, smoother);
-  // 30 while focusing in Camera settings. Checked once a second, so it follows Camera on Stage and Connect stage.
-  const liveFps = () => camSetOn() ? 30 : stageShowsCam() ? 24 : 15;
+  // USB live view speed (Shovon, 11 Nov): 15 fps for the preview and behind the script, 24 while the Stage shows the
+  // camera, and no limit in Camera settings (the camera's real rate, for focusing). The small Stage preview takes 10.
+  const liveFps = () => camSetOn() ? 1000 : stageShowsCam() ? 24 : 15;
   setInterval(() => { if (cam.previewFps !== liveFps()) cam.previewFps = liveFps(); }, 1000);
   function openBig() {
     if (camSetOn()) return;
@@ -1212,15 +1212,15 @@ function init() {
     if (!liveOn()) return;
     try { window.spaceCamPrompter?.pause(); } catch {}
     document.body.classList.add('sc-camset-on'); camSet.hidden = false;
-    cam.previewFps = 30; // focusing: smoother live view while Camera settings is open (liveFps below keeps it)
+    cam.previewFps = liveFps(); // Camera settings: no limit, the camera's real frame rate for focusing
     csDirty = false; { const b = csQ('.sc-cs-save'); b.classList.remove('dirty'); b.innerHTML = `${BACK_IC}<span>Back</span>`; b.title = 'Back to the prompter (Esc)'; }
     renderBigSettings(); fitCamSet(); requestAnimationFrame(fitCamSet);
     document.addEventListener('keydown', camSetKey, true);
   }
   function closeBig() {
     if (!document.body.classList.contains('sc-camset-on')) return;
-    cam.previewFps = liveFps();
     document.body.classList.remove('sc-camset-on'); document.querySelector('.sc-camset').hidden = true;
+    cam.previewFps = liveFps(); // back to 15 (or 24 while the Stage shows the camera)
     document.removeEventListener('keydown', camSetKey, true);
   }
   // the camera gets its own 16:9 frame between the corner buttons and the settings panel, so nothing covers it

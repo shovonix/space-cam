@@ -559,7 +559,7 @@ function init() {
         'Line position': '<path d="M4 12h11M19 6v12M17 8l2-2 2 2M17 16l2 2 2-2"/>',
         'Pause marks': '<path d="M4 6h16M4 10.5h10"/><circle cx="6" cy="17" r="2" class="r"/>',
         'Fade other lines': '<path d="M4 6h16" opacity=".35"/><path d="M4 12h16"/><path d="M4 18h16" opacity=".35"/>',
-        'Fade opacity': '<circle cx="9" cy="12" r="5" class="d"/><circle cx="15" cy="12" r="5" opacity=".45"/>',
+        'Fade opacity': '<path d="M5 6v12"/><path d="M9.7 6v12" opacity=".7"/><path d="M14.3 6v12" opacity=".45"/><path d="M19 6v12" opacity=".2"/>', // bars getting fainter: how dim the other lines go
         'Bluetooth pedal': '<path d="M7 7.5l10 9L12 21V3l5 4.5-10 9"/>',
         'Shooting assistant': '<path d="M12 3l1.6 3.9L17.5 8.5l-3.9 1.6L12 14l-1.6-3.9L6.5 8.5l3.9-1.6z"/><path d="M18 14l.8 1.9 1.9.8-1.9.8L18 19.4l-.8-1.9-1.9-.8 1.9-.8zM6 15l.6 1.4 1.4.6-1.4.6L6 19l-.6-1.4L4 17l1.4-.6z"/>',
         'Level': '<path d="M5 18v-4M9.5 18V9M14 18v-6M18.5 18V5"/>',

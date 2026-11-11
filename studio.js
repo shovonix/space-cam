@@ -141,7 +141,9 @@ function initStageCam() {
       // This page already has the camera open (phone: control window = Stage): show that same stream.
       // Phones allow only one camera stream; opening a second one turns the first black.
       // the mini preview (an iframe in the control window) borrows the control window's stream instead of opening a second one
-      const own = window.spaceCamWebStream?.() || (isMini ? (() => { try { return window.parent.spaceCamWebStream?.(); } catch { return null; } })() : null);
+      // the Stage window and the mini preview borrow the control window's camera stream: no second camera, no hidden
+      // permission prompt on the Stage (it showed in the preview but not on the Stage), and the full 30 fps
+      const own = window.spaceCamWebStream?.() || (() => { try { return (window.opener && window.opener.spaceCamWebStream?.()) || (isMini ? window.parent.spaceCamWebStream?.() : null); } catch { return null; } })();
       if (m.on && m.src === 'mac' && own?.active) {
         if (stream !== own) { stopStream(); stream = own; shared = true; devId = m.deviceId || ''; vid.srcObject = own; vid.play().catch(() => {}); }
       } else if (m.on && m.src === 'mac' && (!stream || !stream.active || devId !== (m.deviceId || ''))) {
@@ -906,7 +908,7 @@ function init() {
     ui.img.src = url; ui.cPreview.src = url; ui.ccImg.src = url; ui.cPreviewBox.classList.add('live'); if (big) big.img.src = url;
     // Camera on Stage with a USB camera: pass frames on, at most 15 a second, so the scroll sync never waits
     const tNow = performance.now();
-    if (stageCamCh && store.get('stageCam', false) && src === 'sony' && tNow - stageFrameT > 66) { stageFrameT = tNow; stageCamCh.postMessage({ type: 'frame', blob: e.detail.blob }); }
+    if (stageCamCh && store.get('stageCam', false) && src === 'sony' && tNow - stageFrameT > 30) { stageFrameT = tNow; stageCamCh.postMessage({ type: 'frame', blob: e.detail.blob }); } // every live-view frame (the old 66 ms gate dropped every other one)
     if (lastUrl) URL.revokeObjectURL(lastUrl);
     lastUrl = url;
   });
@@ -1200,20 +1202,24 @@ function init() {
   csQ('.sc-cs-near').onclick = () => { markDirty(); focusBy(-1); }; csQ('.sc-cs-far').onclick = () => { markDirty(); focusBy(1); };
   csQ('.sc-cs-save').onclick = () => closeBig();
   const camSetOn = () => document.body.classList.contains('sc-camset-on');
+  // USB live view speed: 15 fps keeps the Mac cool; 24 while the Stage shows the camera (prompter glass, smoother);
+  // 30 while focusing in Camera settings. Checked once a second, so it follows Camera on Stage and Connect stage.
+  const liveFps = () => camSetOn() ? 30 : stageShowsCam() ? 24 : 15;
+  setInterval(() => { if (cam.previewFps !== liveFps()) cam.previewFps = liveFps(); }, 1000);
   function openBig() {
     if (camSetOn()) return;
     if (take) return toast('Stop recording first.', 'error');
     if (!liveOn()) return;
     try { window.spaceCamPrompter?.pause(); } catch {}
     document.body.classList.add('sc-camset-on'); camSet.hidden = false;
-    cam.previewFps = 30; // focusing: smoother live view while Camera settings is open
+    cam.previewFps = 30; // focusing: smoother live view while Camera settings is open (liveFps below keeps it)
     csDirty = false; { const b = csQ('.sc-cs-save'); b.classList.remove('dirty'); b.innerHTML = `${BACK_IC}<span>Back</span>`; b.title = 'Back to the prompter (Esc)'; }
     renderBigSettings(); fitCamSet(); requestAnimationFrame(fitCamSet);
     document.addEventListener('keydown', camSetKey, true);
   }
   function closeBig() {
     if (!document.body.classList.contains('sc-camset-on')) return;
-    cam.previewFps = 15;
+    cam.previewFps = liveFps();
     document.body.classList.remove('sc-camset-on'); document.querySelector('.sc-camset').hidden = true;
     document.removeEventListener('keydown', camSetKey, true);
   }
@@ -1880,7 +1886,7 @@ function init() {
     const seen = store.get('seenBuild', '');
     if (build) store.set('seenBuild', build);
     if (seen && build && seen !== build) setTimeout(showNew, 1200); // first visit ever: nothing to compare, no card
-    for (const el of [$('build-meta'), document.querySelector('.sc-rs-ver')]) {
+    for (const el of [document.querySelector('#left-rail .copyright')]) { // the bottom line with the version opens What's new
       if (!el) continue;
       el.title = "What's new"; el.style.cursor = 'pointer';
       el.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); showNew(); });

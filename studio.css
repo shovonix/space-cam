@@ -1623,3 +1623,8 @@ input[type=range]::-webkit-slider-thumb{box-shadow:0 0 3px rgba(255,255,255,.12)
    recalculated every video frame (bottom bar 20 px) though these are nearly solid; a touch more solid instead. */
 #bottombar,.sc-rail-show,.sc-rshow,.sc-assist-tip,.sc-prev-set,#back-btn,#mode-toast,.sc-stage-tools .icon-btn,.sc-stage-tools .sc-stage-rec{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
 body:not(.sc-phone) #bottombar{background:rgba(14,14,15,.94)}
+/* Version moved off the logo to the bottom line ("Space Cam v1.8.1 © shovonix"); the name sits centred beside the logo */
+#build-meta,.sc-rs-ver{display:none!important}
+.brand-text,.sc-rs-text{justify-content:center}
+#left-rail .copyright{cursor:pointer}
+#left-rail .copyright:hover{opacity:.9}

@@ -32,7 +32,7 @@ html.scp-r #stage{right:0!important}
 </style>
 <script src="coi-serviceworker.js"></script>
 <!-- Space Cam styles in the head: nothing paints unstyled on reload (keep its ?v= the same as studio.js at the bottom) -->
-<link rel="stylesheet" href="studio.css?v=2026-11-11d">
+<link rel="stylesheet" href="studio.css?v=2026-11-11e">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#0A0A0B">
@@ -293,6 +293,8 @@ body:not(.stage-window) #script-text{cursor:text}
 #guide.off{opacity:0}
 
 .para{margin-bottom:var(--para-gap,1.1em);transition:opacity .3s ease}
+/* Space Cam: extra blank lines in the script (2+ between paragraphs) add one empty line each, on top of the paragraph gap */
+.para{margin-top:calc(var(--blank,0) * 1lh)}
 /* Space Cam: pause marks at paragraph breaks */
 #script-text.pause-marks .para:not(:last-child)::after{content:"";display:block;width:.3em;height:.3em;margin-top:.4em;border-radius:50%;background:var(--red);opacity:.7}
 #script-text.pause-marks[style*="text-align: center"] .para:not(:last-child)::after{margin-left:auto;margin-right:auto}
@@ -615,16 +617,10 @@ body.solo.ui-hidden #stage{cursor:none}
   background:#f4f4f2;color:#0a0a0b;font:600 12.5px 'Archivo',system-ui,sans-serif;box-shadow:0 10px 36px rgba(0,0,0,.6);
   opacity:0;pointer-events:none;transition:opacity .3s ease,transform .3s ease;max-width:calc(100% - 32px);
 }
-#update-toast.show,#update-toast.has-list.show{opacity:1;pointer-events:auto;transform:translate(-50%,0)}
-#update-toast .upd-h{font-weight:700}
-#update-toast .upd-tap{margin-left:8px;opacity:.6}
-#update-toast.has-list{top:max(16px,env(safe-area-inset-top));bottom:auto;transform:translate(-50%,-12px);border-radius:16px;padding:14px 18px 12px;text-align:left;width:min(440px,calc(100% - 32px))}
-#update-toast.has-list .upd-h{display:block;font-size:13.5px;margin-bottom:8px}
-#update-toast .upd-list{margin:0 0 10px;padding:0;list-style:none;font:500 12.5px/1.45 'Public Sans','Archivo',system-ui,sans-serif}
-#update-toast .upd-list li+li{margin-top:5px}
-#update-toast .upd-list span{display:inline-block;min-width:42px;font:700 10.5px 'Archivo',system-ui,sans-serif;text-transform:uppercase;letter-spacing:.06em;opacity:.55}
-#update-toast .upd-more{opacity:.6}
-#update-toast.has-list .upd-tap{display:block;margin:0;font-size:12px}
+#update-toast.show{opacity:1;pointer-events:auto;transform:translate(-50%,0)}
+#update-toast{display:flex;align-items:center;gap:10px;padding-right:8px;top:calc(env(safe-area-inset-top) + 76px);bottom:auto;transform:translate(-50%,-12px)} /* top centre, under the top buttons: clear of them and of the Play / Record bar */
+#update-toast .upd-x{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;font-size:11px;opacity:.55;cursor:pointer}
+#update-toast .upd-x:hover{opacity:1;background:rgba(0,0,0,.08)}
 body.stage-window #update-toast{display:none}
 #mode-toast.show{opacity:1;transform:translate(-50%,0)}
 body.stage-window #mode-toast{display:none}
@@ -852,14 +848,10 @@ body.touch #screen-note{order:5;margin-top:12px;padding:10px 12px;font-size:12px
 <!-- What's new: edit before every deploy (see CLAUDE.md). Shown in the update notice and once after the reload. Plain words, one line each. -->
 <script type="application/json" id="sc-changes">
 {
-  "added": [
-    "Light mode: the sun / moon button at the top, between Focus and Full screen. While your camera shows behind the script, the middle stays black with white text. The Stage window always stays black for the prompter glass.",
-    "Bigger side panels, top buttons and bottom bar on laptops and desktops, easier to read and click."
-  ],
+  "added": [],
   "fixed": [
-    "The installed app now always opens on the newest version, and tells you sooner when an update is out.",
-    "The Stage now only shows this window's camera and mic signal and its tips. With Space Cam open twice (the app and a browser tab), the signal kept jumping and tips showed for the other window's camera.",
-    "The Stage window's how-to card is left-aligned."
+    "A pasted script keeps its paragraphs and empty lines exactly as written (Google Docs, Word, web pages too), on the Stage and in this window. Paragraph gap adds space on top.",
+    "The update notice is one short line with a close button, under the top buttons. What changed shows after you reload."
   ]
 }
 </script>
@@ -3654,15 +3646,19 @@ var qrcode = function() {
 
     // Split on blank lines into paragraph blocks (not just one text node) so
     // "previous paragraph" has real boundaries to jump between.
-    var paras = text.split(/\n[ \t]*\n+/);
+    // Space Cam: same paragraphs as everywhere else (split on blank lines), but each break remembers how many
+    // blank lines it had: one = the normal paragraph gap, every extra one adds an empty line (kept exactly as pasted).
+    var bits = text.split(/(\n[ \t]*\n+)/);
     scriptText.innerHTML = '';
     var frag = document.createDocumentFragment();
-    paras.forEach(function(p){
+    for(var bi = 0; bi < bits.length; bi += 2){
       var div = document.createElement('div');
       div.className = 'para';
-      div.textContent = p;
+      div.textContent = bits[bi];
+      var sep = bi > 0 ? bits[bi - 1] : '', extra = Math.max(0, (sep.match(/\n/g) || []).length - 2);
+      if(extra){ div.dataset.blank = extra; div.style.setProperty('--blank', extra); }
       frag.appendChild(div);
-    });
+    }
     scriptText.appendChild(frag);
     if(!isStageWindow && !text.trim()){
       // Space Cam: no script yet. Recording without a prompter is fine.
@@ -4042,6 +4038,40 @@ var qrcode = function() {
     save();
     renderScriptTabs();
   }
+  // Formatted clipboard (text/html) → script text: paragraphs joined by a blank line, each empty paragraph
+  // or stray <br> between them adds one more blank line, <br> inside a paragraph = line break.
+  // Returns null when there's no paragraph structure (then the normal plain-text paste is used).
+  function scHtmlToScript(html){
+    var doc; try{ doc = new DOMParser().parseFromString(html, 'text/html'); }catch(e){ return null; }
+    var BLOCK = /^(P|DIV|LI|H[1-6]|BLOCKQUOTE|PRE|TR|SECTION|ARTICLE|HEADER|FOOTER|UL|OL|TABLE|TBODY)$/;
+    var blocks = [], cur = null;
+    function flush(){ if(cur !== null){ blocks.push(cur); cur = null; } }
+    function textOf(el){ var c = el.cloneNode(true); c.querySelectorAll('br').forEach(function(b){ b.replaceWith('\n'); }); c.querySelectorAll('style,script').forEach(function(x){ x.remove(); }); return c.textContent.replace(/\u00a0/g, ' '); }
+    function walk(node){
+      node.childNodes.forEach(function(n){
+        if(n.nodeType === 3){ var t = n.textContent.replace(/\u00a0/g, ' '); if(t.trim() || cur !== null) cur = (cur || '') + t.replace(/\s*\n\s*/g, ' '); return; }
+        if(n.nodeType !== 1 || /^(STYLE|SCRIPT|META|TITLE)$/.test(n.tagName)) return;
+        if(n.tagName === 'BR'){ if(cur !== null) flush(); else blocks.push(''); return; }
+        if(BLOCK.test(n.tagName)){
+          flush();
+          if(n.querySelector('p,div,li,h1,h2,h3,h4,h5,h6,blockquote,tr')) walk(n);
+          else blocks.push(textOf(n).replace(/[ \t]+\n/g, '\n').replace(/\s+$/, ''));
+          return;
+        }
+        if(n.querySelector('p,div,li,h1,h2,h3,h4,h5,h6,blockquote,tr,br')){ walk(n); return; } // e.g. Google Docs wraps everything in <b>
+        cur = (cur || '') + textOf(n);
+      });
+    }
+    walk(doc.body); flush();
+    if(blocks.filter(function(b){ return b.trim(); }).length < 2) return null;
+    var out = '', blank = 0;
+    blocks.forEach(function(b){
+      if(!b.trim()){ blank++; return; }
+      out += (out ? '\n\n' + '\n'.repeat(blank) : '') + b.replace(/^\s+/, '');
+      blank = 0;
+    });
+    return out;
+  }
   // Space Cam: edit a saved script's full text in a popup (re-paste the whole script).
   // id null = paste a new script (Spotlight is the only page, so new scripts start here).
   // Space Cam: script popup — all scripts listed on the left (newest first), the open one on the right.
@@ -4067,6 +4097,17 @@ var qrcode = function() {
     var nameIn = wrap.querySelector('.sc-modal-name-in');
     var ta = wrap.querySelector('textarea');
     function dirty(){ return nameIn.value !== baseName || ta.value !== baseText; }
+    // Paste exactly as written: Google Docs, Word and web pages put each paragraph on ONE line break in plain text,
+    // so the prompter saw one big block. Read the formatted copy instead: every paragraph becomes a paragraph
+    // (blank line), empty lines between them stay as extra blank lines, line breaks inside a paragraph stay.
+    ta.addEventListener('paste', function(e){
+      var cd = e.clipboardData, html = cd && cd.getData('text/html');
+      var txt = html ? scHtmlToScript(html) : null;
+      if(txt == null){ var plain = cd && cd.getData('text/plain'); if(plain == null || plain.indexOf('\r') < 0) return; txt = plain.replace(/\r\n?/g, '\n'); }
+      e.preventDefault();
+      ta.setRangeText(txt, ta.selectionStart, ta.selectionEnd, 'end');
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+    });
     // ---- Coverage: which recordings covered each paragraph; star the one to use (stored on the script as best[paragraph] = take id)
     var cov = wrap.querySelector('.sc-se-cov'), tabs = wrap.querySelector('.sc-se-tabs'), tab = 'text';
     function fmtT(x){ x = Math.max(0, Math.round(x || 0)); return Math.floor(x / 60) + ':' + String(x % 60).padStart(2, '0'); }
@@ -5008,9 +5049,12 @@ var qrcode = function() {
     scriptText.setAttribute('spellcheck', 'false');
     scriptText.setAttribute('aria-label', 'Script');
     function readEditedText(){
-      var parts = [];
-      scriptText.childNodes.forEach(function(n){ parts.push(n.textContent); });
-      return parts.join('\n\n');
+      var out = '';
+      scriptText.childNodes.forEach(function(n, i){
+        var extra = (n.dataset && +n.dataset.blank) || 0;
+        out += (i ? '\n\n' + '\n'.repeat(extra) : '') + n.textContent;
+      });
+      return out;
     }
     function flushEdit(){
       clearTimeout(editSaveTimer);
@@ -5544,7 +5588,7 @@ var qrcode = function() {
   });
 
   // ---- Build/version indicator (control window top bar) ----
-  var APP_VERSION = 'v1.6'; // bump with each deploy (1.1, 1.2 …): shows in the logo chip, and open copies get the "new version" toast
+  var APP_VERSION = 'v1.7'; // bump with each deploy (1.1, 1.2 …): shows in the logo chip, and open copies get the "new version" toast
   if(buildMeta && !isStageWindow){
     buildMeta.textContent = APP_VERSION;
   }
@@ -5568,19 +5612,14 @@ var qrcode = function() {
         var newVer = m && m[1] !== APP_VERSION, newBuild = b && mine && b[1] !== mine;
         if(newVer || newBuild){
           var el = document.getElementById('update-toast');
-          var c = null; try { c = JSON.parse((t.match(/id="sc-changes">([\s\S]*?)<\/script>/) || [])[1]); } catch(e){}
-          // the notice lists the lines themselves: New … / Fixed … (up to 6, then "and N more")
-          var lines = []; if(c){ (c.added||[]).forEach(function(x){ lines.push(['New', x]); }); (c.fixed||[]).forEach(function(x){ lines.push(['Fixed', x]); }); }
+          // one short line + ✕; what changed shows after the reload (What's new card), not here
+          var key = (newVer ? m[1] : '') + '|' + (b ? b[1] : '');
+          try{ if(sessionStorage.getItem('scUpdDismissed') === key){ updateChecking = false; return; } }catch(e){}
           el.textContent = '';
-          var hd = document.createElement('b'); hd.className = 'upd-h'; hd.textContent = newVer ? 'Space Cam ' + m[1] + ' is ready' : 'Space Cam was updated'; el.appendChild(hd);
-          if(lines.length){
-            var ul = document.createElement('ul'); ul.className = 'upd-list';
-            lines.slice(0, 6).forEach(function(l){ var li = document.createElement('li'); var k = document.createElement('span'); k.textContent = l[0]; li.appendChild(k); li.appendChild(document.createTextNode(' ' + l[1])); ul.appendChild(li); });
-            if(lines.length > 6){ var more = document.createElement('li'); more.className = 'upd-more'; more.textContent = 'and ' + (lines.length - 6) + ' more'; ul.appendChild(more); }
-            el.appendChild(ul);
-          }
-          var ft = document.createElement('span'); ft.className = 'upd-tap'; ft.textContent = 'Tap to reload'; el.appendChild(ft);
-          el.classList.toggle('has-list', lines.length > 0);
+          var tx = document.createElement('span'); tx.textContent = (newVer ? 'Space Cam ' + m[1] + ' is ready' : 'Space Cam was updated') + ' — tap to reload'; el.appendChild(tx);
+          var x = document.createElement('span'); x.className = 'upd-x'; x.setAttribute('role', 'button'); x.setAttribute('aria-label', 'Close'); x.title = 'Close'; x.textContent = '✕';
+          x.addEventListener('click', function(ev){ ev.stopPropagation(); el.classList.remove('show'); try{ sessionStorage.setItem('scUpdDismissed', key); }catch(e){} });
+          el.appendChild(x);
           el.classList.add('show');
         }
       }).catch(function(){}).then(function(){ updateChecking = false; });
@@ -6195,4 +6234,4 @@ window.claude.hot.snapshot(function(){ return { state: state }; });
 </script>
 <!-- Bump ?v= on every deploy so browsers load the new files instead of cached ones.
      studio.js passes the same ?v= on to every file it loads (engines, workers). -->
-<script type="module" src="studio.js?v=2026-11-11d"></script>
+<script type="module" src="studio.js?v=2026-11-11e"></script>

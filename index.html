@@ -32,7 +32,7 @@ html.scp-r #stage{right:0!important}
 </style>
 <script src="coi-serviceworker.js"></script>
 <!-- Space Cam styles in the head: nothing paints unstyled on reload (keep its ?v= the same as studio.js at the bottom) -->
-<link rel="stylesheet" href="studio.css?v=2026-11-11k">
+<link rel="stylesheet" href="studio.css?v=2026-11-11l">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#0A0A0B">
@@ -860,9 +860,17 @@ body.touch #screen-note{order:5;margin-top:12px;padding:10px 12px;font-size:12px
 <script type="application/json" id="sc-changes">
 {
   "added": [
-    "Space Cam is in beta for now: this is v1.8.3 beta. Thanks for testing, and tell Shovon what you find."
+    "Send feedback: tell Shovon about a bug or an idea, or just say you love it. Add a screenshot or video if it helps. It's at the bottom of the left panel.",
+    "How to use: the ? beside Controls opens a short guide with the keys.",
+    "shovonix on the bottom line now opens shovonix.dev."
   ],
-  "fixed": []
+  "fixed": [
+    "The welcome text on the first visit starts higher, so more of it fits on screen.",
+    "Every popup and message now has the same dark, blurred background.",
+    "Messages are calmer and sit at the top: each says what to do, with a button that fixes it (Turn mic on, Try again, Reconnect…). Red only when something really broke.",
+    "When the camera drops, one short card with three checks and a Reconnect button. The Terminal fix waits behind “Mac fix”.",
+    "The Recording saved card has more room: name on its own line, Keep or Save name below."
+  ]
 }
 </script>
 <aside id="left-rail" class="rail">
@@ -5605,11 +5613,11 @@ var qrcode = function() {
   });
 
   // ---- Build/version indicator (control window top bar) ----
-  var APP_VERSION = 'v1.8.3 beta'; // bump with each deploy (1.1, 1.2 …): shows in the logo chip, and open copies get the "new version" toast
+  var APP_VERSION = 'v1.8.4 beta'; // bump with each deploy (1.1, 1.2 …): shows in the logo chip, and open copies get the "new version" toast
   if(buildMeta && !isStageWindow){
     buildMeta.textContent = APP_VERSION;
     // the version lives on the bottom line now, beside the copyright: "Space Cam v1.8.1 © shovonix"
-    var copyEl = document.querySelector('#left-rail .copyright'); if(copyEl) copyEl.textContent = 'Space Cam ' + APP_VERSION + ' © shovonix';
+    var copyEl = document.querySelector('#left-rail .copyright'); if(copyEl) copyEl.innerHTML = '<span class="sc-copy-txt">Space Cam ' + APP_VERSION + ' © <a href="https://shovonix.dev" target="_blank" rel="noopener" class="sc-copy-link">shovonix</a></span>';
   }
 
   // Fullscreen isn't available everywhere (iPhone Safari): hide the button there.
@@ -6253,4 +6261,4 @@ window.claude.hot.snapshot(function(){ return { state: state }; });
 </script>
 <!-- Bump ?v= on every deploy so browsers load the new files instead of cached ones.
      studio.js passes the same ?v= on to every file it loads (engines, workers). -->
-<script type="module" src="studio.js?v=2026-11-11k"></script>
+<script type="module" src="studio.js?v=2026-11-11l"></script>

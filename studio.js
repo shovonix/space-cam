@@ -729,7 +729,11 @@ function init() {
   play.after(recBtn); play.after(h(`<span class="cap-div"></span>`));
   const scriptsHead = document.querySelector('#left-rail .scripts-head');
   scriptsHead.before(takesSec);
-  document.body.append(toastEl);
+  // every message that comes on top blurs what's behind it, like the popups; a click outside closes it
+  const toastVeil = h(`<div class="sc-toast-veil" hidden></div>`);
+  document.body.append(toastVeil, toastEl);
+  new MutationObserver(() => { toastVeil.hidden = toastEl.hidden; }).observe(toastEl, { attributes: true, attributeFilter: ['hidden'] });
+  toastVeil.addEventListener('mousedown', () => { clearTimeout(toastT); toastEl.hidden = true; });
   document.querySelector('#setup .brand')?.before(strip);
   // Script card sits next to Camera and Mic; Go to Spotlight gets its own section; setup options go in a right sidebar
   {
@@ -800,19 +804,39 @@ function init() {
 
   // ------------------------------------------------------------------ toast
   let toastT;
-  function toast(msg, kind = '') {
+  // Message card at the top (clear of the reading line): icon, bold title, one line of what to do (split at " — "),
+  // and at most one button that fixes it. Red only for real breakage ('error'); 'ok' = white tick; '' = hint/info.
+  function toast(msg, kind = '', { action = null, ms = 0 } = {}) {
     if (kind === 'error') sfx('error');
-    // popup-style card in the middle: icon, bold title, detail line (split at " — "), ✕, and a bar counting down to auto-close
     const i = msg.indexOf(' — '), title = i > 0 ? msg.slice(0, i) : msg, detail = i > 0 ? msg.slice(i + 3) : '';
-    const icon = kind === 'error' ? '<svg viewBox="0 0 24 24"><path d="M12 2 1 21h22L12 2zm1 15h-2v-2h2v2zm0-4h-2V9h2v4z"/></svg>'
-      : kind === 'ok' ? '<svg viewBox="0 0 24 24"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg>'
-      : '<svg viewBox="0 0 24 24"><path d="M11 7h2v2h-2zm0 4h2v6h-2zm1-9a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/></svg>';
-    toastEl.innerHTML = `<span class="sc-toast-ic">${icon}</span><span class="sc-toast-txt"><b></b><span></span></span><button type="button" class="sc-toast-x" aria-label="Close">✕</button><i class="sc-toast-bar"></i>`;
+    const icon = kind === 'error' ? '<svg viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>'
+      : kind === 'ok' ? '<svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>'
+      : '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>';
+    toastEl.innerHTML = `<span class="sc-toast-ic">${icon}</span><span class="sc-toast-txt"><b></b><span></span></span>${action ? '<button type="button" class="sc-toast-act"></button>' : ''}<button type="button" class="sc-toast-x" aria-label="Close">✕</button><i class="sc-toast-bar"></i>`;
     toastEl.querySelector('b').textContent = title; toastEl.querySelector('.sc-toast-txt span').textContent = detail;
-    toastEl.querySelector('.sc-toast-x').onclick = () => { clearTimeout(toastT); toastEl.hidden = true; };
+    const hide = () => { clearTimeout(toastT); toastEl.hidden = true; };
+    toastEl.querySelector('.sc-toast-x').onclick = hide;
+    if (action) { const b = toastEl.querySelector('.sc-toast-act'); b.textContent = action.label; b.onclick = () => { hide(); action.fn(); }; }
     toastEl.className = 'sc-toast ' + kind; toastEl.hidden = true; void toastEl.offsetWidth; toastEl.hidden = false; // restart the animations
-    const ms = kind === 'error' ? 7000 : 4200; toastEl.style.setProperty('--toast-ms', ms + 'ms');
-    clearTimeout(toastT); toastT = setTimeout(() => (toastEl.hidden = true), ms);
+    const t = ms || (action ? 8000 : kind === 'error' ? 6000 : 4000); toastEl.style.setProperty('--toast-ms', t + 'ms');
+    clearTimeout(toastT); toastT = setTimeout(() => (toastEl.hidden = true), t);
+  }
+  if (location.hostname === 'localhost') Object.assign(window, { __scMsg: { toast, micProblem: m => micProblem(m), macCamProblem: m => macCamProblem(m), camProblem: (k, t) => showCamProblem(k, t), saved: (t, w) => savedCard(t, w) } }); // localhost only: lets the test pages show each message
+  const openRailTab = c => { document.querySelector(`.sc-tab[data-c="${c}"]`)?.click(); };
+  // Engine messages → plain words + the button that fixes it (engines stay UI-free; the wording lives here)
+  function micProblem(message) {
+    const turnOn = { label: 'Turn mic on', fn: () => { openRailTab('mic'); openMic(); } };
+    if (/disconnected/i.test(message)) return toast('Mic disconnected — Plug it back in, then turn it on again.', 'error', { action: turnOn });
+    if (/blocked/i.test(message)) return toast('Chrome is blocking the mic — Click the lock icon left of the web address, set Microphone to Allow.', 'error', { action: { label: 'Try again', fn: turnOn.fn } });
+    if (/Could not open the microphone/i.test(message)) return toast('Couldn’t open the mic — Another app may be using it, or it was unplugged.', 'error', { action: { label: 'Try again', fn: turnOn.fn } });
+    toast(message, 'error');
+  }
+  function macCamProblem(message) {
+    const again = { label: 'Turn on again', fn: () => { openRailTab('cam'); ui.connect.onclick(); } };
+    if (/stopped/i.test(message)) return toast('Mac camera turned off — Another app may be using it, or the lid was closed.', 'error', { action: again });
+    if (/blocked/i.test(message)) return toast('Chrome is blocking the camera — Click the lock icon left of the web address, set Camera to Allow.', 'error', { action: { label: 'Try again', fn: again.fn } });
+    if (/Could not open the Mac camera/i.test(message)) return toast('Couldn’t open the Mac camera — Another app may be using it.', 'error', { action: { label: 'Try again', fn: again.fn } });
+    toast(message, 'error');
   }
 
   // ------------------------------------------------------------------ camera
@@ -886,7 +910,7 @@ function init() {
   });
   cam.addEventListener('error', e => {
     const { kind, message, detail } = e.detail;
-    if (kind === 'cancelled') return toast('No camera chosen.');
+    if (kind === 'cancelled') return toast('No camera chosen — Pick your camera in the list Chrome shows.');
     if (cam.state === 'connected') return toast(message, 'error');
     ui.connect.dataset.retry = '1'; showCamProblem(kind, message, detail); renderCam();
   });
@@ -940,19 +964,29 @@ function init() {
     fillCamProblem(ui.problem, kind, title, detail);
     fillCamProblem(ui.problem2, kind, title, detail);
   }
+  // One calm card: what happened, three short checks, one Reconnect button. The Terminal fix waits behind "Mac fix".
   function fillCamProblem(box, kind, title, detail = '') {
     box.hidden = false;
-    if (kind === 'unsupported') { box.innerHTML = `<b>${title}</b><p>Open Space Cam in Chrome or Edge on a Mac to control the camera.</p>`; return; }
-    // the fix right here, ready to copy: macOS's camera service (ptpcamerad) is the usual reason a camera won't connect
-    const tip = kind === 'feed' ? '' : '<p>First check the camera: switched on, <b>USB Power Supply → Off</b>, <b>USB Connection → PC Remote</b>. Otherwise it only charges and Chrome can’t see it.</p>';
-    const fix = tip + `<p>${kind === 'feed' ? 'Unplug any other USB camera (one at a time). Then paste this in Terminal, unplug and replug the camera:' : 'macOS’s camera service is usually in the way. Paste this in Terminal, then unplug and replug the camera:'}</p>
-      <div class="sc-cmd"><code>${escA(FIX_CMD)}</code><button type="button" data-copy="${escA(FIX_CMD)}">Copy</button></div>`;
-    box.innerHTML = `<b>${title}</b>${fix}<p>Still stuck? Follow the setup steps below.</p>${detail ? `<small>Camera said: ${detail.replace(/</g, '&lt;')}</small>` : ''}`;
+    const IC = '<svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2zM1 1l22 22"/></svg>';
+    if (kind === 'unsupported') { box.innerHTML = `<div class="sc-pb-hd"><span class="sc-pb-ic">${IC}</span><div><b>${title}</b><p>Open Space Cam in Chrome or Edge on a Mac to control the camera.</p></div></div>`; return; }
+    const head = kind === 'nodevice' ? ['Camera disconnected', 'Plug it back in and Space Cam reconnects by itself.']
+      : kind === 'feed' ? ['Connected, but no picture', 'Usually another camera or macOS is in the way.']
+      : [title.replace(/\.$/, ''), 'Check these, then press Reconnect.'];
+    const steps = kind === 'feed'
+      ? ['Unplug any other USB camera (one at a time)', 'Close Imaging Edge and other tabs using the camera', 'Unplug and replug the camera']
+      : ['Camera switched on, cable straight into the Mac', 'On the camera: USB Connection → PC Remote, USB Power Supply → Off', 'Close Imaging Edge and other tabs using the camera'];
+    box.innerHTML = `<div class="sc-pb-hd"><span class="sc-pb-ic">${IC}</span><div><b>${head[0]}</b><p>${head[1]}</p></div></div>
+      <ol class="sc-pb-steps">${steps.map(t => `<li>${t}</li>`).join('')}</ol>
+      <div class="sc-pb-row">${kind === 'feed' ? '' : '<button type="button" class="sc-pb-go">Reconnect</button>'}
+        <details class="sc-pb-more"><summary>Still not working? Mac fix</summary>
+          <p>macOS’s camera service often holds the camera. Paste this in Terminal, then unplug and replug the camera:</p>
+          <div class="sc-cmd"><code>${escA(FIX_CMD)}</code><button type="button" data-copy="${escA(FIX_CMD)}">Copy</button></div>
+          ${detail ? `<small>Camera said: ${detail.replace(/</g, '&lt;')}</small>` : ''}</details></div>`;
+    box.querySelector('.sc-pb-go')?.addEventListener('click', () => ui.connect.onclick());
     box.querySelectorAll('[data-copy]').forEach(b => b.onclick = async e => {
       e.preventDefault();
-      const label = b.textContent; try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = 'Copied'; setTimeout(() => (b.textContent = label), 1500); } catch { toast('Could not copy.', 'error'); }
+      const label = b.textContent; try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = 'Copied'; setTimeout(() => (b.textContent = label), 1500); } catch { toast('Couldn’t copy — Select the text and copy it by hand.', 'error'); }
     });
-    ui.help.open = ui.help2.open = true;
   }
   // Connected but the picture never draws (two USB cameras plugged in, or macOS's camera service in the way): say so, with the fix
   // Connected but no picture: say so, with the fix (two USB cameras plugged in, or macOS's camera service in the way)
@@ -994,7 +1028,7 @@ function init() {
     for (const v of [ui.vid, ui.ccVid]) if (v.srcObject !== s) { v.srcObject = s; if (s) v.play().catch(() => {}); }
     renderCam(); renderRec();
   });
-  web.addEventListener('error', e => toast(e.detail.message, 'error'));
+  web.addEventListener('error', e => macCamProblem(e.detail.message));
   // right-rail box takes the Mac camera's real ratio too
   const vidRatio = () => { if (ui.vid.videoWidth && src === 'mac') ui.preview.style.aspectRatio = `${ui.vid.videoWidth} / ${ui.vid.videoHeight}`; };
   ui.vid.addEventListener('loadedmetadata', vidRatio); ui.vid.addEventListener('resize', vidRatio);
@@ -1289,12 +1323,12 @@ function init() {
       const d = fresh[fresh.length - 1];
       store.set('micId', d.id);
       if (audio.state === 'ready') { await openMic(d.id); toast(`Switched to ${d.label}.`, 'ok'); }
-      else { ui.mic.value = d.id; toast(`${d.label} found. Turn the mic on to use it.`, 'ok'); }
+      else { ui.mic.value = d.id; toast(`${d.label} found — Use it for this recording?`, 'ok', { action: { label: 'Use this mic', fn: () => { openRailTab('mic'); openMic(d.id); } } }); }
     }
   }
   audio.addEventListener('devices', fillMics);
   audio.addEventListener('state', e => renderMic());
-  audio.addEventListener('error', e => toast(e.detail.message, 'error'));
+  audio.addEventListener('error', e => micProblem(e.detail.message));
   let peakHold = -120, peakHoldT = 0, shown = -120, shownT = performance.now();
   const FLOOR = -50; // dB at the left edge; quiet room noise sits near the start instead of filling a third of the bar
   const toPct = db => Math.max(0, Math.min(100, (db - FLOOR) / -FLOOR * 100));
@@ -1422,7 +1456,7 @@ function init() {
     const want = id ?? store.get('micId', '');
     let ok = false;
     console.log('[Space Cam] opening mic:', want || 'default');
-    try { ok = await audio.open(want); } catch (e) { toast('Could not open that mic: ' + (e?.message || e), 'error'); }
+    try { ok = await audio.open(want); } catch (e) { micProblem('Could not open the microphone: ' + (e?.message || e)); }
     if (ok) { store.set('micId', audio.deviceId); store.set('micAuto', true); }
     else console.warn('[Space Cam] mic did not open:', want, [...ui.mic.options].map(o => o.text));
     await fillMics(); // the list shows the mic that is really open (or the one you picked, if none is)
@@ -1522,7 +1556,8 @@ function init() {
     const rr = $('right-rail'), tabsRow = rr?.querySelector('.sc-tabs');
     if (rr && tabsRow) {
       const hideR = h(`<button type="button" class="sc-rhide" title="Hide this panel" aria-label="Hide the right panel"><svg viewBox="0 0 24 24"><path d="M8.59 16.59L10 18l6-6-6-6-1.41 1.41L13.17 12z"/></svg></button>`);
-      const head = h(`<div class="sc-rhead"><b>Controls</b></div>`); head.append(hideR); tabsRow.before(head); // own row, like the left panel's header
+      const head = h(`<div class="sc-rhead"><b>Controls</b><button type="button" class="sc-help-btn" title="How to use Space Cam" aria-label="How to use Space Cam">?</button></div>`); head.append(hideR); tabsRow.before(head); // own row, like the left panel's header
+      head.querySelector('.sc-help-btn').onclick = () => openGuide();
       const gear = h(`<button type="button" class="sc-rshow" title="Show the controls" aria-label="Show the right panel"><svg viewBox="0 0 24 24" class="sc-tool-ic"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></button>`);
       const GEAR_SVG = gear.innerHTML;
       document.body.append(gear);
@@ -1858,6 +1893,52 @@ function init() {
     document.body.append(wrap);
     return { wrap, close };
   }
+  // ---- How to use: the ? beside "Controls" opens a short guide, one step per page ----
+  function openGuide() {
+    const steps = [
+      ['Connect camera and mic', 'Open the <b>Camera</b> tab on the right and turn the camera on: a Sony over USB-C (set to PC Remote) or the Mac camera. Then open <b>Mic</b> and pick your microphone. The meter moves when you talk.'],
+      ['Add your script', 'Click <b>Add script</b> at the bottom and paste your text. Press <b>Space</b> or Play to scroll it. Tap any word to continue from there. Speed, size and spacing are in the <b>Prompter</b> tab.'],
+      ['Record', 'Press <b>R</b> or the Record button. Camera, mic and prompter start together. Press R again to stop. Each take is saved as Take_1, Take_2… in Downloads or the folder you chose bottom left.'],
+      ['Prompter screen', 'Click <b>Connect stage</b> to open the Stage window and drag it onto the screen in front of the lens (the teleprompter). Press <b>F</b> there for full screen.'],
+      ['Keys', '<span class="sc-guide-keys"><span><b>Space</b> play / pause</span><span><b>Space ×2</b> previous paragraph</span><span><b>R</b> record / stop</span><span><b>F</b> full screen (Stage)</span><span><b>hold A</b> autofocus</span><span><b>← →</b> focus near / far</span><span><b>G</b> grid lines</span><span><b>Esc</b> leave Camera settings</span></span>']
+    ];
+    let i = 0;
+    const m = modal(`
+      <div class="sc-modal-head"><div class="sc-modal-title">How to use Space Cam</div><button type="button" class="sc-modal-x" data-close aria-label="Close">✕</button></div>
+      <div class="sc-guide"><div class="sc-guide-n"></div><div class="sc-guide-t"></div><p class="sc-modal-p sc-guide-p"></p><div class="sc-guide-dots"></div></div>
+      <div class="sc-modal-row"><button type="button" class="btn ghost sc-guide-back">Back</button><button type="button" class="btn primary sc-guide-next">Next</button></div>`);
+    const q = c => m.wrap.querySelector(c), back = q('.sc-guide-back'), next = q('.sc-guide-next');
+    const show = () => {
+      q('.sc-guide-n').textContent = (i + 1) + ' / ' + steps.length;
+      q('.sc-guide-t').textContent = steps[i][0];
+      q('.sc-guide-p').innerHTML = steps[i][1];
+      q('.sc-guide-dots').innerHTML = steps.map((_, j) => `<i${j === i ? ' class="on"' : ''}></i>`).join('');
+      back.style.visibility = i ? '' : 'hidden';
+      next.textContent = i === steps.length - 1 ? 'Done' : 'Next';
+    };
+    back.onclick = () => { if (i) { i--; show(); } };
+    next.onclick = () => { if (i < steps.length - 1) { i++; show(); } else m.close(); };
+    show(); next.focus();
+  }
+  // ---- Feedback: the shared Space feedback form (one form for every Space app, inbox at shovonix.dev/feedback) ----
+  {
+    const FB = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? 'http://localhost:8788/feedback' : 'https://shovonix.dev/feedback';
+    // own quiet row above the bottom line ("Space Cam v… © shovonix")
+    const cr = document.querySelector('#left-rail .copyright');
+    if (cr) cr.before(h(`<button type="button" class="sc-fb-btn sc-fb-row" title="Send feedback to Shovon"><svg viewBox="0 0 24 24" class="sc-ic" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.4A8 8 0 1 1 21 12z"/></svg>Send feedback</button>`));
+    let loading = null;
+    const loadFb = () => loading ||= new Promise((ok, fail) => {
+      if (window.SpaceFeedback) return ok();
+      const s = document.createElement('script'); s.src = FB + '/widget.js'; s.crossOrigin = 'anonymous';
+      s.onload = ok; s.onerror = () => { loading = null; s.remove(); fail(); }; document.head.append(s);
+    });
+    document.addEventListener('click', e => {
+      const b = e.target.closest('.sc-fb-btn'); if (!b) return;
+      e.preventDefault(); e.stopPropagation();
+      loadFb().then(() => window.SpaceFeedback.open({ app: 'Space Cam', version: window.APP_VERSION || (document.querySelector('.sc-copy-txt')?.textContent.match(/v[\d.]+[^©]*/)?.[0].trim() || '') }))
+        .catch(() => toast("Feedback needs the internet. Try again when you're online."));
+    });
+  }
   // Shared confirm popup (also used by the prompter's script delete): resolves true on the red button, false otherwise
   window.spaceCamConfirm = (title, text, okLabel = 'Delete') => new Promise(resolve => {
     let done = false; const finish = v => { if (!done) { done = true; resolve(v); } };
@@ -1889,7 +1970,7 @@ function init() {
     for (const el of [document.querySelector('#left-rail .copyright')]) { // the bottom line with the version opens What's new
       if (!el) continue;
       el.title = "What's new"; el.style.cursor = 'pointer';
-      el.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); showNew(); });
+      el.addEventListener('click', e => { if (e.target.closest('a,button')) return; e.stopPropagation(); e.preventDefault(); showNew(); }); // the shovonix link and Feedback button do their own thing
     }
   }
   const esc = x => String(x).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -2507,16 +2588,17 @@ function init() {
         <div class="sc-saved-row">
           <span class="sc-saved-media"><span class="sc-take-thumb sc-saved-thumb"></span><span class="sc-saved-ok"><svg viewBox="0 0 24 24"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg></span></span>
           <span class="sc-saved-txt">
-            <span class="sc-saved-head">${error ? 'Saved up to here · name it?' : 'Recording saved · name it?'}</span>
-            <span class="sc-saved-name"><input class="sc-saved-in" value="${esc(takeLabel(t))}" maxlength="80" spellcheck="false" aria-label="Recording name">${error ? '' : '<button type="button" class="btn primary sc-saved-save">Save</button>'}</span>
+            <b class="sc-saved-title">${error ? 'Saved up to here' : 'Recording saved'}</b>
             <span class="sc-saved-meta">${esc(fmt(t.seconds || 0))}${kinds ? ' · ' + esc(kinds) : ''}</span>
             <span class="sc-saved-where">${esc(where)}</span>
           </span>
           ${error ? '' : '<button type="button" class="sc-modal-x" aria-label="Close">✕</button>'}
         </div>
+        <label class="sc-saved-lab">Name this take</label>
+        <input class="sc-saved-in" value="${esc(takeLabel(t))}" maxlength="80" spellcheck="false" aria-label="Recording name">
         ${isPhone && t.videoName ? '<button type="button" class="btn primary sc-saved-photos">Save to Photos</button>' : ''}
         ${error ? '<div class="sc-saved-foot"><span class="sc-saved-hint"><kbd>Enter</kbd> OK</span><button type="button" class="btn primary sc-saved-save">OK</button></div>'
-                : '<span class="sc-saved-hint"><kbd>Enter</kbd> save · <kbd>Esc</kbd> keep the name · <span class="sc-saved-left">keeps it in 8 s</span></span><i class="sc-saved-bar"></i>'}
+                : `<div class="sc-saved-foot"><span class="sc-saved-hint"><kbd>Enter</kbd> save · <kbd>Esc</kbd> keep name</span><button type="button" class="btn sc-saved-keep">Keep ${esc(takeLabel(t))}</button><button type="button" class="btn primary sc-saved-save">Save name</button></div><i class="sc-saved-bar"></i>`}
       </div></div>`);
     savedFor = t;
     const card = savedEl.querySelector('.sc-saved-card'), input = savedEl.querySelector('.sc-saved-in');
@@ -2538,6 +2620,7 @@ function init() {
     savedEl.querySelector('.sc-saved-save').onclick = commit;
     savedEl.querySelector('.sc-saved-photos')?.addEventListener('click', () => { hold(); saveToPhotos(t); });
     savedEl.querySelector('.sc-modal-x')?.addEventListener('click', closeSaved);
+    savedEl.querySelector('.sc-saved-keep')?.addEventListener('click', closeSaved);
     if (!error) savedEl.addEventListener('mousedown', e => { if (e.target === savedEl) closeSaved(); });
     document.addEventListener('keydown', savedKey, true);
     document.body.append(savedEl);
@@ -2808,7 +2891,7 @@ function init() {
     const vidOk = src === 'mac' && webOn();
     const micReady = audio.state === 'ready';
     const micOk = micReady && !(isPhone && vidOk); // phone: the mic goes into the MP4, no separate audio file
-    if (!camOk && !micReady && !vidOk) return toast('Connect the camera or enable a microphone first.', 'error');
+    if (!camOk && !micReady && !vidOk) return toast('Nothing to record yet — Turn on the camera or the mic first.', '', { action: { label: 'Open Mic', fn: () => openRailTab('mic') } });
     if (player && !player.audio.paused) { player.audio.pause(); } // a take playing back would end up in the new recording
     if (!isPhone && (micOk || vidOk) && !folder && !store.get('folderChoice', '')) { // first take: ask once where takes go
       if ((await askSaveLocation()) === 'cancel') return;

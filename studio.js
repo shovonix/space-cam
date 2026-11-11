@@ -124,6 +124,8 @@ function initStageCam() {
   let stream = null, devId = null, lastUrl = null, shared = false;
   const stopStream = () => { if (!shared) stream?.getTracks().forEach(t => t.stop()); stream = null; devId = null; shared = false; vid.srcObject = null; }; // never stop the page's own camera stream
   let ch; try { ch = new BroadcastChannel('spaceCamCam'); } catch { return; }
+  let myWin = ''; try { myWin = sessionStorage.getItem('spaceCamWin') || ''; } catch {} // the control window that opened this Stage (see init)
+  const fromOther = m => !!(myWin && m?.win && m.win !== myWin);
   ch.onmessage = async ({ data: m }) => {
     if (!m) return;
     if (m.type === 'cfg') {
@@ -168,8 +170,8 @@ function initStageCam() {
   let recSeen = 0;
   const recMsg = m => { recSeen = performance.now(); setInd(m); };
   setInterval(() => { if (performance.now() - recSeen > 1500){ setInd({ rec: false }); tipCard.hidden = true; } }, 500); // control window gone or stopped: grey, no tip
-  const prev = ch.onmessage; ch.onmessage = e => { if (e.data?.type === 'rec') return recMsg(e.data); if (e.data?.type === 'tip') return tipMsg(e.data.tip); prev(e); };
-  ch.postMessage({ type: 'hello' });
+  const prev = ch.onmessage; ch.onmessage = e => { if (fromOther(e.data)) return; if (e.data?.type === 'rec') return recMsg(e.data); if (e.data?.type === 'tip') return tipMsg(e.data.tip); prev(e); };
+  ch.postMessage({ type: 'hello', win: myWin });
   addEventListener('pagehide', stopStream);
 }
 
@@ -202,6 +204,11 @@ function init() {
   const webOn = () => web.state === 'connected';
   // "Camera on Stage": tells the Stage window (and the mini preview) what to show behind the script.
   let stageCamCh = null; try { stageCamCh = new BroadcastChannel('spaceCamCam'); } catch {}
+  // Every Space Cam window (installed app, browser tabs) shares this channel. Tag what this window sends, so its own
+  // Stage and mini preview ignore the others: before, a camera on in another window made the signal flip and its tips show here.
+  // The id lives in sessionStorage: the Stage window (window.open) gets a copy, the mini preview (iframe) shares it.
+  let winId = ''; try { winId = sessionStorage.getItem('spaceCamWin') || (crypto.randomUUID?.() || String(Math.random()).slice(2)); sessionStorage.setItem('spaceCamWin', winId); } catch {}
+  if (stageCamCh && winId) { const rawPost = stageCamCh.postMessage.bind(stageCamCh); stageCamCh.postMessage = m => rawPost({ ...m, win: winId }); }
   let stageCamLast = '', stageFrameT = 0;
   function sendStageCam(force = false) {
     if (!stageCamCh) return;
@@ -213,7 +220,7 @@ function init() {
     if (!force && key === stageCamLast) return; // renderCam runs often; only send changes
     stageCamLast = key; stageCamCh.postMessage(msg);
   }
-  if (stageCamCh) stageCamCh.onmessage = ({ data }) => { if (data?.type === 'hello') { sendStageCam(true); try { sendTip(); } catch {} } };
+  if (stageCamCh) stageCamCh.onmessage = ({ data }) => { if (data?.type === 'hello' && (!data.win || data.win === winId)) { sendStageCam(true); try { sendTip(); } catch {} } };
   // Stage window: REC + audio signal in its top right corner. Sent 4×/s; the Stage turns it off if this stops coming.
   let recLevelDb = -120;
   function sendStageRec() {
@@ -1552,6 +1559,23 @@ function init() {
     const tools = document.querySelector('.sc-stage-tools'), fsBtn = $('fullscreen-btn');
     const focusBtn = h(`<button type="button" class="icon-btn sc-focus-btn"></button>`);
     if (tools && fsBtn) tools.insertBefore(focusBtn, fsBtn);
+    // Dark / light: one button between Focus and Full screen. Sun = switch to light, moon = switch to dark.
+    // The light colours are made in index.html (the script after the main <style>); the Stage window stays black.
+    const IC_SUN = SV('<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>');
+    const IC_MOON = SV('<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>');
+    const themeBtn = h(`<button type="button" class="icon-btn sc-theme-btn"></button>`);
+    if (tools && fsBtn) tools.insertBefore(themeBtn, fsBtn);
+    const renderTheme = () => {
+      const light = document.documentElement.getAttribute('data-theme') === 'light';
+      themeBtn.innerHTML = light ? IC_MOON : IC_SUN;
+      themeBtn.title = light ? 'Dark mode' : 'Light mode'; themeBtn.setAttribute('aria-label', themeBtn.title);
+    };
+    themeBtn.onclick = () => {
+      const light = document.documentElement.getAttribute('data-theme') !== 'light';
+      if (light) document.documentElement.setAttribute('data-theme', 'light'); else document.documentElement.removeAttribute('data-theme');
+      store.set('theme', light ? 'light' : 'dark'); renderTheme();
+    };
+    renderTheme();
     const bothHidden = () => isH('sc-left-hidden') && isH('sc-right-hidden');
     const renderTools = () => {
       const on = bothHidden();

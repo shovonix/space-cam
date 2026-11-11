@@ -1605,3 +1605,17 @@ input[type=range]::-webkit-slider-thumb{box-shadow:0 0 3px rgba(255,255,255,.12)
   body.sc-phone #scPreview{max-height:34vh} /* keeps its shape (the video inside is absolutely placed), just never taller than a third of the screen */
   body.sc-phone .sc-new-assist, body.sc-phone .sc-swgrid:has(#scAssistLight), body.sc-phone .sc-assist-dl{display:none!important}
 }
+
+/* Bigger panels (option B, 11 Nov 2026): side panels, top buttons and bottom bar 15% bigger on laptop and desktop
+   windows. Text is the same physical size on a 13" Air and a 16" Pro, so this is for every Mac, not one screen.
+   Under 1280 px wide (and on phones) the old size stays, so the script isn't squeezed. Both panels show 345 px wide. */
+@media (min-width:1280px){
+  body:not(.sc-phone):not(.stage-window){--rail:345px;--rail-r:345px}
+  body:not(.sc-phone):not(.stage-window) #left-rail,
+  body:not(.sc-phone):not(.stage-window) #right-rail{zoom:1.15;width:calc(345px / 1.15)!important}
+  body:not(.sc-phone):not(.stage-window) #bottombar{zoom:1.12}
+  body:not(.sc-phone):not(.stage-window) .sc-stage-tools,
+  body:not(.sc-phone):not(.stage-window) .sc-rail-show{zoom:1.12}
+}
+/* Stage window card: everything left-aligned (the prompter's centred hint text was leaking in) */
+#stage-hint-card,#stage-hint-card *{text-align:left!important}

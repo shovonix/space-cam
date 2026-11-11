@@ -32,7 +32,7 @@ html.scp-r #stage{right:0!important}
 </style>
 <script src="coi-serviceworker.js"></script>
 <!-- Space Cam styles in the head: nothing paints unstyled on reload (keep its ?v= the same as studio.js at the bottom) -->
-<link rel="stylesheet" href="studio.css?v=2026-11-11c">
+<link rel="stylesheet" href="studio.css?v=2026-11-11d">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#0A0A0B">
@@ -738,19 +738,128 @@ body.touch #screen-note{order:5;margin-top:12px;padding:10px 12px;font-size:12px
 .install-pulse{animation:installPulse 1.2s ease-in-out 6}
 #install-rail:hover,#install-setup:hover{background:rgba(59,130,246,.3)}
 </style>
+<script>
+/* Space Cam light mode (control window only; the Stage window and its mini preview stay black for the prompter glass).
+   No hand-made copy of every colour: at load this reads the app's own CSS and writes a light twin of every rule that
+   sets a grey (dark backgrounds turn light, light text turns dark). Red, green and other colours stay. It only applies
+   while <html data-theme="light">, so the sun/moon button switches it live, and it follows CSS changes by itself.
+   The main colours (--bg, --fg, panels…) are tuned by hand at the end. */
+(function(){
+  if(/^#stage/.test(location.hash)) return;
+  var t=null; try{ t=JSON.parse(localStorage.getItem('spaceCam.theme')||'null'); }catch(e){}
+  if(t==='light') document.documentElement.setAttribute('data-theme','light');
+  var L='html[data-theme="light"]';
+  var CAMBG='body[data-cv="bg"].sc-cam-bg #stage', NOCAM=':not('+CAMBG+'):not('+CAMBG+' *)';
+  var COLOR=/#([0-9a-f]{3,8})\b|rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)/gi;
+  function parse(m){
+    var r,g,b,a=1;
+    if(m[1]){ var h=m[1]; if(h.length<=4){ h=h.split('').map(function(c){return c+c;}).join(''); }
+      r=parseInt(h.substr(0,2),16); g=parseInt(h.substr(2,2),16); b=parseInt(h.substr(4,2),16); if(h.length===8) a=parseInt(h.substr(6,2),16)/255; }
+    else { r=+m[2]; g=+m[3]; b=+m[4]; if(m[5]!=null) a=/%$/.test(m[5])?parseFloat(m[5])/100:+m[5]; }
+    return [r,g,b,a];
+  }
+  function flip(val, shadow){
+    var changed=false;
+    var out=val.replace(COLOR,function(){
+      var c=parse(arguments), r=c[0],g=c[1],b=c[2],a=c[3];
+      if(Math.max(r,g,b)-Math.min(r,g,b)>=16) return arguments[0]; // a real colour: keep
+      changed=true; var l=(r+g+b)/3, k=function(x){return +x.toFixed(3);};
+      if(shadow) return 'rgba(0,0,0,'+k(a*(l>128?0.10:0.14))+')';           // glows and shadows: soft, dark
+      if(a<1) return l>128 ? 'rgba(0,0,0,'+k(a*0.85)+')' : 'rgba(255,255,255,'+k(a)+')'; // white tint ↔ dark tint
+      // not a plain invert (that turns the cool greys yellowish and dark layers muddy): a curve onto clean neutral greys.
+      // dark layers (0–60) → near white 252–228 · borders/dims (60–120) → 228–152 · mid text → mid grey · white text → near black
+      var v = l<60 ? 252-l*0.4 : l<120 ? 228-(l-60)*1.27 : 152-(l-120)*1.0; v=Math.max(14,Math.round(v));
+      return 'rgb('+v+','+v+','+Math.min(255,v+2)+')';
+    });
+    return changed?out:null;
+  }
+  function chromaticBg(st){
+    var v=(st.getPropertyValue('background-color')||'')+' '+(st.getPropertyValue('background-image')||''), m, any=false;
+    COLOR.lastIndex=0; while((m=COLOR.exec(v))){ var c=parse(m); if(Math.max(c[0],c[1],c[2])-Math.min(c[0],c[1],c[2])>=16 && c[3]>0.5) any=true; }
+    return any;
+  }
+  function sel(s){
+    if(/stage-window|scp-stage/.test(s.replace(/:not\([^)]*\)/g,''))) return null; // Stage-only rules; ":not(.stage-window)" is fine
+    return s.split(',').map(function(p){ p=p.trim();
+      if(/^:root/.test(p)) return L+p.slice(5);
+      if(/^html\b/.test(p)) return L+p.slice(4);
+      // camera footage behind the script: the middle section keeps its dark look (black, white text), so light rules skip it
+      var m=p.match(/((::?(before|after|first-line|first-letter|placeholder|selection|marker|backdrop|-webkit-[\w-]+|-moz-[\w-]+)(\([^)]*\))?)+)$/i);
+      var base=m?p.slice(0,p.length-m[1].length):p, pe=m?m[1]:'';
+      return L+' '+(base||'*')+NOCAM+pe; }).join(',');
+  }
+  var KF={}; // animations that use greys get a light copy: name → name-l
+  function frames(list){
+    var out='';
+    for(var i=0;i<list.length;i++){
+      var r=list[i];
+      if(r.type===4||r.type===12){ try{ out+=frames(r.cssRules); }catch(e){} continue; }
+      if(r.type!==7) continue;
+      var body='', any=false;
+      for(var j=0;j<r.cssRules.length;j++){
+        var k=r.cssRules[j], st=k.style, d='';
+        for(var q=0;q<st.length;q++){ var n=st[q], v=st.getPropertyValue(n), f=null;
+          if(/color$|shadow$|^background-image$/.test(n)) f=flip(v,/shadow$/.test(n));
+          else if(n==='filter' && /drop-shadow/.test(v)) f=flip(v,true);
+          if(f!=null) any=true; d+=n+':'+(f==null?v:f)+';'; }
+        body+=k.keyText+'{'+d+'}';
+      }
+      if(any){ KF[r.name]=r.name+'-l'; out+='@keyframes '+r.name+'-l{'+body+'}'; }
+    }
+    return out;
+  }
+  function rules(list){
+    var out='';
+    for(var i=0;i<list.length;i++){
+      var r=list[i];
+      if(r.type===4){ var inner=rules(r.cssRules); if(inner) out+='@media '+r.conditionText+'{'+inner+'}'; continue; }
+      if(r.type===12){ var inner2=rules(r.cssRules); if(inner2) out+='@supports '+r.conditionText+'{'+inner2+'}'; continue; }
+      if(r.type!==1) continue;
+      var st=r.style, decl='', any=false, keepText=chromaticBg(st);
+      for(var j=0;j<st.length;j++){
+        var n=st[j], v=st.getPropertyValue(n);
+        if(!v) continue;
+        var isCol=/color$|^background-image$|^box-shadow$|^text-shadow$|^fill$|^stroke$|^--/.test(n);
+        if(!isCol) continue;
+        // every colour declaration is replayed in its original order (flipped or as is), so later rules still win
+        // over earlier ones exactly as in dark mode; white text on a red button stays white
+        var f=(v.indexOf('var(')>=0 || (keepText && (n==='color'||n==='fill'||n==='stroke'))) ? null : flip(v, /shadow$/.test(n));
+        if(f!=null) any=true;
+        decl+=n+':'+(f==null?v:f)+(st.getPropertyPriority(n)?' !important':'')+';';
+      }
+      var an=st.getPropertyValue('animation-name');
+      if(an && an.split(',').some(function(x){ return KF[x.trim()]; })) decl+='animation-name:'+an.split(',').map(function(x){ x=x.trim(); return KF[x]||x; }).join(',')+(st.getPropertyPriority('animation-name')?' !important':'')+';';
+      if(decl){ var s2=sel(r.selectorText); if(s2) out+=s2+'{'+decl+'}'; }
+    }
+    return out;
+  }
+  var css='', i;
+  for(i=0;i<document.styleSheets.length;i++){ try{ css+=frames(document.styleSheets[i].cssRules); }catch(e){} }
+  for(i=0;i<document.styleSheets.length;i++){ try{ css+=rules(document.styleSheets[i].cssRules); }catch(e){} }
+  // the script area's black is set from JavaScript (applyBgOpacity); drawn waves (canvas) flip with a filter, red stays red
+  css+=L+' #stage'+NOCAM+'{background-color:var(--stage)!important}'+L+' canvas'+NOCAM+'{filter:invert(1) hue-rotate(180deg)}';
+  css+=L+'{--bg:#F5F5F6;--stage:#FFFFFF;--panel:#FBFBFC;--surface:#FBFBFC;--surface-2:#EEEEF0;--raised:#EEEEF0;--hair:#E1E1E4;--border:#E1E1E4;--fg:#111113;--fg-dim:#6B6B72;--accent:#111113;--accent-rgb:17,17,19;--accent-fg:#FAFAF9;color-scheme:light}';
+  // switches, hand-made for light (the flipped greys made "off" look disabled): off = light track + white knob with a soft ring, on = black track + white knob
+  css+=L+' .sc-swb:not(.sc-static)'+NOCAM+'::after{background:#E3E3E7 radial-gradient(circle at 9px 9px,#fff 6.4px,rgba(0,0,0,.16) 7px,transparent 7.6px)}'
+     +L+' .sc-swb[aria-pressed="true"]'+NOCAM+'::after,'+L+' .sc-swb.active'+NOCAM+'::after{background:#111113 radial-gradient(circle at 23px 9px,#fff 6.4px,transparent 7px)}';
+  // …and inside that dark middle, the main colours go back to their dark values (the tokens are inherited)
+  css+=L+' '+CAMBG+'{--bg:#070707;--stage:#000000;--panel:#0E0E0F;--surface:#0E0E0F;--surface-2:#1A1A1B;--raised:#1A1A1B;--hair:#2A2A2C;--border:#2A2A2C;--fg:#F0F0EE;--fg-dim:#9A9AA0;--accent:#F0F0EE;--accent-rgb:240,240,238;--accent-fg:#070707;color-scheme:dark}';
+  var el=document.createElement('style'); el.id='sc-light'; el.textContent=css; document.head.appendChild(el);
+})();
+</script>
 
 <button type="button" id="update-toast" aria-live="polite"></button>
 <!-- What's new: edit before every deploy (see CLAUDE.md). Shown in the update notice and once after the reload. Plain words, one line each. -->
 <script type="application/json" id="sc-changes">
 {
   "added": [
-    "After every update, Space Cam tells you, and shows what changed."
+    "Light mode: the sun / moon button at the top, between Focus and Full screen. While your camera shows behind the script, the middle stays black with white text. The Stage window always stays black for the prompter glass.",
+    "Bigger side panels, top buttons and bottom bar on laptops and desktops, easier to read and click."
   ],
   "fixed": [
-    "If the mic you used last time is unplugged, Space Cam now opens your default mic instead of showing an error. Same for the Mac camera.",
-    "The Space Cam name under the logo uses the right font.",
-    "Fade opacity has a clearer icon.",
-    "The version under the logo shows the real version."
+    "The installed app now always opens on the newest version, and tells you sooner when an update is out.",
+    "The Stage now only shows this window's camera and mic signal and its tips. With Space Cam open twice (the app and a browser tab), the signal kept jumping and tips showed for the other window's camera.",
+    "The Stage window's how-to card is left-aligned."
   ]
 }
 </script>
@@ -5435,7 +5544,7 @@ var qrcode = function() {
   });
 
   // ---- Build/version indicator (control window top bar) ----
-  var APP_VERSION = 'v1.5'; // bump with each deploy (1.1, 1.2 …): shows in the logo chip, and open copies get the "new version" toast
+  var APP_VERSION = 'v1.6'; // bump with each deploy (1.1, 1.2 …): shows in the logo chip, and open copies get the "new version" toast
   if(buildMeta && !isStageWindow){
     buildMeta.textContent = APP_VERSION;
   }
@@ -5478,7 +5587,8 @@ var qrcode = function() {
     };
     window.__spCheckUpdate = checkForUpdate;
     setTimeout(checkForUpdate, 4000);
-    setInterval(checkForUpdate, 10 * 60 * 1000);
+    setInterval(checkForUpdate, 3 * 60 * 1000);
+    window.addEventListener('focus', checkForUpdate); // installed app: clicking back into its window checks too
     document.addEventListener('visibilitychange', function(){ if(!document.hidden) checkForUpdate(); });
     document.getElementById('update-toast').addEventListener('click', function(){ location.reload(); });
   }
@@ -6085,4 +6195,4 @@ window.claude.hot.snapshot(function(){ return { state: state }; });
 </script>
 <!-- Bump ?v= on every deploy so browsers load the new files instead of cached ones.
      studio.js passes the same ?v= on to every file it loads (engines, workers). -->
-<script type="module" src="studio.js?v=2026-11-11c"></script>
+<script type="module" src="studio.js?v=2026-11-11d"></script>

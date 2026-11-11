@@ -205,6 +205,9 @@ body.sc-local #install-setup,body.sc-local #install-rail{display:none!important}
 .sc-modal-input:focus{border-color:rgba(255,255,255,.4)}
 .sc-modal-hint{font-size:12px;color:var(--fg-dim);margin-right:auto}
 .sc-modal-p{margin:0;font-size:13.5px;line-height:1.55;color:#cfcfd2}
+.sc-new-h{font:600 11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--fg-dim);margin:4px 0 6px}
+.sc-new-list{margin:0 0 14px;padding-left:18px;font-size:13.5px;line-height:1.55;color:#cfcfd2}
+.sc-new-list li+li{margin-top:5px}
 .sc-modal-meta{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--fg-dim)}
 .sc-modal-meta code{font:11.5px var(--mono);color:var(--fg);word-break:break-all}
 .sc-modal audio{width:100%}

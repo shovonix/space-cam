@@ -1811,6 +1811,30 @@ function init() {
     const ok = m.wrap.querySelector('.sc-ok'); ok.focus();
     ok.onclick = () => { finish(true); m.close(); };
   });
+  // ---- What's new: once after each deploy (and on a click on the version under the logo) ----
+  {
+    let changes = null; try { changes = JSON.parse(document.getElementById('sc-changes')?.textContent || 'null'); } catch {}
+    const build = (document.querySelector('script[src*="studio.js?v="]')?.getAttribute('src') || '').split('?v=')[1] || '';
+    const li = a => (a || []).map(x => `<li>${esc(x)}</li>`).join('');
+    const showNew = () => {
+      if (!changes || !((changes.added || []).length + (changes.fixed || []).length)) return;
+      const ver = ($('build-meta')?.textContent || '').trim();
+      const m = modal(`
+        <div class="sc-modal-head"><div class="sc-modal-title">What's new${ver && ver !== '—' ? ' in ' + esc(ver) : ''}</div><button type="button" class="sc-modal-x" data-close aria-label="Close">✕</button></div>
+        ${(changes.added || []).length ? `<div class="sc-new-h">Added</div><ul class="sc-new-list">${li(changes.added)}</ul>` : ''}
+        ${(changes.fixed || []).length ? `<div class="sc-new-h">Fixed</div><ul class="sc-new-list">${li(changes.fixed)}</ul>` : ''}
+        <div class="sc-modal-row"><button type="button" class="btn primary" data-close>Got it</button></div>`);
+      m.wrap.querySelector('.btn.primary')?.focus();
+    };
+    const seen = store.get('seenBuild', '');
+    if (build) store.set('seenBuild', build);
+    if (seen && build && seen !== build) setTimeout(showNew, 1200); // first visit ever: nothing to compare, no card
+    for (const el of [$('build-meta'), document.querySelector('.sc-rs-ver')]) {
+      if (!el) continue;
+      el.title = "What's new"; el.style.cursor = 'pointer';
+      el.addEventListener('click', e => { e.stopPropagation(); e.preventDefault(); showNew(); });
+    }
+  }
   const esc = x => String(x).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
   // ---- inline player inside an opened take card: waveform + play/pause + seek ----

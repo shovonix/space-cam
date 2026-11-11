@@ -32,7 +32,7 @@ html.scp-r #stage{right:0!important}
 </style>
 <script src="coi-serviceworker.js"></script>
 <!-- Space Cam styles in the head: nothing paints unstyled on reload (keep its ?v= the same as studio.js at the bottom) -->
-<link rel="stylesheet" href="studio.css?v=2026-11-11b">
+<link rel="stylesheet" href="studio.css?v=2026-11-11c">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#0A0A0B">
@@ -615,7 +615,16 @@ body.solo.ui-hidden #stage{cursor:none}
   background:#f4f4f2;color:#0a0a0b;font:600 12.5px 'Archivo',system-ui,sans-serif;box-shadow:0 10px 36px rgba(0,0,0,.6);
   opacity:0;pointer-events:none;transition:opacity .3s ease,transform .3s ease;max-width:calc(100% - 32px);
 }
-#update-toast.show{opacity:1;pointer-events:auto;transform:translate(-50%,0)}
+#update-toast.show,#update-toast.has-list.show{opacity:1;pointer-events:auto;transform:translate(-50%,0)}
+#update-toast .upd-h{font-weight:700}
+#update-toast .upd-tap{margin-left:8px;opacity:.6}
+#update-toast.has-list{top:max(16px,env(safe-area-inset-top));bottom:auto;transform:translate(-50%,-12px);border-radius:16px;padding:14px 18px 12px;text-align:left;width:min(440px,calc(100% - 32px))}
+#update-toast.has-list .upd-h{display:block;font-size:13.5px;margin-bottom:8px}
+#update-toast .upd-list{margin:0 0 10px;padding:0;list-style:none;font:500 12.5px/1.45 'Public Sans','Archivo',system-ui,sans-serif}
+#update-toast .upd-list li+li{margin-top:5px}
+#update-toast .upd-list span{display:inline-block;min-width:42px;font:700 10.5px 'Archivo',system-ui,sans-serif;text-transform:uppercase;letter-spacing:.06em;opacity:.55}
+#update-toast .upd-more{opacity:.6}
+#update-toast.has-list .upd-tap{display:block;margin:0;font-size:12px}
 body.stage-window #update-toast{display:none}
 #mode-toast.show{opacity:1;transform:translate(-50%,0)}
 body.stage-window #mode-toast{display:none}
@@ -731,6 +740,20 @@ body.touch #screen-note{order:5;margin-top:12px;padding:10px 12px;font-size:12px
 </style>
 
 <button type="button" id="update-toast" aria-live="polite"></button>
+<!-- What's new: edit before every deploy (see CLAUDE.md). Shown in the update notice and once after the reload. Plain words, one line each. -->
+<script type="application/json" id="sc-changes">
+{
+  "added": [
+    "After every update, Space Cam tells you, and shows what changed."
+  ],
+  "fixed": [
+    "If the mic you used last time is unplugged, Space Cam now opens your default mic instead of showing an error. Same for the Mac camera.",
+    "The Space Cam name under the logo uses the right font.",
+    "Fade opacity has a clearer icon.",
+    "The version under the logo shows the real version."
+  ]
+}
+</script>
 <aside id="left-rail" class="rail">
   <button type="button" class="rail-close" data-close="left" aria-label="Close scripts panel" title="Close">✕</button>
   <button type="button" class="brand-live" id="brand-home-btn" aria-label="Hide the left panel" title="Hide this panel">
@@ -5412,7 +5435,7 @@ var qrcode = function() {
   });
 
   // ---- Build/version indicator (control window top bar) ----
-  var APP_VERSION = 'v1.4'; // bump with each deploy (1.1, 1.2 …): shows in the logo chip, and open copies get the "new version" toast
+  var APP_VERSION = 'v1.5'; // bump with each deploy (1.1, 1.2 …): shows in the logo chip, and open copies get the "new version" toast
   if(buildMeta && !isStageWindow){
     buildMeta.textContent = APP_VERSION;
   }
@@ -5430,10 +5453,25 @@ var qrcode = function() {
       if(updateChecking || document.getElementById('update-toast').classList.contains('show')) return;
       updateChecking = true;
       fetch(location.pathname, {cache:'no-store'}).then(function(r){ return r.text(); }).then(function(t){
-        var m = t.match(/var APP_VERSION = '([^']+)'/);
-        if(m && m[1] !== APP_VERSION){
+        // every deploy bumps the studio.js ?v= stamp, so any deploy shows the notice (not only a new version number)
+        var m = t.match(/var APP_VERSION = '([^']+)'/), b = t.match(/studio\.js\?v=([^"']+)/);
+        var sEl = document.querySelector('script[src*="studio.js?v="]'), mine = sEl ? sEl.getAttribute('src').split('?v=')[1] : '';
+        var newVer = m && m[1] !== APP_VERSION, newBuild = b && mine && b[1] !== mine;
+        if(newVer || newBuild){
           var el = document.getElementById('update-toast');
-          el.textContent = 'A new version (' + m[1] + ') is available — tap to reload';
+          var c = null; try { c = JSON.parse((t.match(/id="sc-changes">([\s\S]*?)<\/script>/) || [])[1]); } catch(e){}
+          // the notice lists the lines themselves: New … / Fixed … (up to 6, then "and N more")
+          var lines = []; if(c){ (c.added||[]).forEach(function(x){ lines.push(['New', x]); }); (c.fixed||[]).forEach(function(x){ lines.push(['Fixed', x]); }); }
+          el.textContent = '';
+          var hd = document.createElement('b'); hd.className = 'upd-h'; hd.textContent = newVer ? 'Space Cam ' + m[1] + ' is ready' : 'Space Cam was updated'; el.appendChild(hd);
+          if(lines.length){
+            var ul = document.createElement('ul'); ul.className = 'upd-list';
+            lines.slice(0, 6).forEach(function(l){ var li = document.createElement('li'); var k = document.createElement('span'); k.textContent = l[0]; li.appendChild(k); li.appendChild(document.createTextNode(' ' + l[1])); ul.appendChild(li); });
+            if(lines.length > 6){ var more = document.createElement('li'); more.className = 'upd-more'; more.textContent = 'and ' + (lines.length - 6) + ' more'; ul.appendChild(more); }
+            el.appendChild(ul);
+          }
+          var ft = document.createElement('span'); ft.className = 'upd-tap'; ft.textContent = 'Tap to reload'; el.appendChild(ft);
+          el.classList.toggle('has-list', lines.length > 0);
           el.classList.add('show');
         }
       }).catch(function(){}).then(function(){ updateChecking = false; });
@@ -6047,4 +6085,4 @@ window.claude.hot.snapshot(function(){ return { state: state }; });
 </script>
 <!-- Bump ?v= on every deploy so browsers load the new files instead of cached ones.
      studio.js passes the same ?v= on to every file it loads (engines, workers). -->
-<script type="module" src="studio.js?v=2026-11-11b"></script>
+<script type="module" src="studio.js?v=2026-11-11c"></script>

@@ -36,6 +36,10 @@ export const CamCore = class CamCore extends EventTarget {
   // those, the next connect loads a fresh engine (lib/camera.js under a new URL = its own engine), lib/ untouched.
   #dirty = false;
   #fresh = 0;
+  // Engines can't be unloaded once loaded (each holds its own memory), so load a fresh one only when needed:
+  // after a camera that worked drops. While retrying (camera off between shoots), reuse that fresh engine.
+  #Engine = null; #engineUsed = false; #engineFails = 0;
+  static ENGINE_LIMIT = 8; // past this, the page should reload to free memory (studio does it between takes)
 
   state = 'idle';
   model = '';
@@ -88,13 +92,13 @@ export const CamCore = class CamCore extends EventTarget {
       try { await Promise.race([work, timeout]); }
       catch (e) { work.then(() => camera.disconnect(), () => camera.disconnect()).catch(() => {}); throw e; } // a late answer must not keep the camera open
       finally { clearTimeout(timer); }
-      this.#dirty = false;
+      this.#dirty = false; this.#engineUsed = true; this.#engineFails = 0;
       this.#setState('connected');
       this.#log(`Connected: ${this.model || 'camera'}`, 'ok');
       return true;
     } catch (e) {
       try { await this.#camera?.disconnect(); } catch {}
-      this.#camera = null; this.#dirty = true; // next try: fresh engine
+      this.#camera = null; this.#dirty = true; this.#engineFails++; // next try: a clean engine (reused while it never connected)
       this.#log(`Connect failed: ${e?.message || e}`, 'warn');
       this.#setState('idle');
       return this.#fail(...this.#classify(e));
@@ -102,12 +106,19 @@ export const CamCore = class CamCore extends EventTarget {
   }
 
   async #newCamera() {
-    if (!this.#dirty) return new Camera();
+    if (!this.#dirty) return new (this.#Engine || Camera)();
+    // A fresh engine that never connected is still clean: reuse it for the next tries (up to 5 failures in a row).
+    // Before (v1.3–v1.7) every failed try loaded another engine, and they piled up until the tab crashed.
+    if (this.#Engine && !this.#engineUsed && this.#engineFails < 5) return new this.#Engine();
     const v = new URL(import.meta.url).searchParams.get('v') || '';
     const { Camera: Fresh } = await import(`./lib/camera.js?v=${encodeURIComponent(v)}&engine=${++this.#fresh}`);
+    this.#Engine = Fresh; this.#engineUsed = false; this.#engineFails = 0;
     this.#log(`Fresh camera engine (#${this.#fresh})`);
+    if (this.#fresh >= CamCore.ENGINE_LIMIT) this.#emit('engines', { count: this.#fresh }); // studio reloads between takes
     return new Fresh();
   }
+  /** how many extra camera engines this page has loaded (each one stays in memory until a reload) */
+  get engines() { return this.#fresh; }
 
   async #usbReset(d) {
     try {
@@ -195,6 +206,8 @@ export const CamCore = class CamCore extends EventTarget {
   }
 
   // ---------- preview ----------
+  /** Live view speed limit (frames per second). 15 is smooth for framing and keeps the Mac cool; 30 while focusing. */
+  previewFps = 15;
   startPreview() {
     if (!this.#camera) return;
     this.#previewOn = true;
@@ -222,6 +235,10 @@ export const CamCore = class CamCore extends EventTarget {
         if (failures >= 20) { this.#log('Preview stopped after repeated failures', 'error'); this.#previewOn = false; break; }
         await new Promise(r => setTimeout(r, 300));
       }
+      // Heat: never faster than previewFps. Before, frames were pulled as fast as USB allowed (the camera driver
+      // runs on the processor here, unlike Imaging Edge), and each frame was decoded several times.
+      const wait = 1000 / Math.max(1, this.previewFps) - (performance.now() - t0);
+      if (wait > 4 && this.#previewOn) await new Promise(r => setTimeout(r, wait));
       const now = performance.now();
       if (now - this.#lastStatsT >= 1000) {
         this.#emit('stats', { fps: this.#frames * 1000 / (now - this.#lastStatsT), frameMs: this.#frameMsAvg });

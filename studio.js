@@ -93,10 +93,10 @@ function recIndicator() {
     el.classList.toggle('rec', !!m.rec);
     el.classList.toggle('cam-on', !!m.cam); el.classList.toggle('mic-on', !!m.mic);
     el.classList.toggle('cam-conn', !!m.camConn); el.classList.toggle('mic-conn', !!m.micConn); // connected green · off grey · recording red
-    const lv = Math.max(0, Math.min(1, ((m.db ?? -120) + 55) / 45)); // -55 dB … -10 dB
+    const talking = (m.db ?? -120) > -40; // speech is about -35…-15 dB RMS; a quiet room sits near -55
     // recording: the camera dot blinks; the mic dot blinks in sync while you talk, and stays steady red when you're silent
     dot.style.transform = ''; dot.style.opacity = '';
-    if (m.mic && lv > 0.18) talkUntil = performance.now() + 450; // a short hold so it doesn't flicker between words
+    if (m.mic && talking) talkUntil = performance.now() + 450; // a short hold so it doesn't flicker between words
     el.classList.toggle('mic-talk', !!m.mic && performance.now() < talkUntil);
   };
   return { el, set };
@@ -122,6 +122,8 @@ function initStageCam() {
   new MutationObserver(copy).observe(scroller, { attributes: true, attributeFilter: ['style'] });
   copy();
   let stream = null, devId = null, lastUrl = null, shared = false;
+  // the small Stage preview in the control window: it's tiny, so ~3 camera frames a second are plenty (heat)
+  const isMini = location.hash === '#stage-preview'; let miniT = 0;
   const stopStream = () => { if (!shared) stream?.getTracks().forEach(t => t.stop()); stream = null; devId = null; shared = false; vid.srcObject = null; }; // never stop the page's own camera stream
   let ch; try { ch = new BroadcastChannel('spaceCamCam'); } catch { return; }
   let myWin = ''; try { myWin = sessionStorage.getItem('spaceCamWin') || ''; } catch {} // the control window that opened this Stage (see init)
@@ -137,7 +139,8 @@ function initStageCam() {
       if (!m.on || m.src !== 'usb') img.removeAttribute('src');
       // This page already has the camera open (phone: control window = Stage): show that same stream.
       // Phones allow only one camera stream; opening a second one turns the first black.
-      const own = window.spaceCamWebStream?.();
+      // the mini preview (an iframe in the control window) borrows the control window's stream instead of opening a second one
+      const own = window.spaceCamWebStream?.() || (isMini ? (() => { try { return window.parent.spaceCamWebStream?.(); } catch { return null; } })() : null);
       if (m.on && m.src === 'mac' && own?.active) {
         if (stream !== own) { stopStream(); stream = own; shared = true; devId = m.deviceId || ''; vid.srcObject = own; vid.play().catch(() => {}); }
       } else if (m.on && m.src === 'mac' && (!stream || !stream.active || devId !== (m.deviceId || ''))) {
@@ -148,6 +151,7 @@ function initStageCam() {
         } catch { layer.hidden = true; }
       }
     } else if (m.type === 'frame' && m.blob && layer.dataset.src === 'usb') {
+      if (isMini) { const t = performance.now(); if (t - miniT < 330) return; miniT = t; }
       const u = URL.createObjectURL(m.blob); img.src = u;
       if (lastUrl) URL.revokeObjectURL(lastUrl);
       lastUrl = u;
@@ -190,6 +194,9 @@ function init() {
   const hardReload = sessionStorage.getItem('spaceCamHardReload') === '1';
   sessionStorage.removeItem('spaceCamHardReload');
   if (hardReload) { store.set('camAuto', false); store.set('micAuto', false); store.set('webOn', false); }
+  // Keep this site's data for good: settings, scripts and takes still in browser storage. Without this, Chrome may
+  // clear it when the disk gets full (then a tester has to set everything up again). Chrome decides; no popup.
+  try { navigator.storage?.persisted?.().then(p => { if (!p) navigator.storage.persist?.().catch(() => {}); }).catch(() => {}); } catch {}
   const cam = new CamCore();
   const audio = new AudioCore();
   const web = new WebcamCore(); // the Mac's own camera, used instead of the Sony when chosen
@@ -214,7 +221,7 @@ function init() {
     if (!stageCamCh) return;
     const live = src === 'mac' ? web.state === 'connected' : cam.state === 'connected';
     const on = !!store.get('stageCam', false) && live;
-    const op = Number(document.getElementById('scCvOp')?.value || store.get('centerOpacity', 20)) / 100;
+    const op = Number(store.get('stageOpacity', store.get('centerOpacity', 20))) / 100; // Stage has its own visibility (Prompter tab)
     const msg = { type: 'cfg', on, src: src === 'mac' ? 'mac' : 'usb', deviceId: web.deviceId || '', opacity: op, bw: store.get('camBW', true) };
     const key = JSON.stringify(msg);
     if (!force && key === stageCamLast) return; // renderCam runs often; only send changes
@@ -534,7 +541,9 @@ function init() {
     // sync icon sits right of the Connect stage switch (no separate row): more room further down
     const prHead = h(`<div class="sc-prhead"></div>`); prHead.append(swPr);
     { const sb = syncRow.querySelector('#sync-btn'); if (sb) { sb.title = 'Stage sync: re-send the current position to the Stage window and the preview'; prHead.append(sb); } const st2 = syncRow.querySelector('#sync-status'); if (st2) prHead.append(st2); }
-    const order = [prHead, stageBox, onStageList, row('View', stageView), $('margin-group'), grp('Text'),
+    // Stage camera visibility: its own amount for the prompter glass (before, the Stage used the main window's)
+    const stageOpGroup = h(`<div class="slider-group" id="scStageOpGroup"><div class="slider-label"><span>Stage visibility</span><span id="scStageOpVal">20%</span></div><input type="range" id="scStageOp" min="10" max="100" step="5" value="20" aria-label="How much of the camera shows behind the script on the Stage"></div>`);
+    const order = [prHead, stageBox, onStageList, stageOpGroup, row('View', stageView), $('margin-group'), grp('Text'),
       $('speed-group'), $('size-group'), $('parasp-group'), alignRow,
       grp('Guide'), lineSw, $('dim-group'), grp('Pedal'), pedalRow,
       keys([['Space', 'Play / pause'], [['Space', 'Space'], 'Previous paragraph'], ['Hold Space', 'Back to the top']])];
@@ -549,6 +558,7 @@ function init() {
         'Focus step': '<path d="M4 12h16M8 8l-4 4 4 4M16 8l4 4-4 4"/>',
         'Camera behind text': '<rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="12" cy="10.5" r="2.2"/><path d="M8 19c.6-2.6 2.1-4 4-4s3.4 1.4 4 4"/>',
         'Camera visibility': '<path d="M2.5 12S6 6 12 6s9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"/><circle cx="12" cy="12" r="2.6"/>',
+        'Stage visibility': '<path d="M2.5 12S6 6 12 6s9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6z"/><circle cx="12" cy="12" r="2.6"/>',
         'Black and white': '<circle cx="12" cy="12" r="8"/><path d="M12 4a8 8 0 0 1 0 16z" class="d"/>',
         'Record start sound': '<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M17 15V8M14.5 10.5 17 8l2.5 2.5"/>',
         'Record stop sound': '<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M17 8v7M14.5 12.5 17 15l2.5-2.5"/>',
@@ -670,7 +680,11 @@ function init() {
   renderBW();
   // Camera on Stage toggle
   const stageCamBtn = $('scStageCam'); // lives in the Prompter tab now
-  const renderStageCamBtn = () => stageCamBtn.setAttribute('aria-pressed', String(!!store.get('stageCam', false)));
+  const stageOp = $('scStageOp'), stageOpVal = $('scStageOpVal'), stageOpGroup = $('scStageOpGroup');
+  const setStageOp = pct => { pct = Math.max(10, Math.min(100, Math.round(pct / 5) * 5 || 20)); if (stageOp) stageOp.value = pct; if (stageOpVal) stageOpVal.textContent = pct + '%'; store.set('stageOpacity', pct); };
+  stageOp?.addEventListener('input', () => { setStageOp(Number(stageOp.value)); sendStageCam(); });
+  setStageOp(store.get('stageOpacity', store.get('centerOpacity', 20)));
+  const renderStageCamBtn = () => { const on = !!store.get('stageCam', false); stageCamBtn.setAttribute('aria-pressed', String(on)); if (stageOpGroup) stageOpGroup.hidden = !on; }; // the slider shows while Camera on Stage is on
   stageCamBtn.onclick = () => { store.set('stageCam', !store.get('stageCam', false)); renderStageCamBtn(); sendStageCam(); };
   renderStageCamBtn();
   setCamOpacity(store.get('centerOpacity', 20)); // 20% tested best behind the script (9 Nov); your own choice is remembered
@@ -847,6 +861,14 @@ function init() {
     ui.camState.textContent = web.recording ? 'Recording' : on ? MACCAM : busyW ? 'Starting' : 'Off';
     ui.camState.className = 'sc-state' + (web.recording ? ' rec' : on ? ' on' : '');
   }
+  // Heat: pause the USB live view while nothing shows it (this window hidden or minimised, and no Stage window
+  // showing the camera). The camera keeps recording to its card; live view resumes when you come back.
+  const stageShowsCam = () => !!store.get('stageCam', false) && !!$('display-btn')?.classList.contains('connected');
+  document.addEventListener('visibilitychange', () => {
+    if (cam.state !== 'connected') return;
+    if (document.hidden && !stageShowsCam()) cam.stopPreview();
+    else if (!document.hidden) cam.startPreview();
+  });
   let camUserOff = false; // true between your own 'off' and the camera reporting disconnected
   cam.addEventListener('state', e => {
     if (e.detail.state === 'connected') { camUserOff = false; store.set('camAuto', true); store.set('camEverConnected', true); ui.help.open = ui.help2.open = false; ui.problem.hidden = true; ui.problem2.hidden = true; delete ui.connect.dataset.retry; cam.startPreview(); }
@@ -1181,12 +1203,14 @@ function init() {
     if (!liveOn()) return;
     try { window.spaceCamPrompter?.pause(); } catch {}
     document.body.classList.add('sc-camset-on'); camSet.hidden = false;
+    cam.previewFps = 30; // focusing: smoother live view while Camera settings is open
     csDirty = false; { const b = csQ('.sc-cs-save'); b.classList.remove('dirty'); b.innerHTML = `${BACK_IC}<span>Back</span>`; b.title = 'Back to the prompter (Esc)'; }
     renderBigSettings(); fitCamSet(); requestAnimationFrame(fitCamSet);
     document.addEventListener('keydown', camSetKey, true);
   }
   function closeBig() {
     if (!document.body.classList.contains('sc-camset-on')) return;
+    cam.previewFps = 15;
     document.body.classList.remove('sc-camset-on'); document.querySelector('.sc-camset').hidden = true;
     document.removeEventListener('keydown', camSetKey, true);
   }
@@ -1271,7 +1295,7 @@ function init() {
     const now0 = performance.now(), dt = Math.min(0.1, (now0 - shownT) / 1000);
     // Calm meter: the bar follows loudness (RMS), rises quickly and falls slowly (~12 dB/s).
     const target = Math.max(e.detail.rmsDb, -120);
-    recLevelDb = e.detail.peakDb ?? target;
+    recLevelDb = target; // loudness (RMS), not the peak: room-noise peaks read as talking and the mic dot blinked all the time
     shown = target > shown ? shown + (target - shown) * Math.min(1, dt * 18) : Math.max(target, shown - 12 * dt);
     shownT = now0;
     const peakDb = shown;
@@ -2186,7 +2210,7 @@ function init() {
       // An MP3 (saved take): use the waveform kept when it was saved, else decode it (only short files: memory).
       let peaks = null;
       if (Array.isArray(t.peaks) && t.peaks.length) peaks = resamplePeaks(Float32Array.from(t.peaks), buckets);
-      else if (r.file.size < 30e6) { try { peaks = await decodedPeaks(r.file, buckets); } catch {} }
+      else if (r.file.size < 12e6) { try { peaks = await decodedPeaks(r.file, buckets); } catch {} } // ~5 min: decoding a longer MP3 at once briefly takes hundreds of MB
       if (peaks && player === p) { p.peaks = peaks; paint(); }
     }
   }
@@ -2938,6 +2962,17 @@ function init() {
     location.reload();
   }, true);
   window.addEventListener('pagehide', () => { if (cam.state === 'connected') cam.disconnect(); });
+  // Too many camera engines loaded (each stays in memory until a reload, see cam-core.js): reload to free the
+  // memory, but never during a take or while a take is saving. Settings, scripts and the camera come back by themselves.
+  let engineReload = false;
+  cam.addEventListener('engines', () => { engineReload = true; });
+  setInterval(async () => {
+    if (!engineReload || take || busy || takes.some(t => t.saving) || document.querySelector('.sc-modal')) return;
+    engineReload = false;
+    toast('Reloading to keep Space Cam running smoothly…');
+    try { await cam.release(); } catch {}
+    setTimeout(() => location.reload(), 1200);
+  }, 3000);
 
   // ------------------------------------------------------------------ keys (prompter keys stay as they are)
   const typing = e => { const t = e.target; return t && (t.isContentEditable || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || (t.tagName === 'INPUT' && t.type !== 'range')); };

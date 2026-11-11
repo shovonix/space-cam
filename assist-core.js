@@ -136,7 +136,12 @@ export class AssistCore extends EventTarget {
       let sum = 0, white = 0;
       for (let i = 0, j = 0; i < px.length; i += 4, j++) { const l = 0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2]; lum[j] = l; sum += l; if (l >= 250) white++; }
       const mean = sum / lum.length;
-      if (this.light && mean < 38) found.add('dark'); // the real camera frame (black and white / visibility only change the view behind the text)
+      // Too dark? Not the average: a low-key look (dark background, face lit right) has a low average and is fine.
+      // Judge the brightest part instead (top 5%, where a lit face is); only when even that is dim is the shot dark.
+      // With the face detector on, the face itself decides (below). Black and white / visibility don't matter here.
+      const hist = new Uint32Array(256); for (let j = 0; j < lum.length; j++) hist[Math.min(255, lum[j] | 0)]++;
+      let p95 = 255; for (let v = 255, acc = 0; v >= 0; v--) { acc += hist[v]; if (acc >= lum.length * 0.05) { p95 = v; break; } }
+      let darkShot = p95 < 70;
       if (this.light && white / lum.length > 0.12) found.add('bright');
       // --- face (optional) ---
       if (this.frame && this.#face) {
@@ -145,7 +150,7 @@ export class AssistCore extends EventTarget {
           const best = d.sort((a, b) => (b.boundingBox.width * b.boundingBox.height) - (a.boundingBox.width * a.boundingBox.height))[0];
           if (best) face = best.boundingBox;
         } catch {}
-        if (!face) { if (mean >= 38) found.add('noface'); }
+        if (!face) { if (!darkShot) found.add('noface'); }
         else {
           const cx = (face.originX + face.width / 2) / W, top = face.originY / H, fw = face.width / W;
           if (cx < 0.3) found.add('offleft'); else if (cx > 0.7) found.add('offright');
@@ -156,12 +161,14 @@ export class AssistCore extends EventTarget {
           let fs = 0, fn = 0; for (let y = box.y0; y < box.y1; y++) for (let x = box.x0; x < box.x1; x++) { fs += lum[y * W + x]; fn++; }
           const faceLum = fn ? fs / fn : mean, bgLum = (sum - fs) / Math.max(1, lum.length - fn);
           if (bgLum - faceLum > 50 && bgLum > 120) found.add('backlit');
+          darkShot = faceLum < 55; // the face decides: a dark room around a well-lit face is a look, not a problem
           // focus: sharpness (Laplacian energy) on the face vs the background
           const sharp = (x0, y0, x1, y1, inside) => { let s = 0, n = 0; for (let y = Math.max(1, y0); y < Math.min(H - 1, y1); y++) for (let x = Math.max(1, x0); x < Math.min(W - 1, x1); x++) { const k = y * W + x; const isIn = x >= box.x0 && x < box.x1 && y >= box.y0 && y < box.y1; if (isIn !== inside) continue; const v = 4 * lum[k] - lum[k - 1] - lum[k + 1] - lum[k - W] - lum[k + W]; s += v * v; n++; } return n ? s / n : 0; };
           const fSharp = sharp(box.x0, box.y0, box.x1, box.y1, true), bSharp = sharp(0, 0, W, H, false);
           if (bSharp > 60 && fSharp < bSharp * 0.45) found.add('focus');
         }
       }
+      if (this.light && darkShot) found.add('dark');
     }
     return this.#update(found, now);
   }
@@ -178,7 +185,7 @@ export class AssistCore extends EventTarget {
   #publish(now = performance.now()) {
     let pick = null;
     for (const id of Object.keys(TIPS)) {
-      const s = this.#seen.get(id); if (!s || now - s.since < SHOW_AFTER) continue;
+      const s = this.#seen.get(id); if (!s || now - s.since < (id === 'dark' ? 8000 : SHOW_AFTER)) continue; // dark: only when it stays dark a while
       if ((this.#snoozed.get(id) || 0) > now) continue;
       if (this.recording && !DURING_TAKE.has(id)) continue;
       pick = id; break;

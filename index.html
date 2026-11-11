@@ -32,7 +32,7 @@ html.scp-r #stage{right:0!important}
 </style>
 <script src="coi-serviceworker.js"></script>
 <!-- Space Cam styles in the head: nothing paints unstyled on reload (keep its ?v= the same as studio.js at the bottom) -->
-<link rel="stylesheet" href="studio.css?v=2026-11-11e">
+<link rel="stylesheet" href="studio.css?v=2026-11-11f">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#0A0A0B">
@@ -770,7 +770,8 @@ body.touch #screen-note{order:5;margin-top:12px;padding:10px 12px;font-size:12px
     return changed?out:null;
   }
   function chromaticBg(st){
-    var v=(st.getPropertyValue('background-color')||'')+' '+(st.getPropertyValue('background-image')||''), m, any=false;
+    var v=(st.getPropertyValue('background-color')||'')+' '+(st.getPropertyValue('background-image')||'')+' '+(st.getPropertyValue('background')||''), m, any=false;
+    if(/var\(--red/.test(v)) return true; // the red token (record, badges): white text on it stays white
     COLOR.lastIndex=0; while((m=COLOR.exec(v))){ var c=parse(m); if(Math.max(c[0],c[1],c[2])-Math.min(c[0],c[1],c[2])>=16 && c[3]>0.5) any=true; }
     return any;
   }
@@ -812,6 +813,12 @@ body.touch #screen-note{order:5;margin-top:12px;padding:10px 12px;font-size:12px
       if(r.type===12){ var inner2=rules(r.cssRules); if(inner2) out+='@supports '+r.conditionText+'{'+inner2+'}'; continue; }
       if(r.type!==1) continue;
       var st=r.style, decl='', any=false, keepText=chromaticBg(st);
+      // shorthands written with a variable (background: var(--red)) leave their longhands empty in the CSSOM:
+      // copy the shorthand itself, or a later grey rule beats it (Record turned white, recording dots stayed green)
+      ['background','border','border-top','border-right','border-bottom','border-left','border-color','outline'].forEach(function(sh){
+        var sv=st.getPropertyValue(sh); if(!sv || sv.indexOf('var(')<0) return;
+        decl+=sh+':'+sv+(st.getPropertyPriority(sh)?' !important':'')+';';
+      });
       for(var j=0;j<st.length;j++){
         var n=st[j], v=st.getPropertyValue(n);
         if(!v) continue;
@@ -838,6 +845,9 @@ body.touch #screen-note{order:5;margin-top:12px;padding:10px 12px;font-size:12px
   // switches, hand-made for light (the flipped greys made "off" look disabled): off = light track + white knob with a soft ring, on = black track + white knob
   css+=L+' .sc-swb:not(.sc-static)'+NOCAM+'::after{background:#E3E3E7 radial-gradient(circle at 9px 9px,#fff 6.4px,rgba(0,0,0,.16) 7px,transparent 7.6px)}'
      +L+' .sc-swb[aria-pressed="true"]'+NOCAM+'::after,'+L+' .sc-swb.active'+NOCAM+'::after{background:#111113 radial-gradient(circle at 23px 9px,#fff 6.4px,transparent 7px)}';
+  // Record while recording: solid red, white text and icon, no glow (the flipped greys made it white with black text)
+  css+=L+' .cap-side.sc-rec.on'+NOCAM+','+L+' .cap-side.sc-rec.warn'+NOCAM+'{background:var(--red)!important;border-color:var(--red)!important;color:#fff!important;box-shadow:none!important}'
+     +L+' .cap-side.sc-rec.on'+NOCAM+' i{background:#fff!important}';
   // …and inside that dark middle, the main colours go back to their dark values (the tokens are inherited)
   css+=L+' '+CAMBG+'{--bg:#070707;--stage:#000000;--panel:#0E0E0F;--surface:#0E0E0F;--surface-2:#1A1A1B;--raised:#1A1A1B;--hair:#2A2A2C;--border:#2A2A2C;--fg:#F0F0EE;--fg-dim:#9A9AA0;--accent:#F0F0EE;--accent-rgb:240,240,238;--accent-fg:#070707;color-scheme:dark}';
   var el=document.createElement('style'); el.id='sc-light'; el.textContent=css; document.head.appendChild(el);
@@ -848,10 +858,15 @@ body.touch #screen-note{order:5;margin-top:12px;padding:10px 12px;font-size:12px
 <!-- What's new: edit before every deploy (see CLAUDE.md). Shown in the update notice and once after the reload. Plain words, one line each. -->
 <script type="application/json" id="sc-changes">
 {
-  "added": [],
+  "added": [
+    "Stage visibility: how much camera shows behind the script on the prompter glass, right under Camera on Stage."
+  ],
   "fixed": [
-    "A pasted script keeps its paragraphs and empty lines exactly as written (Google Docs, Word, web pages too), on the Stage and in this window. Paragraph gap adds space on top.",
-    "The update notice is one short line with a close button, under the top buttons. What changed shows after you reload."
+    "Runs cooler: no blur redrawn over the video, the USB camera's live view is limited to 15 frames a second (30 in Camera settings) and pauses when nothing shows it.",
+    "No more crash after a few shoots: reconnecting the camera between shoots no longer piles up memory.",
+    "The \"quite dark\" tip now looks at your face (or the brightest part of the picture), so a dark background with a well-lit face is fine.",
+    "While recording, the Record button and the camera and mic signal turn red in light mode too. The mic dot blinks only while you talk.",
+    "Space Cam asks Chrome to keep its data, so your settings and scripts stay put."
   ]
 }
 </script>
@@ -5588,7 +5603,7 @@ var qrcode = function() {
   });
 
   // ---- Build/version indicator (control window top bar) ----
-  var APP_VERSION = 'v1.7'; // bump with each deploy (1.1, 1.2 …): shows in the logo chip, and open copies get the "new version" toast
+  var APP_VERSION = 'v1.8'; // bump with each deploy (1.1, 1.2 …): shows in the logo chip, and open copies get the "new version" toast
   if(buildMeta && !isStageWindow){
     buildMeta.textContent = APP_VERSION;
   }
@@ -6234,4 +6249,4 @@ window.claude.hot.snapshot(function(){ return { state: state }; });
 </script>
 <!-- Bump ?v= on every deploy so browsers load the new files instead of cached ones.
      studio.js passes the same ?v= on to every file it loads (engines, workers). -->
-<script type="module" src="studio.js?v=2026-11-11e"></script>
+<script type="module" src="studio.js?v=2026-11-11f"></script>

@@ -1619,3 +1619,7 @@ input[type=range]::-webkit-slider-thumb{box-shadow:0 0 3px rgba(255,255,255,.12)
 }
 /* Stage window card: everything left-aligned (the prompter's centred hint text was leaking in) */
 #stage-hint-card,#stage-hint-card *{text-align:left!important}
+/* Heat (11 Nov 2026): no background blur on anything that sits over the camera / scrolling script. The blur was
+   recalculated every video frame (bottom bar 20 px) though these are nearly solid; a touch more solid instead. */
+#bottombar,.sc-rail-show,.sc-rshow,.sc-assist-tip,.sc-prev-set,#back-btn,#mode-toast,.sc-stage-tools .icon-btn,.sc-stage-tools .sc-stage-rec{-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+body:not(.sc-phone) #bottombar{background:rgba(14,14,15,.94)}

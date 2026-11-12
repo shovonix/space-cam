@@ -32,7 +32,7 @@ html.scp-r #stage{right:0!important}
 </style>
 <script src="coi-serviceworker.js"></script>
 <!-- Space Cam styles in the head: nothing paints unstyled on reload (keep its ?v= the same as studio.js at the bottom) -->
-<link rel="stylesheet" href="studio.css?v=2026-11-12">
+<link rel="stylesheet" href="studio.css?v=2026-11-12b">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#0A0A0B">
@@ -860,7 +860,7 @@ body.touch #screen-note{order:5;margin-top:12px;padding:10px 12px;font-size:12px
 <script type="application/json" id="sc-changes">
 {
   "fixed": [
-    "New version numbers: Space Cam is in beta, so it now counts from 0.1 (this is v0.1.8.4 beta). Version 1.0 comes with the public launch."
+    "First visit: the welcome now sits on the red reading line and lights up like a real script, with bigger text. Press Play and the highlight follows the line."
   ]
 }
 </script>
@@ -3673,12 +3673,15 @@ var qrcode = function() {
       // Space Cam: no script yet. Recording without a prompter is fine.
       // First view looks like the real prompter: script-sized lines on the reading line, not small notes.
       // Play scrolls it, so a first visitor tries the prompter straight away.
-      scriptText.innerHTML = ['Welcome to Space Cam.',
+      scriptText.innerHTML = ['Welcome to Space Cam. This is your prompter.',
         'Press Space or Play to see your script scroll like this.',
         'Click <b>Add script</b> below to paste your own. Or just record without one.',
         'Connect your camera and mic on the right. Press R, and camera, mic and prompter start together.',
         'Your words stay big and clear, right on the reading line, while you look into the lens.']
         .map(function(t, i){ return '<div class="para sc-noscript sc-welcome-p' + (i ? ' sc-welcome-next' : '') + '">' + t + '</div>'; }).join('');
+      // slate-style placeholder lines above the reading line, faded like lines already read, so the screen looks like a script in progress
+      scriptText.insertAdjacentHTML('afterbegin', ['Shoot 01, take 1. Los Angeles, window light on the left.']
+        .map(function(t){ return '<div class="para sc-noscript sc-welcome-pre">' + t + '</div>'; }).join(''));
     }
     applyViewScale();
     if(keepG !== null && isFinite(keepG)){
@@ -3728,7 +3731,8 @@ var qrcode = function() {
     if(!flipSideways) guideEl.style.top = (guideFrac * 100) + '%';
     var gs = document.getElementById('guidepos'), gv = document.getElementById('guidepos-val');
     if(gs){ gs.value = Math.round(f * 100); gv.textContent = Math.round(f * 100) + '% from top'; }
-    if(g !== null && isFinite(g)) setG(g);
+    if(!isStageWindow && welcomePad()) scroller.scrollTop = 0;
+    else if(g !== null && isFinite(g)) setG(g);
     if(typeof scheduleDim === 'function') scheduleDim();
   }
   function getG(){ return (scroller.scrollTop + scroller.clientHeight * guideFrac) / viewK - textPadTop(); }
@@ -3753,8 +3757,30 @@ var qrcode = function() {
     }else{
       ['width','maxWidth','marginLeft','marginRight','transformOrigin','transform','marginBottom'].forEach(function(prop){ scriptText.style[prop] = ''; });
     }
-    if(g !== null && isFinite(g)) setG(g);
+    if(welcomePad()) scroller.scrollTop = 0;
+    else if(g !== null && isFinite(g)) setG(g);
     renderMarks();
+  }
+  // Space Cam: first visit (no script): "Welcome to Space Cam." starts centred on the red line, so the normal
+  // "bright line on the reading line" rule lights it; slate lines fill the space above, the welcome the space below
+  function welcomePad(){
+    var fp = scriptText.querySelector('.sc-welcome-p'), want = '';
+    if(fp){
+      // small or narrow screens: drop slate lines until the welcome fits on the red line
+      var pre = scriptText.querySelectorAll('.sc-welcome-pre'), line = scroller.clientHeight * guideFrac / viewK, raw = 0;
+      for(var i = 0; i < pre.length; i++) pre[i].style.display = '';
+      for(var k = 0; k <= pre.length; k++){
+        var first = scriptText.querySelector('.para:not([style*="display: none"])');
+        raw = line - (fp.offsetTop - first.offsetTop) - fp.offsetHeight / 2;
+        if(raw >= 0 || k === pre.length) break;
+        pre[pre.length - 1 - k].style.display = 'none';
+      }
+      want = Math.max(0, Math.round(raw)) + 'px';
+    }
+    if(scriptText.style.paddingTop === want) return false;
+    scriptText.style.paddingTop = want;
+    dimCur = -2; scheduleDim();
+    return !!want;
   }
   function updateProgress(){
     if(!progressFill || isStageWindow) return;
@@ -5604,7 +5630,7 @@ var qrcode = function() {
   });
 
   // ---- Build/version indicator (control window top bar) ----
-  var APP_VERSION = 'v0.1.8.4 beta'; // bump with each deploy (v0.1.8.5 beta, v0.1.8.6 beta … until v1.0): shows in the logo chip, and open copies get the "new version" toast
+  var APP_VERSION = 'v0.1.8.5 beta'; // bump with each deploy (v0.1.8.5 beta, v0.1.8.6 beta … until v1.0): shows in the logo chip, and open copies get the "new version" toast
   if(buildMeta && !isStageWindow){
     buildMeta.textContent = APP_VERSION;
     // the version lives on the bottom line now, beside the copyright: "Space Cam v1.8.1 © shovonix"
@@ -6252,4 +6278,4 @@ window.claude.hot.snapshot(function(){ return { state: state }; });
 </script>
 <!-- Bump ?v= on every deploy so browsers load the new files instead of cached ones.
      studio.js passes the same ?v= on to every file it loads (engines, workers). -->
-<script type="module" src="studio.js?v=2026-11-12"></script>
+<script type="module" src="studio.js?v=2026-11-12b"></script>

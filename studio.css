@@ -1638,13 +1638,12 @@ body:not(.sc-phone) #bottombar{background:rgba(14,14,15,.94)}
 body.sc-phone .sc-rs-text b{font-size:15px!important}
 /* First view (no script yet): the welcome reads like a real script, at the script's own size; lines after the first are dimmed like "fade other lines" */
 .sc-noscript.sc-welcome-p{font-size:1em!important;color:var(--fg)}
-.sc-noscript.sc-welcome-p.sc-welcome-next{color:var(--fg);opacity:.42}
 .sc-noscript.sc-welcome-p b{font-weight:inherit;text-decoration:underline;text-underline-offset:.12em;text-decoration-thickness:.06em}
 /* sun / moon button: same size as Focus and Full screen */
 .sc-stage-tools .sc-theme-btn{width:44px;height:44px;border-radius:12px;background:rgba(20,20,22,.7)!important;border-color:var(--hair)!important}
-/* First view: the welcome starts higher, so 2–3 more lines fill the screen (it began on the reading line, top half empty) */
-.sc-noscript.sc-welcome-p:first-child{margin-top:-24vh}
-.sc-noscript.sc-welcome-p:first-child{opacity:1!important}
+/* First view: "Welcome to Space Cam." starts on the red line (index.html welcomePad), lit by the normal reading-line rule; slate lines above */
+.sc-noscript.sc-welcome-pre{font-size:1em!important;color:var(--fg)}
+.sc-noscript.sc-welcome-p,.sc-noscript.sc-welcome-pre{font-size:1.18em!important;line-height:1.25;margin-left:6%;margin-right:6%}
 /* How to use: small ? beside "Controls" */
 .sc-rhead b{display:flex;align-items:center}
 .sc-help-btn{width:20px;height:20px;margin-left:8px;margin-right:auto;border-radius:50%;border:1px solid var(--line-2,rgba(255,255,255,.22));background:none;color:var(--fg-dim);font:700 11px 'Public Sans',system-ui,sans-serif;display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0}

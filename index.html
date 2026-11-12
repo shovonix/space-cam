@@ -32,7 +32,7 @@ html.scp-r #stage{right:0!important}
 </style>
 <script src="coi-serviceworker.js"></script>
 <!-- Space Cam styles in the head: nothing paints unstyled on reload (keep its ?v= the same as studio.js at the bottom) -->
-<link rel="stylesheet" href="studio.css?v=2026-11-12b">
+<link rel="stylesheet" href="studio.css?v=2026-11-12c">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#0A0A0B">
@@ -3673,14 +3673,14 @@ var qrcode = function() {
       // Space Cam: no script yet. Recording without a prompter is fine.
       // First view looks like the real prompter: script-sized lines on the reading line, not small notes.
       // Play scrolls it, so a first visitor tries the prompter straight away.
-      scriptText.innerHTML = ['Welcome to Space Cam. This is your prompter.',
+      scriptText.innerHTML = ['Welcome to Space Cam. This is your prompter, and your words sit right here on the red line.',
         'Press Space or Play to see your script scroll like this.',
         'Click <b>Add script</b> below to paste your own. Or just record without one.',
         'Connect your camera and mic on the right. Press R, and camera, mic and prompter start together.',
         'Your words stay big and clear, right on the reading line, while you look into the lens.']
         .map(function(t, i){ return '<div class="para sc-noscript sc-welcome-p' + (i ? ' sc-welcome-next' : '') + '">' + t + '</div>'; }).join('');
       // slate-style placeholder lines above the reading line, faded like lines already read, so the screen looks like a script in progress
-      scriptText.insertAdjacentHTML('afterbegin', ['Shoot 01, take 1. Los Angeles, window light on the left.']
+      scriptText.insertAdjacentHTML('afterbegin', ['Shoot 01, take 1. Los Angeles, soft window light from the left, coffee on the desk.']
         .map(function(t){ return '<div class="para sc-noscript sc-welcome-pre">' + t + '</div>'; }).join(''));
     }
     applyViewScale();
@@ -3766,6 +3766,10 @@ var qrcode = function() {
   function welcomePad(){
     var fp = scriptText.querySelector('.sc-welcome-p'), want = '';
     if(fp){
+      // welcome text size follows the column: script size x1.18, but never more than ~16 em across, so lines stay long enough
+      var cs = getComputedStyle(scriptText), inner = scriptText.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      var wfs = Math.round(Math.min(parseFloat(cs.fontSize) * 1.18, inner * 0.88 / 16)) + 'px';
+      if(scriptText.style.getPropertyValue('--wfs') !== wfs) scriptText.style.setProperty('--wfs', wfs);
       // small or narrow screens: drop slate lines until the welcome fits on the red line
       var pre = scriptText.querySelectorAll('.sc-welcome-pre'), line = scroller.clientHeight * guideFrac / viewK, raw = 0;
       for(var i = 0; i < pre.length; i++) pre[i].style.display = '';
@@ -3777,6 +3781,7 @@ var qrcode = function() {
       }
       want = Math.max(0, Math.round(raw)) + 'px';
     }
+    if(!fp) scriptText.style.removeProperty('--wfs');
     if(scriptText.style.paddingTop === want) return false;
     scriptText.style.paddingTop = want;
     dimCur = -2; scheduleDim();
@@ -6278,4 +6283,4 @@ window.claude.hot.snapshot(function(){ return { state: state }; });
 </script>
 <!-- Bump ?v= on every deploy so browsers load the new files instead of cached ones.
      studio.js passes the same ?v= on to every file it loads (engines, workers). -->
-<script type="module" src="studio.js?v=2026-11-12b"></script>
+<script type="module" src="studio.js?v=2026-11-12c"></script>

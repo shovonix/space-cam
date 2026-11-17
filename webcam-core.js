@@ -50,8 +50,9 @@ export class WebcamCore extends EventTarget {
     try {
       const ask = id => navigator.mediaDevices.getUserMedia({
         audio: false,
-        // as big as the camera gives, up to 4K: a capture card (Cam Link 4K) passes the camera's 4K; the FaceTime camera tops out at 1080p
-        video: { deviceId: id ? { exact: id } : undefined, width: { ideal: 3840 }, height: { ideal: 2160 }, frameRate: { ideal: 30 } },
+        // 1080p first (asking a 1080p camera like the FaceTime HD for 4K makes Chrome pick an odd tall format);
+        // a camera that can do 4K (a capture card like the Cam Link 4K) is stepped up to 4K right after.
+        video: { deviceId: id ? { exact: id } : undefined, width: { ideal: 1920 }, height: { ideal: 1080 }, aspectRatio: { ideal: 16 / 9 }, frameRate: { ideal: 30 } },
       });
       // A saved camera that's gone (or got a new id) → OverconstrainedError: use the default camera instead
       try { this.stream = await ask(deviceId); }
@@ -61,6 +62,10 @@ export class WebcamCore extends EventTarget {
       return this.#fail(e?.name === 'NotAllowedError' ? 'Camera access was blocked. Allow the camera for this site in Chrome (and in macOS Privacy & Security → Camera).' : 'Could not open the Mac camera: ' + (e?.message || e));
     }
     const track = this.stream.getVideoTracks()[0];
+    try { // 4K only for cameras that really offer it (16:9, 3840 wide); everything else stays exactly as opened
+      const cap = track?.getCapabilities?.() || {};
+      if ((cap.width?.max || 0) >= 3840 && (cap.height?.max || 0) >= 2160) await track.applyConstraints({ width: { ideal: 3840 }, height: { ideal: 2160 }, aspectRatio: { ideal: 16 / 9 }, frameRate: { ideal: 30 } });
+    } catch {}
     this.label = track?.label || 'Mac camera';
     this.deviceId = track?.getSettings().deviceId || deviceId;
     track?.addEventListener('ended', () => { if (this.state !== 'off') { this.#fail('The Mac camera stopped.'); this.close(); } });

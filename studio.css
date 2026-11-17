@@ -1733,3 +1733,23 @@ body.sc-phone .sc-saved-lab{margin-top:14px}
 .sc-pb-row{flex-direction:column;align-items:flex-start!important}
 .sc-pb-more{flex:none!important;width:100%}
 .sc-toast-bar,.sc-saved-bar{display:none!important}
+/* Saving progress: spinner on the take's thumbnail, thin bar under its line, and a bar on the "Recording saved" card */
+.sc-take.saving .sc-take-thumb::after{content:"";position:absolute;inset:0;z-index:2;background:rgba(0,0,0,.55)}
+.sc-take.saving .sc-take-thumb::before{content:"";position:absolute;z-index:3;left:50%;top:50%;width:16px;height:16px;margin:-10px 0 0 -10px;border-radius:50%;border:2px solid rgba(255,255,255,.25);border-top-color:#fff;animation:sc-spin .8s linear infinite}
+.sc-take-kind{display:block;font:400 11px/1.4 'Public Sans',system-ui,sans-serif;color:var(--fg-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@keyframes sc-spin{to{transform:rotate(360deg)}}
+.sc-take-saving{color:var(--fg)}
+.sc-take-prog{display:block;height:3px;margin-top:5px;border-radius:2px;background:var(--hair);overflow:hidden}
+.sc-take-prog i{display:block;height:100%;background:var(--fg);border-radius:2px;transition:width .3s ease}
+.sc-saved-prog{display:block;height:3px;margin-top:8px;border-radius:2px;background:var(--hair);overflow:hidden}
+.sc-saved-prog[hidden]{display:none}
+.sc-saved-prog i{display:block;height:100%;width:0;background:var(--fg);border-radius:2px;transition:width .3s ease}
+@media (prefers-reduced-motion:reduce){.sc-take.saving .sc-take-thumb::before{animation-duration:2.4s}}
+.sc-saved.busy .sc-saved-ok{display:none}
+/* Low disk space: red twin of the "new version" banner (top centre, under the top buttons); never dims or blocks */
+#sc-space-banner{position:fixed;left:50%;top:calc(env(safe-area-inset-top) + 76px);transform:translate(-50%,-12px);z-index:61;display:flex;align-items:center;gap:10px;padding:11px 8px 11px 18px;border-radius:999px;background:var(--red,#E5484D);color:#fff;font:600 12.5px 'Archivo',system-ui,sans-serif;box-shadow:0 10px 36px rgba(0,0,0,.6);max-width:calc(100% - 32px);opacity:0;pointer-events:none;transition:opacity .3s ease,transform .3s ease}
+#sc-space-banner.show{opacity:1;pointer-events:auto;transform:translate(-50%,0)}
+#sc-space-banner.below{top:calc(env(safe-area-inset-top) + 128px)}
+#sc-space-banner .sc-sb-x{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;font-size:11px;opacity:.8;cursor:pointer}
+#sc-space-banner .sc-sb-x:hover{opacity:1;background:rgba(0,0,0,.15)}
+body.stage-window #sc-space-banner{display:none}

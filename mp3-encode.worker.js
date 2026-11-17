@@ -1,6 +1,6 @@
 // mp3-encode.worker.js — turns a WAV take (16/24/32-bit PCM or 32-bit float) into an MP3 when it is saved.
 // Recording itself stays WAV (crash-safe, see audio-writer.worker.js); this only runs on save.
-// Message in:  { file: File|Blob, kbps?: number }
+// Message in:  { file: File|Blob, kbps?: number, skipMs?: number }  (skipMs: cut this much off the start, so the MP3 lines up with a camera clip that started later; negative = add that much silence in front)
 // Messages out: { ev:'progress', p: 0..1 } … then { ev:'done', blob } or { ev:'error', message }
 importScripts('lib/lamejs/lame.min.js');
 
@@ -22,7 +22,7 @@ async function readWavInfo(file) {
 
 self.onmessage = async e => {
   try {
-    const { file, kbps = 320 } = e.data;
+    const { file, kbps = 320, skipMs = 0 } = e.data;
     const w = await readWavInfo(file);
     const bps = w.bits / 8, frame = bps * w.channels;
     const isFloat = w.format === 3;
@@ -31,7 +31,14 @@ self.onmessage = async e => {
     const out = [];
     const SAMPLES = 1152 * 200; // samples per channel per read
     const total = Math.floor(w.dataBytes / frame);
-    let done = 0;
+    let done = Math.min(total, Math.max(0, Math.round((skipMs || 0) * w.rate / 1000)));
+    if (skipMs < 0) { // the camera started first: put that much silence in front instead
+      const pad = new Int16Array(Math.round(-skipMs * w.rate / 1000));
+      for (let i = 0; i < pad.length; i += 1152) {
+        const mp3 = ch === 2 ? enc.encodeBuffer(pad.subarray(i, i + 1152), pad.subarray(i, i + 1152)) : enc.encodeBuffer(pad.subarray(i, i + 1152));
+        if (mp3.length) out.push(new Uint8Array(mp3));
+      }
+    }
     while (done < total) {
       const n = Math.min(SAMPLES, total - done);
       const buf = new DataView(await file.slice(w.dataAt + done * frame, w.dataAt + (done + n) * frame).arrayBuffer());
@@ -53,7 +60,7 @@ self.onmessage = async e => {
         if (mp3.length) out.push(new Uint8Array(mp3));
       }
       done += n;
-      self.postMessage({ ev: 'progress', p: done / total });
+      self.postMessage({ ev: 'progress', p: total ? done / total : 1 });
     }
     const end = enc.flush();
     if (end.length) out.push(new Uint8Array(end));

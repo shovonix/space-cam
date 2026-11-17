@@ -32,8 +32,7 @@ html.scp-r #stage{right:0!important}
 </style>
 <script src="coi-serviceworker.js"></script>
 <!-- Space Cam styles in the head: nothing paints unstyled on reload (keep its ?v= the same as studio.js at the bottom) -->
-<link rel="stylesheet" href="studio.css?v=2026-11-12c">
-<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="studio.css?v=2026-11-17f">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#0A0A0B">
 <meta name="mobile-web-app-capable" content="yes">
@@ -859,8 +858,16 @@ body.touch #screen-note{order:5;margin-top:12px;padding:10px 12px;font-size:12px
 <!-- What's new: edit before every deploy (see CLAUDE.md). Shown in the update notice and once after the reload. Plain words, one line each. -->
 <script type="application/json" id="sc-changes">
 {
+  "added": [
+    "Cam Link and other HDMI capture cards: record your camera in 4K straight to your Mac, picture and sound together in one MP4.",
+    "Saving shows on the take and on the saved card, with the time left on long takes.",
+    "A red banner warns when your Mac has room for less than 10 minutes of video. It never stops a recording."
+  ],
   "fixed": [
-    "First visit: the welcome now sits on the red reading line and lights up like a real script, with bigger text. Press Play and the highlight follows the line."
+    "Sony over USB: the MP3 now lines up with the camera's own clip. It used to start about half a second early.",
+    "Camera + mic takes save as one MP4 in sync, instead of a separate MP4 and MP3.",
+    "Clearer saved messages: what was saved, and where.",
+    "The Install app button is gone: a Space Cam app for Mac is on the way."
   ]
 }
 </script>
@@ -873,7 +880,6 @@ body.touch #screen-note{order:5;margin-top:12px;padding:10px 12px;font-size:12px
       <span class="meta" id="build-meta">—</span>
     </span>
   </button>
-  <button type="button" class="install-btn" id="install-rail" hidden aria-label="Install Space Cam as an app"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg><span>Install app</span></button>
   <div class="scripts-head">
     <div class="sec-title">Scripts</div>
     <button type="button" id="new-script-btn" aria-label="New script">+ New</button>
@@ -896,7 +902,6 @@ body.touch #screen-note{order:5;margin-top:12px;padding:10px 12px;font-size:12px
   <div class="setup-inner">
     <div id="setup-top">
       <button type="button" id="setup-brand" aria-label="New script"><img class="brand-logo" id="setup-logo" alt=""><span class="name">Space Cam</span></button>
-      <button type="button" class="install-btn" id="install-setup" hidden aria-label="Install Space Cam as an app"><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg><span>Install app</span></button>
       <button type="button" id="menu-btn" aria-label="Manage scripts" title="Manage scripts (rename, delete)">☰</button>
     </div>
     <div id="setup-scripts"></div>
@@ -5635,7 +5640,7 @@ var qrcode = function() {
   });
 
   // ---- Build/version indicator (control window top bar) ----
-  var APP_VERSION = 'v0.1.8.5 beta'; // bump with each deploy (v0.1.8.5 beta, v0.1.8.6 beta … until v1.0): shows in the logo chip, and open copies get the "new version" toast
+  var APP_VERSION = 'v1.0 beta'; // bump with each deploy (v1.0 beta, then v1.0.1 beta … until the public v1.0): shows in the logo chip, and open copies get the "new version" toast
   if(buildMeta && !isStageWindow){
     buildMeta.textContent = APP_VERSION;
     // the version lives on the bottom line now, beside the copyright: "Space Cam v1.8.1 © shovonix"
@@ -5770,33 +5775,7 @@ var qrcode = function() {
     }
   })();
 
-  // ---- Install-as-app prompts (landing header + Controls panel; never on the prompting stage) ----
-  (function(){
-    var btns = [document.getElementById('install-setup'), document.getElementById('install-rail')].filter(Boolean);
-    if(!btns.length || isStageWindow) return;
-    var standalone = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone;
-    if(standalone) return;
-    var deferred = null;
-    var ua = navigator.userAgent;
-    var safariMac = /Safari/.test(ua) && !/Chrome|Chromium|Edg|OPR/.test(ua) && /Macintosh/.test(ua);
-    function show(label){ btns.forEach(function(b){ if(label){ var sp = b.querySelector('span'); if(sp) sp.textContent = label; } b.hidden = false; }); }
-    function hide(){ btns.forEach(function(b){ b.hidden = true; }); }
-    var FLAG = 'spInstalled';
-    function flag(v){ try{ if(v) localStorage.setItem(FLAG,'1'); else localStorage.removeItem(FLAG); }catch(e){} }
-    function flagged(){ try{ return localStorage.getItem(FLAG) === '1'; }catch(e){ return false; } }
-    // Chrome only fires this when the app is NOT installed, so it also clears a stale flag.
-    window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); deferred = e; flag(false); show(); });
-    window.addEventListener('appinstalled', function(){ deferred = null; flag(true); hide(); });
-    if(safariMac && !flagged()) show('Install: Share → Add to Dock');
-    // Arrived from the landing page's "Install as an app" link: draw the eye to the button.
-    if(/[?&]install=1/.test(location.search)) btns.forEach(function(b){ b.classList.add('install-pulse'); setTimeout(function(){ b.classList.remove('install-pulse'); }, 8000); });
-    if(navigator.getInstalledRelatedApps){ navigator.getInstalledRelatedApps().then(function(a){ if(a && a.length){ flag(true); deferred = null; hide(); } }).catch(function(){}); }
-    btns.forEach(function(b){ b.addEventListener('click', function(){
-      if(!deferred) return;
-      var d = deferred; deferred = null; hide();
-      d.prompt(); d.userChoice.then(function(c){ if(c.outcome === 'accepted') flag(true); else { deferred = d; show(); } }).catch(function(){});
-    }); });
-  })();
+  // (17 Nov 2026: the install-as-app prompt and the web app manifest were removed; Space Cam ships as a Mac app instead.)
 
 
   // Space Cam: lets studio.js add/remove sample scripts for quick checks (marked demo:true).
@@ -6283,4 +6262,4 @@ window.claude.hot.snapshot(function(){ return { state: state }; });
 </script>
 <!-- Bump ?v= on every deploy so browsers load the new files instead of cached ones.
      studio.js passes the same ?v= on to every file it loads (engines, workers). -->
-<script type="module" src="studio.js?v=2026-11-12c"></script>
+<script type="module" src="studio.js?v=2026-11-17f"></script>

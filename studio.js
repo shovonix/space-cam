@@ -273,6 +273,10 @@ function init() {
       <div class="slider-label"><span>Focus step</span><span id="scStepVal">1</span></div>
       <input type="range" id="scStep" min="1" max="7" step="1" value="1" disabled>
     </div>
+    <div class="slider-group sc-sony-only" title="The camera starts filming a moment after Space Cam's audio. Space Cam measures how long the camera takes to answer the record command and cuts that off the start of the MP3; this fine-tunes it. The A7 III starts filming a little before it answers, so the default is −110 ms. Change it only if a clap test shows a gap.">
+      <div class="slider-label"><span>Camera start delay</span><span id="scSyncVal">-110 ms</span></div>
+      <input type="range" id="scSync" min="-1000" max="2000" step="10" value="-110">
+    </div>
     <div class="tpair">
       <button type="button" class="tbtn" id="scGridBtn" aria-pressed="false" disabled><span>Grid</span><kbd>G</kbd></button>
       <button type="button" class="tbtn" id="scBig" disabled title="Large floating preview window"><span>Big preview</span></button>
@@ -821,7 +825,7 @@ function init() {
     const t = ms || (action ? 8000 : kind === 'error' ? 6000 : 4000); toastEl.style.setProperty('--toast-ms', t + 'ms');
     clearTimeout(toastT); toastT = setTimeout(() => (toastEl.hidden = true), t);
   }
-  if (location.hostname === 'localhost') Object.assign(window, { __scMsg: { toast, micProblem: m => micProblem(m), macCamProblem: m => macCamProblem(m), camProblem: (k, t) => showCamProblem(k, t), saved: (t, w) => savedCard(t, w) } }); // localhost only: lets the test pages show each message
+  if (location.hostname === 'localhost') Object.assign(window, { __scMsg: { toast, micProblem: m => micProblem(m), macCamProblem: m => macCamProblem(m), camProblem: (k, t) => showCamProblem(k, t), saved: (t, w) => savedCard(t, w), spaceBanner: x => spaceBanner(x), saveProgress: (t, p) => saveProgress(t, p), updateSaved: (t, w) => updateSaved(t, w), takes: () => takes, renderTakes: () => renderTakes() } }); // localhost only: lets the test pages show each message
   const openRailTab = c => { document.querySelector(`.sc-tab[data-c="${c}"]`)?.click(); };
   // Engine messages → plain words + the button that fixes it (engines stay UI-free; the wording lives here)
   function micProblem(message) {
@@ -1145,6 +1149,13 @@ function init() {
   ui.af.addEventListener('pointerdown', afDown); ui.af.addEventListener('pointerup', afUp); ui.af.addEventListener('pointerleave', afUp);
   ui.step.value = store.get('mfStep', 1); ui.stepVal.textContent = ui.step.value;
   ui.step.oninput = () => { ui.stepVal.textContent = ui.step.value; store.set('mfStep', Number(ui.step.value)); };
+  const CAM_DELAY_DEFAULT = -110;
+  { // Camera start delay: added to the measured USB record-start time. Clap test 17 Nov 2026 (A7 III, C0079 vs Take_77):
+    // the camera starts filming ~114 ms before it answers "OK", so the default is −110 ms.
+    const sl = $('scSync'), sv = $('scSyncVal');
+    sl.value = store.get('camDelayMs', CAM_DELAY_DEFAULT); sv.textContent = sl.value + ' ms';
+    sl.oninput = () => { sv.textContent = sl.value + ' ms'; store.set('camDelayMs', Number(sl.value)); };
+  }
   const focusBy = dir => { if (!ui.near.disabled) cam.focusStep(dir * Number(ui.step.value || 1)); };
   ui.near.onclick = () => focusBy(-1); ui.far.onclick = () => focusBy(1);
 
@@ -1723,7 +1734,7 @@ function init() {
       setTimeout(applyLogo, 600); // the collapsed box copies the logo a moment after load
     }
   }
-  // Install app button: hidden while testing on localhost, shown on the live site to anyone who hasn't installed it
+  // localhost (testing) marker, used by test hooks and a few localhost-only styles
   if (/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) document.body.classList.add('sc-local');
   // "+" next to Scripts: blank New script popup to paste a script
   { const nb = $('new-script-btn'); if (nb) { nb.innerHTML = '<svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>'; nb.title = 'New script'; nb.setAttribute('aria-label', 'New script'); } }
@@ -1835,17 +1846,20 @@ function init() {
   const toMp3Name = n => n.replace(/\.wav$/i, '') + '.mp3';
   const isWav = f => /\.wav$/i.test(f?.name || '') || f?.type === 'audio/wav';
   // WAV → MP3 (320 kbps) in a worker, so the page stays responsive. Long takes take a little while.
-  function wavToMp3(file) {
+  // How much to cut off the start of a Sony take's audio so it lines up with the camera clip: the USB command time
+  // measured at record start, plus the camera's own start delay (Camera tab). Mac-camera takes are already in sync.
+  const syncTrimMs = t => (t && t.camera ? Math.round((t.camLagMs || 0) + (t.camDelayMs ?? store.get('camDelayMs', CAM_DELAY_DEFAULT)))
+    : -(t?.avShiftMs || 0)); // negative: silence in front (capture-card takes: the HDMI picture is ~50 ms late, so the sound moves later too)
+  function wavToMp3(file, skipMs = 0, onProgress = null) {
     return new Promise((resolve, reject) => {
       const w = new Worker(new URL('./mp3-encode.worker.js' + V, import.meta.url));
-      let shown = -1;
       w.onmessage = e => {
         const m = e.data;
-        if (m.ev === 'progress') { const p = Math.floor(m.p * 10) * 10; if (p !== shown && file.size > 20e6) { shown = p; if (savedEl) updateSavedText(`Making MP3… ${p}%`); else toast(`Making MP3… ${p}%`); } }
+        if (m.ev === 'progress') onProgress?.(m.p);
         else { w.terminate(); m.ev === 'done' ? resolve(m.blob) : reject(new Error(m.message)); }
       };
       w.onerror = e => { w.terminate(); reject(new Error(e.message || 'MP3 encoder failed')); };
-      w.postMessage({ file, kbps: 320 });
+      w.postMessage({ file, kbps: 320, skipMs });
     });
   }
   async function writeToFolder(dir, name, blob) {
@@ -2132,7 +2146,8 @@ function init() {
           a.addEventListener('seeked', () => { vid.currentTime = a.currentTime; });
           a.addEventListener('timeupdate', () => { if (Math.abs(vid.currentTime - a.currentTime) > 0.25) vid.currentTime = a.currentTime; });
         }
-      } else abox.innerHTML = '<div class="sc-take-vnote">No audio was recorded with this take.</div>';
+      } else if (vid) abox.remove(); // one MP4 with the mic sound inside: the video player plays both
+      else abox.innerHTML = '<div class="sc-take-vnote">No audio was recorded with this take.</div>';
       renderScriptPart(t, pane);
 
     }
@@ -2312,7 +2327,7 @@ function init() {
     if (r.missing) return toast('This take’s audio is no longer available.', 'error'), false;
     let blob = r.file, name = safeFileName(takeLabel(t), t);
     if (isWav(r.file) && /\.mp3$/i.test(name)) {
-      try { blob = await wavToMp3(r.file); } catch (e) { return toast('Could not make the MP3: ' + (e?.message || e), 'error'), false; }
+      try { blob = await wavToMp3(r.file, syncTrimMs(t)); } catch (e) { return toast('Could not make the MP3: ' + (e?.message || e), 'error'), false; }
     }
     downloadBlob(blob, name);
     if (!quiet) toast(`${name} downloaded.`, 'ok');
@@ -2332,7 +2347,7 @@ function init() {
     let file; try { file = await web.getStoredFile(t.videoName); } catch { return toast('This take’s video is no longer in the browser.', 'error'), false; }
     const ext = /\.[a-z0-9]+$/i.exec(t.videoName)?.[0] || '.mp4';
     const name = (t.label ? safeFileName(t.label, { ...t, audio: 'none' }).replace(/\.mp3$/i, '') : t.videoName.replace(/\.[a-z0-9]+$/i, '')) + ext;
-    downloadBlob(file, name);
+    downloadBlob(await WebcamCore.shiftAudio(file, t.avShiftMs || 0), name);
     if (!quiet) toast(`${name} downloaded.`, 'ok');
     return true;
   }
@@ -2513,14 +2528,17 @@ function init() {
       const vNote = t.saving ? '' : t.video === 'browser' ? 'video not saved' : '';
       // notes: red only when something needs attention (not saved / file moved); otherwise plain
       const alarm = !t.saving && (t.missing || t.audio === 'browser' || !!vNote);
-      const note = t.saving ? 'saving…' : [t.missing ? 'file moved' : t.audio === 'browser' ? 'not saved' : !hasAudio && t.audio !== 'saved' && !t.videoName ? 'no audio' : '', vNote].filter(Boolean).join(' · ');
+      const note = t.saving ? '' : [t.missing ? 'file moved' : t.audio === 'browser' ? 'not saved' : !hasAudio && t.audio !== 'saved' && !t.videoName ? 'no audio' : '', vNote].filter(Boolean).join(' · ');
       const hasVideo = !!(t.videoName && t.video && t.video !== 'none');
-      const el = h(`<div class="script-tab sc-take${t.audio === 'browser' ? ' unsaved' : ''}">
+      const kind = t.saving || note ? '' : takeKind(t).short;
+      const el = h(`<div class="script-tab sc-take${t.audio === 'browser' ? ' unsaved' : ''}${t.saving ? ' saving' : ''}" data-id="${esc(t.id)}">
         <div class="sc-take-head" role="button" tabindex="0">
           <span class="sc-take-thumb"></span>
           <span class="sc-take-main">
             <span class="sc-take-title"><span class="script-tab-name">${esc(takeLabel(t))}</span></span>
-            <span class="sc-take-sub">${esc(whenLabel(t.startedAt))}${t.seconds != null ? ' · ' + fmt(t.seconds) : ''}${note ? ` · <em${alarm ? ' class="alarm"' : ''}>${note}</em>` : ''}</span>
+            <span class="sc-take-sub">${t.saving ? `<span class="sc-take-saving">Saving…${t.savePct != null ? ' ' + t.savePct + '%' : ''}</span>` : `${esc(whenLabel(t.startedAt))}${t.seconds != null ? ' · ' + fmt(t.seconds) : ''}${note ? ` · <em${alarm ? ' class="alarm"' : ''}>${note}</em>` : ''}`}</span>
+            ${kind ? `<span class="sc-take-kind">${esc(kind)}</span>` : ''}
+            ${t.saving ? `<span class="sc-take-prog"><i style="width:${t.savePct || 0}%"></i></span>` : ''}
           </span>
           <span class="script-tab-actions"></span>
         </div></div>`);
@@ -2545,7 +2563,7 @@ function init() {
         const dest = t.label ? safeFileName(t.label, t) : toMp3Name(t.name);
         const wav = await audio.getStoredFile(t.name);
         await keepPeaks(t, wav);
-        const mp3 = await wavToMp3(wav);
+        const mp3 = await wavToMp3(wav, syncTrimMs(t));
         if (await folderOk(true)) {
           const fin = await freeName(folder, dest);
           await writeToFolder(folder, fin, mp3);
@@ -2561,11 +2579,11 @@ function init() {
       delete t.recovered; delete t.missing; saveTakes(); renderTakes(); toast(`${t.label || t.name || 'Take'} saved.`, 'ok');
     } catch (e) { if (e?.name !== 'AbortError') toast('Could not save: ' + (e?.message || e), 'error'); }
   }
-  async function saveVideo(t) {
+  async function saveVideo(t, onProgress = null) {
     if (isPhone) { await downloadVideo(t, true); t.video = 'kept'; return; } // phone: one MP4 (picture + sound) saved once, by itself; Save to Photos from the card
     if (await folderOk(false)) {
       const fin = await freeName(folder, t.videoName);
-      await web.moveToFolder(t.videoName, folder, fin); t.videoName = fin; t.video = 'folder'; t.folderName = folder.name; await idb.set('dir:' + t.id, folder);
+      await web.moveToFolder(t.videoName, folder, fin, t.avShiftMs || 0, onProgress); t.videoName = fin; t.video = 'folder'; t.folderName = folder.name; await idb.set('dir:' + t.id, folder);
     } else { if (await downloadVideo(t, true)) t.video = 'kept'; }
   }
   // ---- "Take saved" card: the take's thumbnail, ✓, length and where it went, centered over a dimmed screen
@@ -2581,16 +2599,17 @@ function init() {
   function savedCard(t, where, { error = '', ms = 8000 } = {}) {
     closeSaved(); clearTimeout(toastT); toastEl.hidden = true;
     const hasVideo = !!(t.videoName && t.video && t.video !== 'none');
-    const kinds = [t.audio !== 'none' && t.name && 'MP3', hasVideo && 'MP4', t.camera && 'camera clip'].filter(Boolean).join(' + ');
-    savedEl = h(`<div class="sc-saved${error ? ' err' : ''}" role="dialog" aria-modal="true" aria-label="Recording saved">
+    const kinds = t.saving ? (hasVideo && t.micInVideo && !store.get('mp3WithVideo', false) ? 'picture and sound in one file' : t.camera ? 'audio, lined up with the camera clip' : '') : takeKind(t).long;
+    savedEl = h(`<div class="sc-saved${error ? ' err' : ''}${t.saving ? ' busy' : ''}" role="dialog" aria-modal="true" aria-label="Recording saved">
       <div class="sc-saved-card" style="--saved-ms:${ms}ms">
         ${error ? `<div class="sc-saved-warn"><svg viewBox="0 0 24 24"><path d="M12 2 1 21h22L12 2zm1 15h-2v-2h2v2zm0-4h-2V9h2v4z"/></svg><span><b>Recording stopped</b><span>${esc(error)}</span></span></div>` : ''}
         <div class="sc-saved-row">
           <span class="sc-saved-media"><span class="sc-take-thumb sc-saved-thumb"></span><span class="sc-saved-ok"><svg viewBox="0 0 24 24"><path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"/></svg></span></span>
           <span class="sc-saved-txt">
-            <b class="sc-saved-title">${error ? 'Saved up to here' : 'Recording saved'}</b>
+            <b class="sc-saved-title">${error ? 'Saved up to here' : t.saving ? 'Saving recording' : 'Recording saved'}</b>
             <span class="sc-saved-meta">${esc(fmt(t.seconds || 0))}${kinds ? ' · ' + esc(kinds) : ''}</span>
             <span class="sc-saved-where">${esc(where)}</span>
+            <span class="sc-saved-prog" hidden><i></i></span>
           </span>
           ${error ? '' : '<button type="button" class="sc-modal-x" aria-label="Close">✕</button>'}
         </div>
@@ -2632,20 +2651,66 @@ function init() {
   function updateSaved(t, where) {
     if (!savedEl || savedFor !== t) return false;
     savedEl.querySelector('.sc-saved-where').textContent = where;
+    const meta = savedEl.querySelector('.sc-saved-meta'); if (meta) meta.textContent = `${fmt(t.seconds || 0)} · ${takeKind(t).long}`;
+    const bar = savedEl.querySelector('.sc-saved-prog'); if (bar) bar.hidden = true;
+    savedEl.classList.remove('busy'); const ti = savedEl.querySelector('.sc-saved-title'); if (ti && !savedEl.classList.contains('err')) ti.textContent = 'Recording saved';
     return true;
+  }
+
+  // ---- Saving progress: the take's card in Recordings and the "Recording saved" card show it live.
+  // p = 0..1 of the current step; a 30-min 4K take takes ~20–60 s to copy, a short take is done before anyone looks.
+  function saveProgress(t, p) {
+    const now = performance.now();
+    if (!t.saveStart) t.saveStart = now;
+    const pct = Math.max(0, Math.min(99, Math.floor(p * 100)));
+    if (pct === t.savePct) return; t.savePct = pct;
+    const el = ui.takeList.querySelector(`.sc-take[data-id="${t.id}"]`);
+    if (el) {
+      const sub = el.querySelector('.sc-take-saving'); if (sub) sub.textContent = `Saving… ${pct}%`;
+      const bar = el.querySelector('.sc-take-prog i'); if (bar) bar.style.width = pct + '%';
+    }
+    if (savedEl && savedFor === t) {
+      const secs = p > 0.04 ? Math.round((now - t.saveStart) / 1000 * (1 - p) / p) : 0;
+      updateSavedText(`Saving… ${pct}%${secs >= 3 ? ` · about ${secs} s left` : ''}`);
+      const bar = savedEl.querySelector('.sc-saved-prog'); if (bar) { bar.hidden = false; bar.firstElementChild.style.width = pct + '%'; }
+    }
+  }
+  // What the take is, in words: the meta line under "Recording saved" and the short kind in the Recordings list.
+  function takeKind(t) {
+    const hasVideo = !!(t.videoName && t.video && t.video !== 'none');
+    const mp3 = t.audio !== 'none' && t.name ? (/\.mp3$/i.test(t.name) ? t.name : toMp3Name(t.name)) : '';
+    const res = t.videoH >= 2160 ? '4K video' : t.videoH >= 1080 ? '1080p video' : 'video';
+    if (hasVideo && !mp3) return { long: `${t.videoName} · ${t.micInVideo ? 'picture and sound in one file' : 'no sound'}`, short: res };
+    if (hasVideo && mp3) return { long: `${t.videoName} + ${mp3}`, short: res + ' + audio' };
+    if (t.camera && mp3) return { long: `${mp3} · lined up with the camera clip`, short: 'audio + camera card' };
+    if (t.camera) return { long: 'Clip on the camera card', short: 'camera card' };
+    return { long: mp3 || 'Nothing recorded', short: mp3 ? 'audio' : '' };
   }
 
   // Right after a take stops: audio → MP3 into the folder (or Downloads), video → folder (or Downloads).
   // Runs in the background, one take at a time, so the next take can start straight away.
   let saveChain = Promise.resolve();
   function finishTake(t) {
-    t.saving = true; renderTakes();
+    t.saving = true; delete t.savePct; delete t.saveStart; renderTakes();
     saveChain = saveChain.then(async () => {
+      const shownFrom = Date.now(); // a short take saves in a blink: keep "Saving…" up ~1 s so people see it happen
+      // Mac camera / capture card with the mic on: the MP4 already carries the mic sound, so the take is one MP4.
+      // Video first; only if it's safely saved does the WAV go (its waveform is kept for the card). If the video
+      // can't be saved, the MP3 is saved as before, so the sound is never lost. store 'mp3WithVideo' = also keep the MP3.
+      if (t.video === 'browser' && t.audio === 'browser' && !isPhone && !store.get('mp3WithVideo', false)) {
+        try { await saveVideo(t, p => saveProgress(t, p)); }
+        catch (e) { toast('Could not save the video — it is still safe in the browser: ' + (e?.message || e), 'error'); }
+        if (t.video === 'folder' || t.video === 'kept') {
+          try { await keepPeaks(t, await audio.getStoredFile(t.name)); } catch {}
+          await audio.deleteStored(t.name).catch(() => {});
+          t.audio = 'none'; t.name = null;
+        }
+      }
       if (t.audio === 'browser') {
         try {
           const wavFile = await audio.getStoredFile(t.name);
           await keepPeaks(t, wavFile);
-          const mp3 = await wavToMp3(wavFile);
+          const mp3 = await wavToMp3(wavFile, syncTrimMs(t), p => saveProgress(t, p));
           if (await folderOk(false)) {
             const fin = await freeName(folder, toMp3Name(t.name));
             await writeToFolder(folder, fin, mp3);
@@ -2658,11 +2723,12 @@ function init() {
         } catch (e) { toast('Could not save the MP3 — the audio is still safe in the browser: ' + (e?.message || e), 'error'); }
       }
       if (t.video === 'browser') {
-        try { await saveVideo(t); }
+        try { await saveVideo(t, p => saveProgress(t, p)); }
         catch (e) { toast('Could not save the video — it is still safe in the browser: ' + (e?.message || e), 'error'); }
       }
-      delete t.saving; saveTakes(); renderTakes();
-      // one line per place: "Saved in “Folder”" when the MP3 and the video went to the same place
+      await new Promise(r => setTimeout(r, Math.max(0, 1000 - (Date.now() - shownFrom))));
+      delete t.saving; delete t.savePct; delete t.saveStart; saveTakes(); renderTakes();
+      // where the files went: "in “Folder”" (+ "video on the camera card" for a USB camera)
       const fname = `“${t.folderName || folder?.name || 'the folder'}”`;
       const at = { folder: [], kept: [] };
       if (t.audio === 'folder' || t.audio === 'kept') at[t.audio].push('MP3');
@@ -2671,11 +2737,11 @@ function init() {
       for (const [k, place] of [['folder', fname], ['kept', 'Downloads']]) {
         if (!at[k].length) continue;
         const onlyHere = !at[k === 'folder' ? 'kept' : 'folder'].length;
-        parts.push(onlyHere ? `saved in ${place}` : `${at[k].join(' + ')} in ${place}`);
+        parts.push(onlyHere ? `in ${place}` : `${at[k].join(' + ')} in ${place}`);
       }
-      if (t.camera) parts.push('clip on the camera card');
+      if (t.camera) parts.push('video on the camera card');
       if (isPhone && t.video === 'kept') parts.splice(0, parts.length, /iPhone|iPad|Macintosh/.test(navigator.userAgent) ? 'Saved to Downloads (Files) · Save to Photos puts it in Photos' : 'Saved to Downloads (shows in the gallery)');
-      const whereText = parts.length ? parts.join(' · ').replace(/^./, c => c.toUpperCase()) : 'Nothing recorded';
+      const whereText = parts.length ? parts.join(' · ') : 'Nothing recorded';
       if (updateSaved(t, whereText)) return; // its card (error stop) is open: just fill in the line
       if (cardShown.delete(t)) return; // its card was already shown and closed: no second box
       if (take || document.querySelector('.sc-modal')) toast(`${t.label || 'Take'} — ${parts.join(' · ') || 'nothing recorded'}.`, 'ok'); // a take is rolling or a warning is open: don't cover it
@@ -2921,6 +2987,7 @@ function init() {
     if (takes.some(t => t.name === `${base}.wav` || t.name === `${base}.mp3` || (t.videoName || '').startsWith(base + '.'))) base = `${label} (${pad(started.getHours())}${pad(started.getMinutes())}${pad(started.getSeconds())})`;
     const name = `${base}.wav`;
     const micTrack = micReady ? audio.stream?.getAudioTracks()[0] : null;
+    if (vidOk && !isPhone) lowSpaceCheck(); // a heads-up only; never blocks the take
     const [a, c, v] = await Promise.all([micOk ? audio.startRecording(name) : false, camOk ? cam.startRecording() : false, vidOk ? web.startRecording(base, micTrack) : null]);
     // Everything starts together or nothing does: a take with the camera rolling but no audio (or the other way round)
     // can't be synced later. Undo whatever did start, and say what failed.
@@ -2932,7 +2999,17 @@ function init() {
       return stopWarning('Recording didn’t start', `${failed.join(' and ')} didn’t start, so nothing was recorded${c ? ' (a second or two may be on the camera card)' : ''}. Check ${failed.length > 1 ? 'them' : 'it'} and try again.`);
     }
     take = { id: 't' + started.getTime().toString(36), series: 'st', no, label, name: a ? name : null, startedAt: started.getTime(), camera: !!c, audio: a ? 'recording' : 'none', video: v ? 'recording' : undefined, videoName: v || undefined };
+    if (a && c) { // for the audio trim on save
+      take.camLagMs = Math.max(0, cam.recordStartedAt - audio.recordStartedAt); take.camDelayMs = store.get('camDelayMs', CAM_DELAY_DEFAULT);
+      console.info(`[sync] ${label}: camera accepted Record ${take.camLagMs} ms after the audio started; MP3 start will be trimmed by ${take.camLagMs + take.camDelayMs} ms`);
+    }
     if (v) grabThumb(take.id); // card thumbnail from the Mac camera, ~1 s in
+    if (v) { take.videoH = web.stream?.getVideoTracks()[0]?.getSettings().height || 0; take.micInVideo = !!micTrack; }
+    // capture card (Cam Link 4K & co.): the HDMI picture arrives after the mic sound. Clap tests 17 Nov 2026 (A7 III 4K25 →
+    // Cam Link 4K): Take_84, 5 claps measured by hand motion, sound ~120 ms before the hands met (Take_82/83 agree).
+    // Corrected when saving: the MP4's sound track is moved 120 ms later (WebcamCore.shiftAudio, no re-encoding),
+    // and an MP3 (only if 'mp3WithVideo' is on) gets the same silence in front.
+    if (v && /cam ?link|capture|hdmi|elgato|usb video/i.test(web.label || '')) take.avShiftMs = store.get('hdmiDelayMs', 120);
     take.mark = window.spaceCamMarks?.start() || null; // where the take starts in the script
     if (take.mark) { // which script, and when each paragraph comes up (for the Script part and Coverage views)
       const sc = window.spaceCamMarks.script(take.mark.id);
@@ -2968,7 +3045,7 @@ function init() {
     try { renderSampleBtn(); } catch {} // 3rd take of your own: sample data goes away
     if (reason) { /* stopped by an error or a limit: stopTogether shows one card with the warning */ }
     else if (t.camera && t.audio !== 'browser' && t.video !== 'browser') savedCard(t, 'Clip on the camera card');
-    else if (t.audio === 'browser' || t.video === 'browser') (cardShown.add(t), savedCard(t, 'Saving…')); // one card only: it fills in where the files went when the save is done
+    else if (t.audio === 'browser' || t.video === 'browser') (cardShown.add(t), t.saving = true, savedCard(t, 'Saving…')); // one card only: it fills in where the files went when the save is done
     else toast(`${t.label || 'Take'} done`, 'ok');
     if (t.audio === 'browser' || t.video === 'browser') finishTake(t);
     if (src === 'sony') setTimeout(() => cam.refreshInfo(), 800);
@@ -2997,6 +3074,31 @@ function init() {
       } catch {}
     }
     return lim.sort((x, y) => x.sec - y.sec)[0] || null;
+  }
+  // Video takes are big (4K ≈ 0.26 GB a minute) and sit in browser storage until saved, then briefly exist twice
+  // while they're copied into the folder. Chrome's storage estimate tracks free disk space closely enough to warn.
+  async function lowSpaceCheck() {
+    try {
+      const { quota = 0, usage = 0 } = await navigator.storage.estimate();
+      const vs = web.stream?.getVideoTracks()[0]?.getSettings() || {};
+      const bytesPerMin = Math.min(50e6, Math.max(8e6, (vs.width || 1920) * (vs.height || 1080) * (vs.frameRate || 30) * 0.2)) / 8 * 60;
+      const mins = Math.floor((quota - usage) / (bytesPerMin * 2)); // ×2: the copy into the folder
+      if (mins < 10) spaceBanner(`Low disk space: room for about ${Math.max(0, mins)} min of ${vs.height >= 2160 ? '4K ' : ''}video`);
+    } catch {}
+  }
+  // Red banner, same place and shape as the "new version" banner: it never covers or blocks the recording. ✕ hides it
+  // for this session.
+  function spaceBanner(text) {
+    try { if (sessionStorage.getItem('spaceCam.spaceBannerOff')) return; } catch {}
+    let el = document.getElementById('sc-space-banner');
+    if (!el) {
+      el = h(`<div id="sc-space-banner" role="status" aria-live="polite"><span class="sc-sb-txt"></span><span class="sc-sb-x" role="button" aria-label="Close" title="Close">✕</span></div>`);
+      el.querySelector('.sc-sb-x').onclick = () => { el.classList.remove('show'); try { sessionStorage.setItem('spaceCam.spaceBannerOff', '1'); } catch {} };
+      document.body.append(el);
+    }
+    el.querySelector('.sc-sb-txt').textContent = text;
+    el.classList.toggle('below', !!document.querySelector('#update-toast.show'));
+    requestAnimationFrame(() => el.classList.add('show'));
   }
   let stopping = false;
   async function stopTogether(reason) {

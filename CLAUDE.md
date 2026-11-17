@@ -19,6 +19,7 @@ No build step.
 - Preview locally with `python3 -m http.server 8000`. If a change touches camera or audio, say what Shovon must test by hand with the A7 III.
 - Recording safety comes first: audio is written to browser storage while recording and must survive a crash. Never change this without asking.
 - A7 III clip limit is 29:59; the warning starts at 29:00.
+- Sync (17 Nov 2026, clap tests): Sony over USB starts filming ~0.57 s after the Mac audio; the MP3 start is trimmed on save by the measured USB "Record start" time minus 110 ms (`CAM_DELAY_DEFAULT`, Camera start delay slider). The A7 III turns HDMI off while USB-C (PC Remote) is plugged in. Cam Link 4K: picture ~120 ms behind the mic; camera + mic takes save as ONE MP4 with the sound track moved 120 ms later (`WebcamCore.shiftAudio`, `hdmiDelayMs`), no MP3 unless `mp3WithVideo`. Capture cards record up to 4K (≈35–41 Mbps).
 
 ## Keys
 - Prompter: Space play/pause (double tap previous paragraph, hold back to top), `F` full screen (Stage).
@@ -41,7 +42,7 @@ No build step.
 - Never edit the live files on the VPS directly.
 
 ## Versions
-- **Beta until the public launch.** Since 12 Nov 2026 the live app is labelled **v0.1.8.4 beta** (was v1.8.4 beta; renumbered so the betas sit below 1.0). Each later deploy is the next beta: v0.1.8.5 beta, v0.1.8.6 beta …, set in `APP_VERSION` in `index.html`.
+- **Beta until the public launch.** Since 17 Nov 2026 the live app is labelled **v1.0 beta** (before: v0.1.8.4 beta on 12 Nov, v0.1.8.5 beta). Later deploys: v1.0.1 beta, v1.0.2 beta … (ask Shovon if he wants another scheme), set in `APP_VERSION` in `index.html`.
 - **Public launch = v1.0.** When the website, the video and the blog are live, Shovon says "deploy 1.0": then `APP_VERSION` becomes `v1.0`, and the mass audience sees 1.0 as the first version. Don't relabel to 1.0 before he says so.
 - Fixes and small changes until then stay betas; **no major features until v2.0** (planned: live streaming, video calls, conferences, like StreamYard).
 - Big offline-engine files (`models/*`, `lib/vosk/vosk.js`, `lib/mediapipe/wasm/`) are not in git (`.gitignore`); they're copied to the VPS by hand once (see `models/README.md`). `git pull` leaves them alone.
@@ -58,7 +59,7 @@ No build step.
   4. Prompter scrolls with Space, the pedal and Voice scroll.
   5. Whatever this change touched.
 - Bump the `?v=` date on `studio.css` (in the `<head>` of `index.html`) and `studio.js` (at the bottom) — keep both the same (e.g. `2026-11-09` → `2026-11-12`; add `b` for a second deploy the same day). studio.js passes it on to every file it loads, so browsers pick up the new code without a hard reload.
-- Bump `APP_VERSION` in `index.html` to the next beta (v0.1.8.5 beta, v0.1.8.6 beta …; v1.0 only at the public launch): it shows on the bottom line of the left panel, and open copies get the "new version" notice.
+- Bump `APP_VERSION` in `index.html` to the next beta (v1.0.1 beta, v1.0.2 beta …; plain v1.0 only at the public launch): it shows on the bottom line of the left panel, and open copies get the "new version" notice.
 - Replace the lines in `<script id="sc-changes">` in `index.html` with this deploy's changes ("added" / "fixed", plain words, one line each, written for users). They show in the update notice and in the What's new card after the reload; clicking the version under the logo opens the card again.
 - Only after that: commit, push, then Shovon runs `deploy-space cam` on the VPS.
 - Before every push, remind Shovon of this checklist and ask whether it passed.

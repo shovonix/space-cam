@@ -208,7 +208,9 @@ function init() {
   // Internally src 'sony' = the USB camera path, 'mac' = the browser camera path.
   const isPhone = matchMedia('(max-width: 760px), (pointer: coarse) and (max-width: 1366px)').matches || /iPhone|iPad|Android/.test(navigator.userAgent);
   const MACCAM = isPhone ? 'Phone camera' : 'Mac camera'; // the browser camera: the phone's own camera on a phone
-  let camPick = String(store.get('camPick', isPhone ? 'mac:' : 'usb')).replace(/^sony$/, 'usb'); // phone: its own camera by default
+  // First visit: the device's own camera (Mac or phone), so the camera switch never opens Chrome's USB picker by itself.
+  // A USB camera becomes the pick only after it's added once (Add USB camera… in the list); then it stays the pick.
+  let camPick = String(store.get('camPick', isPhone || !store.get('camEverConnected', false) ? 'mac:' : 'usb')).replace(/^sony$/, 'usb');
   let src = camPick.startsWith('mac') ? 'mac' : 'sony';
   document.body.dataset.src = src;
   const webOn = () => web.state === 'connected';
@@ -1012,7 +1014,16 @@ function init() {
   // Connect camera: connects whichever camera is picked in the dropdown.
   const macDeviceId = () => camPick.startsWith('mac:') ? camPick.slice(4) : '';
   ui.connect.onclick = async () => {
-    if (src === 'mac') { if (await web.open(macDeviceId())) { store.set('webOn', true); fillCamPick(); } return; }
+    if (src === 'mac') {
+      // "Mac camera" without a chosen one = the built-in camera, not whatever macOS calls default (an iPhone or OBS Virtual Camera)
+      const builtIn = async () => (await web.listDevices()).find(d => /facetime|built-?in|macbook|integrated/i.test(d.label))?.deviceId || '';
+      const id = macDeviceId() || await builtIn();
+      if (await web.open(id)) {
+        if (!macDeviceId()) { const b = await builtIn(); if (b && b !== web.deviceId) await web.open(b); } // names only show after the first camera access
+        store.set('webOn', true); fillCamPick();
+      }
+      return;
+    }
     cam.connect({ pick: !(await cam.hasPermittedDevice()) });
   };
   ui.cCamBtn.onclick = () => (cam.state === 'connected' ? ui.disconnect.onclick() : ui.connect.onclick());

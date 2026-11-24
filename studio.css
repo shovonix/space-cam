@@ -1501,7 +1501,7 @@ body:not(.sc-tried-voice) #right-rail #voice-scroll-btn > span svg,body:not(.sc-
 body:not(.stage-window):not(.sc-right-hidden) #stage{right:var(--rail-r)!important}
 .sc-tools,.sc-stage-tools{right:16px}
 /* compact download rows: one small button, details in its hover note */
-.vs-dl-btn{height:34px!important;min-height:0!important;font-size:12.5px!important;border-radius:9px!important;background:transparent!important;border:1px dashed #44444a!important;color:#d6d6d8!important}
+.vs-dl-btn{height:34px!important;min-height:0!important;white-space:nowrap!important;overflow:hidden;text-overflow:ellipsis;padding:0 10px!important;font-size:12.5px!important;border-radius:9px!important;background:transparent!important;border:1px dashed #44444a!important;color:#d6d6d8!important}
 .vs-dl-btn:hover{border-color:#fff!important;color:#fff!important}
 .vs-dl{margin:4px 0 6px!important}
 /* keys behind one row; they pop up above it */
@@ -1786,3 +1786,9 @@ body.stage-window #sc-space-banner{display:none}
 /* Save location: room left for recordings + Free up space */
 .sc-space-line{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px;font-size:12px;color:var(--fg-dim)}
 .sc-space-line #scSpaceTxt.low{color:#FF6B61}
+/* Clean up voice (Mic tab): strength slider, then Listen / Hear original side by side */
+.sc-clean{margin-top:6px}
+.sc-clean-btns{display:flex;gap:8px;margin-top:10px}
+.sc-clean-btns .btn{flex:1;height:32px;min-height:0;font-size:12.5px;white-space:nowrap}
+.sc-clean-btns .btn[aria-pressed="true"]{background:#fff;color:#0A0A0B;border-color:#fff}
+.sc-clean-btns .btn:disabled{opacity:.4;cursor:default}

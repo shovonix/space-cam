@@ -9,6 +9,7 @@ One page for a solo recording: camera control + audio recording + teleprompter. 
 - `lib/` — vendored web-gphoto2 0.4.1 (LGPL-2.1). Don't edit it.
 - `assist-core.js` — Shooting assistant engine, no UI (light, sound, battery; framing/headroom/focus/backlight with the face detector). `lib/mediapipe/` — vendored MediaPipe Tasks Vision 0.10.14 (Apache-2.0) + `models/blaze_face_short_range.tflite`; users download them once (~10 MB) into Cache Storage (`spacecam-assist-v1`). Don't edit.
 - `lib/vosk/` — vendored vosk-browser 0.0.8 (Apache-2.0), offline speech for Voice scroll's "On this Mac" engine. `models/vosk-model-small-en-us-0.15.tar.gz` (41 MB, Apache-2.0) is downloaded once by the user from the app into Cache Storage (`spacecam-voice-v1`). Don't edit either.
+- `voice-clean-core.js`, `voice-clean.worker.js`, `voice-clean.worklet-shim.js` — Clean up voice (Mic tab): live cleaned monitor/wave/Listen, and the take cleaned on save (`Take_N.mp3` cleaned + `Take_N_original.mp3`; the recording itself stays raw). `lib/deepfilternet/` — vendored DeepFilterNet3 web build 0.1.0 (MIT/Apache-2.0); `df_bg.wasm` (34 MB) is not in git, users download it once into Cache Storage (`spacecam-clean-v1`). Model delay 1440 samples is taken off on save (sync tested). Mac-camera takes with cleanup on: MP4 keeps the raw sound, the cleaned MP3 sits next to it.
 - `coi-serviceworker.js` — vendored (MIT). Needed for cross-origin isolation on a static host; don't remove it.
 - `test/` — camera diagnostics page.
 

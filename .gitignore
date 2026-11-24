@@ -4,3 +4,4 @@ models/*.tflite
 lib/vosk/vosk.js
 lib/mediapipe/wasm/
 .DS_Store
+lib/deepfilternet/df_bg.wasm

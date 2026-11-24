@@ -8,6 +8,7 @@ const { CamCore } = await import('./cam-core.js' + V);
 const { AudioCore } = await import('./audio-core.js' + V);
 const { WebcamCore } = await import('./webcam-core.js' + V);
 const { AssistCore, FACE_MB } = await import('./assist-core.js' + V);
+const { VoiceClean } = await import('./voice-clean-core.js' + V);
 try { if (localStorage.getItem('spaceCam.triedVoice')) document.body.classList.add('sc-tried-voice'); if (JSON.parse(localStorage.getItem('spaceCam.triedLight'))) document.body.classList.add('sc-tried-light'); if (JSON.parse(localStorage.getItem('spaceCam.triedFrame'))) document.body.classList.add('sc-tried-frame'); } catch {}
 
 // The stage window (#stage) and its mini preview (#stage-preview) are plain prompter views; the only thing
@@ -518,6 +519,14 @@ function init() {
     { const mw = $('scMeterWrap'); if (mw) { const lv = row('Level'); lv.classList.add('sc-lvrow'); mw.before(lv); lv.append(mw); } } // level bar on its own labelled row, like the camera rows
     const sndBtns = ['scSndStart', 'scSndStop', 'scSndError'].map(id => $(id));
     soundSec.querySelector('.sec-title')?.remove(); soundSec.prepend(h(`<div class="sc-grp">Sounds</div>`), swList(...sndBtns));
+    // Clean up voice: switch · Strength · Listen / Hear original · one-time download (wired up next to the live wave)
+    audioSec.append(h(`<div class="sc-grp sc-grp-new sc-new-clean">Clean up voice <span class="sc-new">New</span></div>`),
+      swList(h(`<button type="button" class="tbtn" id="scCleanSw" aria-pressed="false"><span data-help="Takes out room noise, hum and some echo, like Adobe Podcast, on this Mac. The recording stays untouched; the cleanup happens when the take is saved, and the original is kept next to it as Take_N_original.mp3.">Clean up voice</span></button>`)),
+      h(`<div class="sc-clean" id="scCleanBox" hidden>
+        <div class="slider-group"><div class="slider-label"><span data-help="How much noise to take away. Lower keeps more of the room; 100% removes all of it.">Strength</span><span id="scCleanStrVal">80%</span></div><input type="range" id="scCleanStr" min="10" max="100" step="5" value="80" aria-label="Clean up strength"></div>
+        <div class="sc-clean-btns"><button type="button" class="btn sc-clean-listen" id="scCleanListen" aria-pressed="false" data-help="Hear the cleaned mic in your headphones, to test the strength before you record. Use headphones: through the speakers the mic hears itself.">Listen</button><button type="button" class="btn sc-clean-orig" id="scCleanOrig" aria-pressed="false" data-help="While listening: switch between the cleaned and the original sound to compare." disabled>Hear original</button></div>
+      </div>`),
+      h(`<div class="vs-dl sc-clean-dl" hidden><button type="button" class="btn vs-dl-btn" data-help="Downloads the voice cleanup engine (DeepFilterNet3): ${VoiceClean.MB} MB, once. It stays in this browser and runs on your Mac; your voice never leaves it.">Download · ${VoiceClean.MB} MB</button><span class="vs-dl-bar" hidden><i></i></span><span class="vs-dl-note"></span><span class="vs-dl-what">DeepFilterNet3 noise removal. Runs on your Mac.</span></div>`));
     // PROMPTER: Connect stage · Stage preview (or floating) · Stage sync · Stage view · text · lines · fade · margin · pedal · keys
     const mir = $('mirror-btn'), flp = $('flip-btn'), rot = $('rotate-btn');
     const stPair = mir.parentElement;
@@ -592,6 +601,8 @@ function init() {
         'Bluetooth pedal': '<path d="M7 7.5l10 9L12 21V3l5 4.5-10 9"/>',
         'Shooting assistant': '<path d="M12 3l1.6 3.9L17.5 8.5l-3.9 1.6L12 14l-1.6-3.9L6.5 8.5l3.9-1.6z"/><path d="M18 14l.8 1.9 1.9.8-1.9.8L18 19.4l-.8-1.9-1.9-.8 1.9-.8zM6 15l.6 1.4 1.4.6-1.4.6L6 19l-.6-1.4L4 17l1.4-.6z"/>',
         'Level': '<path d="M5 18v-4M9.5 18V9M14 18v-6M18.5 18V5"/>',
+        'Clean up voice': '<path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 11v2"/><path d="M17.5 3.5l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z" class="d"/>',
+        'Strength': '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>',
       };
       const rr = $('right-rail');
       rr.querySelectorAll('.sc-swb > span:first-child, .slider-group .slider-label > span:first-child, .sc-row > .sc-lab').forEach(el => {
@@ -613,7 +624,7 @@ function init() {
       const swL = h(`<button type="button" class="tbtn" id="scAssistLight" aria-pressed="true"><span data-help="Tips while you set up and record: too dark, blown out, noisy room, mic too quiet, too loud or silent, camera battery. Runs on this Mac, no download.">${SUN}Lighting assistant</span></button>`);
       const swF = h(`<button type="button" class="tbtn" id="scAssistFrame" aria-pressed="false"><span data-help="Tips about you in the picture: off-centre, headroom, focus missing your face, light behind you. Needs the face detector (download below, 10 MB, once); it runs on this Mac.">${FRAME}Framing assistant</span></button>`);
       camSec.append(swList(swL, swF));
-      camSec.append(h(`<div class="vs-dl sc-assist-dl" hidden><button type="button" class="btn vs-dl-btn" data-help="Downloads the face detection engine and model: ${FACE_MB} MB, once. It stays in this browser and runs on your Mac. The Framing assistant needs it.">Download Framing assistant · ${FACE_MB} MB</button><span class="vs-dl-bar" hidden><i></i></span><span class="vs-dl-note"></span><span class="vs-dl-what">Google MediaPipe face detector (BlazeFace model + engine). Runs on your Mac.</span></div>`)); }
+      camSec.append(h(`<div class="vs-dl sc-assist-dl" hidden><button type="button" class="btn vs-dl-btn" data-help="Downloads the face detection engine and model: ${FACE_MB} MB, once. It stays in this browser and runs on your Mac. The Framing assistant needs it.">Download · ${FACE_MB} MB</button><span class="vs-dl-bar" hidden><i></i></span><span class="vs-dl-note"></span><span class="vs-dl-what">Google MediaPipe face detector (BlazeFace model + engine). Runs on your Mac.</span></div>`)); }
     camSec.append(keys([['R', 'Record'], ['Hold A', 'Autofocus'], ['← →', 'Focus near / far'], ['G', 'Grid lines']]));
     $('shortcuts-hint')?.classList.add('sc-gone');
     // hide what the switches and the center panel already cover
@@ -1376,7 +1387,8 @@ function init() {
     ui.db.textContent = peakHold <= -119 ? "−∞ dB" : `peak ${peakHold.toFixed(0)} dB`;
     ui.cDb.textContent = ui.db.textContent;
     ui.clip.classList.toggle('on', clip);
-    pushWave(e.detail.peakDb, clip, e.detail.rmsDb);
+    if (vclean.running) rawClip = clip; // Clean up voice on: the wave draws the cleaned sound (see vclean 'level')
+    else pushWave(e.detail.peakDb, clip, e.detail.rmsDb);
   });
 
   // ---- live waveform: voice-memo style bars, newest on the right. Shows the mic is alive; the tag says if it's recording.
@@ -1441,7 +1453,7 @@ function init() {
     if (!rec && waveNowClip) { g.fillStyle = '#E5484D'; g.fillRect(0, 0, dpr * 3, H); g.fillRect(W - dpr * 3, 0, dpr * 3, H); } // clipping right now: red edges
     if (noiseDb !== null) {
       const noisy = noiseDb > NOISY_DB;
-      nz.textContent = `Room noise ${noiseDb <= -119 ? '−∞' : '−' + Math.abs(Math.round(noiseDb))} dB`; // plain white: the Shooting assistant tells you if the room is noisy
+      nz.textContent = `${vclean.running ? 'Noise after cleanup' : 'Room noise'} ${noiseDb <= -119 ? '−∞' : '−' + Math.abs(Math.round(noiseDb))} dB`; // plain white: the Shooting assistant tells you if the room is noisy
       nz.classList.remove('noisy');
     } else nz.textContent = '';
   }
@@ -1450,12 +1462,73 @@ function init() {
     for (const w of waves) {
       w.el.hidden = !on;
       w.el.classList.toggle('rec', rec);
-      w.tag.querySelector('b').textContent = rec ? 'Recording audio' : 'Mic on · not recording';
+      w.tag.querySelector('b').textContent = (rec ? 'Recording audio' : 'Mic on · not recording') + (vclean.running ? ' · cleaned' : '');
       if (on) drawLiveWave(w);
     }
     document.body.classList.toggle('sc-wave-on', on);
     if (!on) { waveHist.fill(0); waveClip.fill(0); noiseHist.fill(-120); noiseFilled = 0; noiseDb = null; }
   }
+
+  // ---- Clean up voice (voice-clean-core.js) ----
+  // Switch on + engine downloaded + mic on → a second, cleaned copy of the mic runs live: the wave and the room-noise
+  // number show the cleaned sound (silence = a flat row of dots), and Listen plays it in the headphones to test the
+  // strength. The recording itself stays the raw mic (crash-safe WAV); the take is cleaned when it is saved.
+  const vclean = new VoiceClean();
+  let rawClip = false, listenOn = false, origOn = false;
+  vclean.addEventListener('level', e => pushWave(e.detail.peakDb, rawClip, e.detail.rmsDb));
+  const cleanOn = () => !!store.get('cleanVoice', false);
+  const cleanStr = () => +store.get('cleanStrength', 80);
+  const cleanSw = $('scCleanSw'), cleanBox = $('scCleanBox'), cleanDl = document.querySelector('.sc-clean-dl');
+  const strIn = $('scCleanStr'), strVal = $('scCleanStrVal'), listenBtn = $('scCleanListen'), origBtn = $('scCleanOrig');
+  const resetNoise = () => { noiseHist.fill(-120); noiseFilled = 0; noiseDb = null; };
+  let cleanChain = Promise.resolve();
+  const renderClean = () => (cleanChain = cleanChain.then(renderClean_, () => {}));
+  async function renderClean_() {
+    const ready = await VoiceClean.ready(), on = cleanOn(), micOn = audio.state !== 'off' && !!audio.stream;
+    cleanSw.setAttribute('aria-pressed', String(on));
+    cleanBox.hidden = !on || !ready; cleanDl.hidden = !on || ready;
+    strIn.value = cleanStr(); strVal.textContent = cleanStr() + '%';
+    const want = on && ready && micOn;
+    if (!want) listenOn = origOn = false;
+    if (vclean.running && (!want || vclean.stream !== audio.stream)) { await vclean.stop(); resetNoise(); }
+    if (want && !vclean.running) {
+      try { await vclean.start(audio.stream, { strength: cleanStr(), listen: listenOn }); resetNoise(); }
+      catch (e) { toast('Clean up voice could not start: ' + (e?.message || e), 'error'); }
+    }
+    vclean.setBypass(origOn);
+    listenBtn.disabled = false; origBtn.disabled = !listenOn; // Listen with the mic off turns the mic on first
+    listenBtn.setAttribute('aria-pressed', String(listenOn)); listenBtn.textContent = listenOn ? 'Stop listening' : 'Listen';
+    origBtn.setAttribute('aria-pressed', String(origOn)); origBtn.textContent = origOn ? 'Hear cleaned' : 'Hear original';
+    listenBtn.title = vclean.running ? '' : 'Turns the mic on and plays the cleaned sound in your headphones';
+    renderWave();
+  }
+  cleanSw.onclick = () => { store.set('cleanVoice', !cleanOn()); renderClean(); };
+  strIn.oninput = () => { store.set('cleanStrength', +strIn.value); strVal.textContent = strIn.value + '%'; vclean.setStrength(+strIn.value); };
+  listenBtn.onclick = async () => {
+    listenOn = !listenOn; if (!listenOn) origOn = false;
+    if (listenOn && !store.get('cleanHeadphonesTold', false)) { store.set('cleanHeadphonesTold', true); toast('Use headphones — through the speakers the mic hears itself and howls.', ''); }
+    if (listenOn && audio.state === 'off') { await openMic(); if (audio.state === 'off') listenOn = false; } // the mic's 'state' event starts the monitor
+    vclean.setListen(listenOn); renderClean();
+  };
+  origBtn.onclick = () => { origOn = !origOn; renderClean(); };
+  { const b = cleanDl.querySelector('.vs-dl-btn'), bar = cleanDl.querySelector('.vs-dl-bar'), fill = bar.querySelector('i'), note = cleanDl.querySelector('.vs-dl-note');
+    b.onclick = async () => {
+      b.disabled = true; bar.hidden = false; fill.style.width = '0%'; note.textContent = 'Downloading…';
+      try { await VoiceClean.download(p => { fill.style.width = Math.round(p * 100) + '%'; note.textContent = Math.round(p * 100) + '%'; }); note.textContent = ''; renderClean(); }
+      catch (e) { note.textContent = 'Download failed (' + (e?.message || e) + '). Try again.'; }
+      b.disabled = false; bar.hidden = true;
+    };
+  }
+  audio.addEventListener('state', () => renderClean());
+  renderClean();
+  // On save: the cleaned WAV, or null (switch was off, engine missing, or it failed: then the raw sound is saved as before)
+  async function cleanedWav(t, wav, onP) {
+    if (!t.clean) return null;
+    if (!(await VoiceClean.ready())) { toast('Clean up voice isn’t downloaded yet, so this take was saved without it.', 'error'); return null; }
+    try { return await VoiceClean.cleanFile(wav, t.cleanStr ?? 80, onP); }
+    catch (e) { toast('Could not clean up the voice, so it was saved without it: ' + (e?.message || e), 'error'); return null; }
+  }
+  const origMp3Name = n => n.replace(/\.mp3$/i, '') + '_original.mp3';
   function renderMic() {
     const on = audio.state !== 'off';
     renderRailTabs(on ? undefined : null);
@@ -2275,7 +2348,7 @@ function init() {
   // deletePlan() = what will happen (text for the confirm); doDelete() = do it. Returns true when done.
   async function deletePlan(t) {
     const dir = await takeDir(t);
-    const files = [t.audio === 'folder' && t.name, t.video === 'folder' && t.videoName].filter(Boolean);
+    const files = [t.audio === 'folder' && t.name, t.audio === 'folder' && t.origName, t.video === 'folder' && t.videoName].filter(Boolean);
     const where = dir ? ` from “${esc(dir.name)}”` : '';
     const inDownloads = t.audio === 'kept' || t.video === 'kept' || t.audio === 'saved';
     const neverSaved = t.audio === 'browser' || t.video === 'browser';
@@ -2678,11 +2751,14 @@ function init() {
       if (t.audio === 'browser') {
         const dest = t.label ? safeFileName(t.label, t) : toMp3Name(t.name);
         const wav = await audio.getStoredFile(t.name);
-        await keepPeaks(t, wav);
-        const mp3 = await wavToMp3(wav, syncTrimMs(t));
+        const cw = await cleanedWav(t, wav);
+        await keepPeaks(t, cw || wav);
+        const mp3 = await wavToMp3(cw || wav, syncTrimMs(t));
+        const orig = cw ? await wavToMp3(wav, syncTrimMs(t)) : null;
         if (await folderOk(true)) {
           const fin = await freeName(folder, dest);
           await writeToFolder(folder, fin, mp3);
+          if (orig) { const on = await freeName(folder, origMp3Name(fin)); await writeToFolder(folder, on, orig); t.origName = on; }
           await audio.deleteStored(t.name).catch(() => {});
           t.name = fin; t.audio = 'folder'; t.folderName = folder.name; await idb.set('dir:' + t.id, folder);
         } else {
@@ -2813,7 +2889,8 @@ function init() {
       // Mac camera / capture card with the mic on: the MP4 already carries the mic sound, so the take is one MP4.
       // Video first; only if it's safely saved does the WAV go (its waveform is kept for the card). If the video
       // can't be saved, the MP3 is saved as before, so the sound is never lost. store 'mp3WithVideo' = also keep the MP3.
-      if (t.video === 'browser' && t.audio === 'browser' && !isPhone && !store.get('mp3WithVideo', false)) {
+      // Clean up voice on: the MP4 keeps the raw sound and the cleaned MP3 is saved next to it (t.clean).
+      if (t.video === 'browser' && t.audio === 'browser' && !isPhone && !store.get('mp3WithVideo', false) && !t.clean) {
         try { await saveVideo(t, p => saveProgress(t, p)); }
         catch (e) { toast('Could not save the video — it is still safe in the browser: ' + (e?.message || e), 'error'); }
         if (t.video === 'folder' || t.video === 'kept') {
@@ -2825,16 +2902,21 @@ function init() {
       if (t.audio === 'browser') {
         try {
           const wavFile = await audio.getStoredFile(t.name);
-          await keepPeaks(t, wavFile);
-          const mp3 = await wavToMp3(wavFile, syncTrimMs(t), p => saveProgress(t, p));
+          // Clean up voice: cleaned WAV first (60% of the bar), then its MP3, then the original's MP3
+          const cw = await cleanedWav(t, wavFile, p => saveProgress(t, p * 0.6));
+          await keepPeaks(t, cw || wavFile); // the card's wave shows what's in the MP3 (cleaned: silence is flat)
+          const mp3 = await wavToMp3(cw || wavFile, syncTrimMs(t), p => saveProgress(t, cw ? 0.6 + p * 0.25 : p));
+          const orig = cw ? await wavToMp3(wavFile, syncTrimMs(t), p => saveProgress(t, 0.85 + p * 0.15)) : null;
           if (await folderOk(false)) {
             const fin = await freeName(folder, toMp3Name(t.name));
             await writeToFolder(folder, fin, mp3);
+            if (orig) { const on = await freeName(folder, origMp3Name(fin)); await writeToFolder(folder, on, orig); t.origName = on; }
             await audio.deleteStored(t.name).catch(() => {});
             t.name = fin; t.audio = 'folder'; t.folderName = folder.name; await idb.set('dir:' + t.id, folder);
           } else {
             // No folder: keep the WAV in the browser (for playback) and download the MP3 to Downloads.
-            downloadBlob(mp3, toMp3Name(t.name)); t.audio = 'kept';
+            downloadBlob(mp3, toMp3Name(t.name)); if (orig) downloadBlob(orig, origMp3Name(toMp3Name(t.name)));
+            t.audio = 'kept';
           }
         } catch (e) { toast('Could not save the MP3 — the audio is still safe in the browser: ' + (e?.message || e), 'error'); }
       }
@@ -3217,6 +3299,7 @@ function init() {
       t.audio = ok ? 'browser' : 'none'; // WAV is safe in browser storage
     }
     if (t.video === 'recording') t.video = v ? 'browser' : 'none';
+    if (t.audio === 'browser' && cleanOn()) { t.clean = true; t.cleanStr = cleanStr(); } // Clean up voice, applied on save
     takes.push(t); saveTakes(); renderTakes(); renderRec();
     try { renderSampleBtn(); } catch {} // 3rd take of your own: sample data goes away
     if (reason) { /* stopped by an error or a limit: stopTogether shows one card with the warning */ }

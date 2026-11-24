@@ -9,6 +9,13 @@ the app only when they press the download button (Mic tab → Voice scroll, Came
 | `models/blaze_face_short_range.tflite` | 0.2 MB | https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite (Google, Apache-2.0) |
 | `lib/vosk/vosk.js` | 5.8 MB | npm `vosk-browser@0.0.8`, `dist/vosk.js` (Apache-2.0) |
 | `lib/mediapipe/wasm/vision_wasm_internal.js` + `.wasm` | 9.6 MB | npm `@mediapipe/tasks-vision@0.10.14`, `wasm/` (Apache-2.0) |
+| `lib/deepfilternet/df_bg.wasm` | 34 MB | npm `@lofcz/deepfilternet-web@0.1.0`, `dist/df_bg.wasm` (DeepFilterNet3, MIT OR Apache-2.0), sha256 `596034b83a03b546f33daa14b791bcdb59655cb3a07053ac39ddb0ba42c52fa4` — Mic tab → Clean up voice |
+
+Clean up voice's engine, on the VPS as root (live folder since 11 Nov 2026):
+
+```bash
+sudo -u spacecam bash -c 'cd /home/spacecam/htdocs/spacecam.shovonix.dev && mkdir -p lib/deepfilternet && curl -fsSL -o lib/deepfilternet/df_bg.wasm https://cdn.jsdelivr.net/npm/@lofcz/deepfilternet-web@0.1.0/dist/df_bg.wasm && echo "596034b83a03b546f33daa14b791bcdb59655cb3a07053ac39ddb0ba42c52fa4  lib/deepfilternet/df_bg.wasm" | sha256sum -c'
+```
 
 On the VPS they live in the same paths under `/home/cam/htdocs/cam.shovonix.dev/` (owned by `cam`). `git pull` leaves them alone (untracked + ignored).
 To put them there, run this on the VPS as root (downloads from the sources above, then checks the checksums):

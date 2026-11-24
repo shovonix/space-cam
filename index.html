@@ -32,7 +32,7 @@ html.scp-r #stage{right:0!important}
 </style>
 <script src="coi-serviceworker.js"></script>
 <!-- Space Cam styles in the head: nothing paints unstyled on reload (keep its ?v= the same as studio.js at the bottom) -->
-<link rel="stylesheet" href="studio.css?v=2026-11-24c">
+<link rel="stylesheet" href="studio.css?v=2026-11-24f">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#0A0A0B">
 <meta name="mobile-web-app-capable" content="yes">
@@ -858,8 +858,11 @@ body.touch #screen-note{order:5;margin-top:12px;padding:10px 12px;font-size:12px
 <!-- What's new: edit before every deploy (see CLAUDE.md). Shown in the update notice and once after the reload. Plain words, one line each. -->
 <script type="application/json" id="sc-changes">
 {
+  "added": [
+    "Clean up voice (Mic tab): takes room noise, hum and some echo out of your voice. Set the strength, press Listen to hear it in headphones before you record. Each take saves cleaned, with the original kept next to it."
+  ],
   "fixed": [
-    "Long Mac-camera takes: with a save folder chosen, the video now goes into that folder while it records, so a take is no longer limited to about 10 GB."
+    "The Framing assistant download button stays on one line."
   ]
 }
 </script>
@@ -5632,7 +5635,7 @@ var qrcode = function() {
   });
 
   // ---- Build/version indicator (control window top bar) ----
-  var APP_VERSION = 'v1.0.5 beta'; // bump with each deploy (v1.0 beta, then v1.0.1 beta … until the public v1.0): shows in the logo chip, and open copies get the "new version" toast
+  var APP_VERSION = 'v1.0.6 beta'; // bump with each deploy (v1.0 beta, then v1.0.1 beta … until the public v1.0): shows in the logo chip, and open copies get the "new version" toast
   if(buildMeta && !isStageWindow){
     buildMeta.textContent = APP_VERSION;
     // the version lives on the bottom line now, beside the copyright: "Space Cam v1.8.1 © shovonix"
@@ -6257,4 +6260,4 @@ window.claude.hot.snapshot(function(){ return { state: state }; });
 </script>
 <!-- Bump ?v= on every deploy so browsers load the new files instead of cached ones.
      studio.js passes the same ?v= on to every file it loads (engines, workers). -->
-<script type="module" src="studio.js?v=2026-11-24c"></script>
+<script type="module" src="studio.js?v=2026-11-24f"></script>

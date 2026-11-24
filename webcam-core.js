@@ -10,6 +10,12 @@
 //   await web.stopRecording()           → { name, bytes } (file stays in browser storage until saved)
 //   web.addEventListener('state', e => …)   // e.detail: { state, label }
 //   web.addEventListener('error', e => …)   // e.detail: { message }
+//
+// Chrome gives a site only ~10 GiB of private storage, so long takes are written in ~1 GiB pieces
+// ('Take_3.mp4.~001', '~002' …). Set web.partsDir to the save folder before recording: every finished piece is
+// moved there while recording, as a hidden '.Take_3.mp4.part001' (a crash keeps everything: the pieces in the
+// folder plus the one still in browser storage). getStoredFile() joins all pieces into one file; saving writes
+// 'Take_3.mp4' and removes the pieces. web.dirResolver (async () => folder handle) finds the pieces after a reload.
 
 const TYPES = [
   ['video/mp4;codecs=avc1.640033,mp4a.40.2', 'mp4', 'big'], // H.264 High 5.1: 4K (e.g. a Sony through a Cam Link 4K)
@@ -27,7 +33,13 @@ export class WebcamCore extends EventTarget {
   deviceId = '';
   recording = false;
   recordingName = '';
+  partsDir = null;     // folder for finished pieces while recording (null: everything stays in browser storage)
+  dirResolver = null;  // async () => folder handle, to find pieces of an earlier take (after a reload or crash)
+  segBytes = 0;        // piece size override (testing); 0 = the worker's 1 GiB
   #rec = null; #worker = null; #pending = new Map(); #writes = Promise.resolve(); #extraTracks = [];
+  #recDir = null; #moving = Promise.resolve();
+  /** true while finished pieces of the current take are going to the folder */
+  get partsActive() { return !!(this.recording && this.#recDir); }
 
   static get supported() {
     return !!(navigator.mediaDevices?.getUserMedia && window.MediaRecorder && navigator.storage?.getDirectory);
@@ -92,7 +104,8 @@ export class WebcamCore extends EventTarget {
     this.bytesPerSec = (vbps + (audioTrack ? 192_000 : 0)) / 8; // what this take writes to browser storage each second
     this.full = false;
     const name = `${baseName}.${fmt.ext}`;
-    try { await this.#ask('open', { name }); } catch { return null; }
+    this.#recDir = this.partsDir || null;
+    try { await this.#ask('open', { name, seg: this.segBytes || 0 }); } catch { return null; }
     const tracks = [...this.stream.getVideoTracks()];
     this.#extraTracks = [];
     if (audioTrack) { const a = audioTrack.clone(); this.#extraTracks.push(a); tracks.push(a); }
@@ -120,6 +133,7 @@ export class WebcamCore extends EventTarget {
     this.#extraTracks.forEach(t => t.stop()); this.#extraTracks = [];
     let res = null;
     try { res = await this.#ask('close', {}); } catch {}
+    await this.#moving; // a piece still on its way to the folder
     this.#rec = null; this.recording = false; this.recordingName = '';
     this.#setState(this.stream ? 'connected' : 'off');
     return res;
@@ -178,13 +192,81 @@ export class WebcamCore extends EventTarget {
     } catch { return file; }
   }
 
-  // ---------- stored videos (browser storage) ----------
-  async listStored() { const r = await this.#ask('list', {}); return r.files || []; }
-  async getStoredFile(name) {
-    const d = await (await navigator.storage.getDirectory()).getDirectoryHandle('videos', { create: true });
-    return (await d.getFileHandle(name)).getFile();
+  // ---------- stored videos (browser storage + pieces moved to the folder) ----------
+  static #seg = (n, i) => `${n}.~${String(i).padStart(3, '0')}`;
+  static #part = (n, i) => `.${n}.part${String(i).padStart(3, '0')}`;
+  async #opfs() { return (await navigator.storage.getDirectory()).getDirectoryHandle('videos', { create: true }); }
+  async #dirFor(name) {
+    if (this.recording && name === this.recordingName && this.#recDir) return this.#recDir;
+    if (this.partsDir) return this.partsDir;
+    try { return (await this.dirResolver?.()) || null; } catch { return null; }
   }
-  async deleteStored(name) { await this.#ask('delete', { name }); }
+  // A finished piece goes to the folder while the next one records. If that fails (card out, no permission),
+  // the rest of the take stays in browser storage and 'partsoff' tells the page (its space check takes over).
+  #moveOut(name, i) {
+    this.#moving = this.#moving.then(async () => {
+      const dir = this.#recDir; if (!dir) return;
+      try {
+        const d = await this.#opfs(), f = await (await d.getFileHandle(WebcamCore.#seg(name, i))).getFile();
+        const w = await (await dir.getFileHandle(WebcamCore.#part(name, i), { create: true })).createWritable();
+        await f.stream().pipeTo(w); // closes w: the piece is now a real file in the folder
+        await d.removeEntry(WebcamCore.#seg(name, i));
+      } catch (e) {
+        this.#recDir = null;
+        this.#emit('partsoff', { message: String(e?.message || e) });
+      }
+    });
+  }
+  /** Stored takes: one entry per take (its pieces counted together). */
+  async listStored() {
+    const r = await this.#ask('list', {}), by = new Map();
+    for (const f of r.files || []) {
+      if (f.name.endsWith('.parts.json')) continue;
+      const m = f.name.match(/^(.*)\.~\d{3}$/), n = m ? m[1] : f.name;
+      const e = by.get(n) || { name: n, size: 0, modified: 0 };
+      e.size += f.size; e.modified = Math.max(e.modified, f.modified); by.set(n, e);
+    }
+    return [...by.values()];
+  }
+  /** The pieces of a take, in order: [{ file, where: 'browser'|'folder' }]. Missing pieces are skipped. */
+  async #pieces(name) {
+    const d = await this.#opfs();
+    let n = 0;
+    try { n = JSON.parse(await (await (await d.getFileHandle(`${name}.parts.json`)).getFile()).text()).n || 0; } catch {}
+    if (!n) { // older takes: one plain file
+      try { return [{ file: await (await d.getFileHandle(name)).getFile(), where: 'browser' }]; } catch { return []; }
+    }
+    const out = []; let dir;
+    for (let i = 1; i <= n; i++) {
+      try { out.push({ file: await (await d.getFileHandle(WebcamCore.#seg(name, i))).getFile(), where: 'browser' }); continue; } catch {}
+      if (dir === undefined) dir = await this.#dirFor(name);
+      try { if (dir) out.push({ file: await (await dir.getFileHandle(WebcamCore.#part(name, i))).getFile(), where: 'folder' }); } catch {}
+    }
+    return out;
+  }
+  /** The whole take as one file (pieces joined; nothing big is copied). */
+  async getStoredFile(name) {
+    await this.#moving;
+    const p = await this.#pieces(name);
+    if (!p.length) throw new Error('not stored');
+    if (p.length === 1 && !/\.~\d{3}$/.test(p[0].file.name) && p[0].where === 'browser') return p[0].file;
+    return new File(p.map(x => x.file), name, { type: name.endsWith('.webm') ? 'video/webm' : 'video/mp4', lastModified: Math.max(...p.map(x => x.file.lastModified)) });
+  }
+  async deleteStored(name) {
+    await this.#moving;
+    const d = await this.#opfs();
+    let n = 0;
+    try { n = JSON.parse(await (await (await d.getFileHandle(`${name}.parts.json`)).getFile()).text()).n || 0; } catch {}
+    await this.#ask('delete', { name });
+    if (n) {
+      const dir = await this.#dirFor(name);
+      for (let i = 1; i <= n; i++) {
+        await d.removeEntry(WebcamCore.#seg(name, i)).catch(() => {});
+        if (dir) await dir.removeEntry(WebcamCore.#part(name, i)).catch(() => {});
+      }
+      await d.removeEntry(`${name}.parts.json`).catch(() => {});
+    }
+  }
   /** Copies a stored video into a folder handle. Deletes the stored copy on success.
    *  audioShiftMs > 0 moves the sound that much later in the saved copy (see shiftAudio). */
   async moveToFolder(name, dirHandle, destName = name, audioShiftMs = 0, onProgress = null) {
@@ -204,6 +286,7 @@ export class WebcamCore extends EventTarget {
     this.#worker.onmessage = e => {
       const m = e.data;
       // No room left on the Mac (or Chrome's share of it): say it once and stop the take; what's written so far is kept.
+      if (m.ev === 'rotated') { this.#moveOut(m.name, m.seg); return; }
       if (m.ev === 'error' && m.cmd === 'chunk') {
         if (!this.full && this.recording) { this.full = true; this.#emit('full', { message: m.message }); }
         return;

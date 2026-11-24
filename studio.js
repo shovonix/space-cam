@@ -382,7 +382,7 @@ function init() {
       <div class="sc-folder-line">
         <button type="button" class="sc-folder-pill" id="scFolderRow" title="Where takes are saved">${'<svg viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>'}<b id="scFolderName">Downloads</b></button>
       </div>
-      <div class="sc-space-line"><span id="scSpaceTxt" data-help="Takes are written on this Mac first (so a crash can't lose them), then copied to the folder. This is the room Chrome gives Space Cam for that."></span><button type="button" class="sc-link" id="scFreeUp">Free up space</button></div>
+      <div class="sc-space-line"><span id="scSpaceTxt" data-help="Takes are written on this Mac first, so a crash can't lose them. Chrome gives Space Cam about 10 GB for that. With a folder chosen, Mac-camera video moves there in 1 GB pieces while it records, so long takes only need room in the folder."></span><button type="button" class="sc-link" id="scFreeUp">Free up space</button></div>
     </div>
     <div class="sec sc-sec">
       <div class="sec-title"><span>Bluetooth device</span><span class="sc-status" id="scCardPedalState">Off</span></div>
@@ -2878,10 +2878,16 @@ function init() {
   const audioBps = () => audio.sampleRate * audio.channels * 3;
   const storageFree = async () => { const { quota = 0, usage = 0 } = await navigator.storage.estimate(); return Math.max(0, quota - usage); };
   const gb = b => b < 1e9 ? Math.max(1, Math.round(b / 1e6)) + ' MB' : (b / 1e9).toFixed(b < 10e9 ? 1 : 0) + ' GB';
+  const PIECES_RESERVE = 2.3e9; // browser storage a take needs when its video goes to the folder piece by piece
   async function renderSpace() {
     const el = $('scSpaceTxt'); if (!el) return;
     try {
       const free = await storageFree();
+      if (folder && await folderOk(false)) { // long takes are fine: the video goes to the folder while recording
+        el.textContent = `Video records into the folder (${gb(free)} free in Chrome)`;
+        el.classList.toggle('low', free < PIECES_RESERVE);
+        return;
+      }
       const mins = Math.floor(free * 0.95 / vidBps() / 60);
       el.textContent = `Room for about ${mins > 600 ? '10+ h' : mins >= 120 ? Math.floor(mins / 60) + ' h ' + (mins % 60) + ' min' : mins + ' min'} of video (${gb(free)})`;
       el.classList.toggle('low', mins < 10);
@@ -3141,10 +3147,14 @@ function init() {
       if (!ok) return;
       sessionStorage.setItem('spaceCam.noMicOk', '1'); // asked once per session
     }
+    // Mac-camera video goes to the chosen folder piece by piece while recording (Chrome caps a site at ~10 GiB),
+    // so browser storage only needs room for about two pieces. No folder (Downloads) or no permission: it all
+    // stays in browser storage, as before.
+    web.partsDir = vidOk && folder && await folderOk(true) ? folder : null;
     // Less than one minute of room in browser storage: don't start (the take would break within seconds).
     // Checked before a take number is used, so a refused start doesn't skip a Take_N.
     try {
-      const need = ((vidOk ? vidBps() : 0) + (micOk ? audioBps() : 0)) * 60;
+      const need = (vidOk ? (web.partsDir ? PIECES_RESERVE / 60 : vidBps()) : 0) * 60 + (micOk ? audioBps() * 60 : 0);
       if (need) { const free = await storageFree(); if (free < need) return stopWarning('Not enough space to record', `Chrome has room for less than a minute of recording (${gb(free)} left for Space Cam). Takes are written on this Mac first, even when the folder is on a card. Click Free up space at the bottom left, or free space on the Mac, then try again.`); }
     } catch {}
     closeSaved();
@@ -3153,7 +3163,7 @@ function init() {
     if (takes.some(t => t.name === `${base}.wav` || t.name === `${base}.mp3` || (t.videoName || '').startsWith(base + '.'))) base = `${label} (${pad(started.getHours())}${pad(started.getMinutes())}${pad(started.getSeconds())})`;
     const name = `${base}.wav`;
     const micTrack = micReady ? audio.stream?.getAudioTracks()[0] : null;
-    if (vidOk && !isPhone) lowSpaceCheck(); // a heads-up only; never blocks the take
+    if (vidOk && !isPhone && !web.partsDir) lowSpaceCheck(); // a heads-up only; never blocks the take
     const [a, c, v] = await Promise.all([micOk ? audio.startRecording(name) : false, camOk ? cam.startRecording() : false, vidOk ? web.startRecording(base, micTrack) : null]);
     // Everything starts together or nothing does: a take with the camera rolling but no audio (or the other way round)
     // can't be synced later. Undo whatever did start, and say what failed.
@@ -3230,16 +3240,23 @@ function init() {
       bps += ab;
       lim.push({ sec: Math.floor((2 ** 32 - 1 - 44) / ab), why: 'an audio file can’t grow past 4 GB' });
     }
-    if (t.video === 'recording') bps += vidBps();
-    t.bps = bps;
-    if (bps) {
+    t.bps = bps + (t.video === 'recording' ? 1 : 0); // > 0: the space check runs (spaceLeft works out the real rate)
+    if (t.bps) {
       try {
-        const { quota = 0, usage = 0 } = await navigator.storage.estimate();
-        const sec = Math.floor(((quota - usage) * 0.95) / bps);
-        lim.push({ sec: Math.max(10, sec), why: 'this Mac’s space for recordings ran out', space: true });
+        const sec = spaceLeft(t, await storageFree());
+        if (sec < Infinity) lim.push({ sec: Math.max(10, sec), why: 'this Mac’s space for recordings ran out', space: true });
       } catch {}
     }
     return lim.sort((x, y) => x.sec - y.sec)[0] || null;
+  }
+  // Seconds of recording left in browser storage. Video counts in full only when it all stays there; when its
+  // pieces go to the folder, browser storage just keeps room for about two pieces (PIECES_RESERVE).
+  function spaceLeft(t, free) {
+    const pieces = t.video === 'recording' && web.partsActive;
+    const bps = (t.audio === 'recording' ? audioBps() : 0) + (t.video === 'recording' && !pieces ? vidBps() : 0);
+    const room = free - (pieces ? PIECES_RESERVE : 0);
+    if (room <= 0) return 0;
+    return bps ? Math.floor(room * 0.95 / bps) : Infinity;
   }
   // Video takes are big (4K ≈ 0.26 GB a minute) and sit in browser storage until saved, then briefly exist twice
   // while they're copied into the folder. Chrome's storage estimate tracks free disk space closely enough to warn.
@@ -3288,6 +3305,8 @@ function init() {
   // a part that stops on its own (unplugged, blocked, crashed) stops the rest
   audio.addEventListener('state', () => { if (take && take.audio === 'recording' && audio.state !== 'recording' && !stopping) stopTogether('the microphone stopped (unplugged or blocked)'); });
   web.addEventListener('state', () => { if (take && take.video === 'recording' && !web.recording && !stopping) stopTogether('the Mac camera stopped'); });
+  web.addEventListener('partsoff', e => { console.warn('[video] pieces stay in browser storage:', e.detail.message); toast('Couldn’t write the video to the folder (card full or removed?). The rest of this take stays on this Mac, up to about 10 GB.', 'error'); });
+  web.dirResolver = async () => (await folderOk(false)) ? folder : null; // pieces of an earlier take, after a reload or crash
   web.addEventListener('full', () => { if (take && take.video === 'recording' && !stopping) stopTogether('this Mac’s space for recordings ran out (everything up to now is kept)'); });
   cam.addEventListener('state', e => { if (take && take.camera && e.detail.state === 'disconnected' && !stopping) stopTogether('the USB camera disconnected'); });
 
@@ -3305,10 +3324,10 @@ function init() {
       take.spaceAt = s; const t0 = take;
       storageFree().then(free => {
         if (take !== t0) return;
-        const left = Math.floor(free * 0.95 / t0.bps), end = s + Math.max(10, left);
+        const left = spaceLeft(t0, free), end = left === Infinity ? Infinity : s + Math.max(10, left);
         const other = t0.limit && !t0.limit.space ? t0.limit : t0.otherLimit; // the camera's 29:59 / WAV 4 GB limit stays
         if (t0.limit && !t0.limit.space) t0.otherLimit = t0.limit;
-        t0.limit = other && other.sec <= end ? other : { sec: end, why: 'this Mac’s space for recordings ran out', space: true };
+        t0.limit = other && other.sec <= end ? other : end === Infinity ? null : { sec: end, why: 'this Mac’s space for recordings ran out', space: true };
         if (left < 60 && !t0.spaceWarned) { t0.spaceWarned = true; toast('About one minute of space left — the take will stop and save by itself.', 'error'); }
       }).catch(() => {});
     }

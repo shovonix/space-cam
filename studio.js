@@ -382,6 +382,7 @@ function init() {
       <div class="sc-folder-line">
         <button type="button" class="sc-folder-pill" id="scFolderRow" title="Where takes are saved">${'<svg viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>'}<b id="scFolderName">Downloads</b></button>
       </div>
+      <div class="sc-space-line"><span id="scSpaceTxt" data-help="Takes are written on this Mac first (so a crash can't lose them), then copied to the folder. This is the room Chrome gives Space Cam for that."></span><button type="button" class="sc-link" id="scFreeUp">Free up space</button></div>
     </div>
     <div class="sec sc-sec">
       <div class="sec-title"><span>Bluetooth device</span><span class="sc-status" id="scCardPedalState">Off</span></div>
@@ -1654,7 +1655,7 @@ function init() {
     const IC_SUN = SV('<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/>');
     const IC_MOON = SV('<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/>');
     const themeBtn = h(`<button type="button" class="icon-btn sc-theme-btn"></button>`);
-    if (tools && fsBtn) tools.insertBefore(themeBtn, fsBtn);
+    if (tools && fsBtn && !window.spaceCamApp) tools.insertBefore(themeBtn, fsBtn); // the Mac app is dark only: no button
     const renderTheme = () => {
       const light = document.documentElement.getAttribute('data-theme') === 'light';
       themeBtn.innerHTML = light ? IC_MOON : IC_SUN;
@@ -1963,6 +1964,110 @@ function init() {
       loadFb().then(() => window.SpaceFeedback.open({ app: 'Space Cam', version: window.APP_VERSION || (document.querySelector('.sc-copy-txt')?.textContent.match(/v[\d.]+[^©]*/)?.[0].trim() || '') }))
         .catch(() => toast("Feedback needs the internet. Try again when you're online."));
     });
+  }
+  // ---- Account (optional): email + 6-digit code, settings follow you to every Mac. Engine: account-core.js ----
+  // Mac app only for now: the account server (shovonix.dev/account) isn't set up yet.
+  if (window.spaceCamApp) {
+    const cr = document.querySelector('#left-rail .copyright');
+    const row = h(`<button type="button" class="sc-acc-row"></button>`);
+    const fbRow = document.querySelector('#left-rail .sc-fb-row');
+    if (fbRow) fbRow.before(row); else if (cr) cr.before(row);
+    let A = null;
+    const core = () => (A ? Promise.resolve(A) : import('./account-core.js' + V).then(m => (A = m.AccountCore)));
+    const renderRow = () => {
+      const s = A?.session;
+      row.innerHTML = s?.email
+        ? `<span class="sc-acc-av">${esc(s.email[0].toUpperCase())}</span><span class="sc-acc-txt"><span class="sc-acc-mail">${esc(s.email)}</span><span class="sc-acc-sub">Settings synced</span></span>`
+        : `<svg viewBox="0 0 24 24" class="sc-ic" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg><span class="sc-acc-txt"><span>Sign in</span><span class="sc-acc-sub">Keep your settings on every Mac</span></span>`;
+      row.title = s?.email ? 'Your account' : 'Sign in to keep your settings on all your devices';
+    };
+    const reloadForPrefs = () => { try { sessionStorage.setItem('spaceCamPrefsReload', '1'); } catch {} location.reload(); };
+
+    // sign-in popup: email → code. welcome = first launch of the Mac app (with "Continue without an account")
+    function openSignIn({ welcome = false } = {}) {
+      const m = modal(`
+        ${welcome ? `<div class="sc-acc-hello"><img class="sc-acc-logo" alt=""><div class="sc-modal-title sc-acc-big">Welcome to Space Cam</div><p class="sc-modal-p">Camera, mic and prompter in one window. Free for everyone, always.</p></div>` : ''}
+        <div class="sc-modal-head"><div class="sc-modal-title">Keep your settings on every Mac</div>${welcome ? '' : '<button type="button" class="sc-modal-x" data-close aria-label="Close">✕</button>'}</div>
+        <div class="sc-acc-step1">
+          <p class="sc-modal-p">Sign up with your email. No password: a 6-digit code is sent to your email.</p>
+          <input class="sc-modal-input sc-acc-email" type="email" placeholder="you@example.com" autocomplete="email" spellcheck="false" aria-label="Email">
+          <label class="sc-acc-news"><input type="checkbox" class="sc-acc-newsbox"> Send me Space Cam news (a few emails a year)</label>
+          <div class="sc-acc-err" role="alert"></div>
+          <button type="button" class="btn primary sc-acc-send">Send code</button>
+          ${welcome ? '<button type="button" class="btn ghost" data-close>Continue without an account</button>' : ''}
+          <p class="sc-acc-fine">Your email is only used for your account and, if you tick the box, Space Cam news. Recordings and scripts never leave your Mac.</p>
+        </div>
+        <div class="sc-acc-step2" hidden>
+          <p class="sc-modal-p">Check your email. A code was sent to <b class="sc-acc-to"></b></p>
+          <input class="sc-modal-input sc-acc-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" aria-label="6-digit code">
+          <div class="sc-acc-err" role="alert"></div>
+          <button type="button" class="btn primary sc-acc-verify">Sign in</button>
+          <p class="sc-acc-fine">Didn't get it? <button type="button" class="sc-acc-link sc-acc-again">Send again</button> · <button type="button" class="sc-acc-link sc-acc-back">Change email</button></p>
+        </div>`, { onClose: () => store.set('accountAsked', true) });
+      m.wrap.querySelector('.sc-modal-card').classList.add('sc-acc-card');
+      const logo = m.wrap.querySelector('.sc-acc-logo'); if (logo) logo.src = document.querySelector('.brand-logo')?.src || '';
+      const q = c => m.wrap.querySelector(c), email = q('.sc-acc-email'), code = q('.sc-acc-code');
+      const err = (step, t) => { m.wrap.querySelector(step + ' .sc-acc-err').textContent = t || ''; };
+      const busy = (b, on, label) => { b.disabled = on; b.textContent = label; };
+      const send = async () => {
+        const e = email.value.trim(); err('.sc-acc-step1', '');
+        if (!/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(e)) { err('.sc-acc-step1', "That email doesn't look right."); email.focus(); return; }
+        const b = q('.sc-acc-send'); busy(b, true, 'Sending…');
+        try { await (await core()).requestCode(e); q('.sc-acc-to').textContent = e; q('.sc-acc-step1').hidden = true; q('.sc-acc-step2').hidden = false; code.value = ''; code.focus(); }
+        catch (x) { err('.sc-acc-step1', x.message); }
+        busy(b, false, 'Send code');
+      };
+      const verify = async () => {
+        const c = code.value.replace(/\D/g, ''); err('.sc-acc-step2', '');
+        if (c.length !== 6) { err('.sc-acc-step2', 'Type the 6 digits from the email.'); code.focus(); return; }
+        const b = q('.sc-acc-verify'); busy(b, true, 'Signing in…');
+        try {
+          const r = await (await core()).verify(email.value.trim(), c, q('.sc-acc-newsbox').checked);
+          m.close(); renderRow();
+          if (r.changed) { toast('Signed in. Loading your settings…'); setTimeout(reloadForPrefs, 900); }
+          else toast('Signed in. Your settings are saved to your account.');
+        } catch (x) { err('.sc-acc-step2', x.message); busy(b, false, 'Sign in'); }
+      };
+      q('.sc-acc-send').onclick = send;
+      email.onkeydown = e => { if (e.key === 'Enter') send(); };
+      q('.sc-acc-verify').onclick = verify;
+      code.oninput = () => { code.value = code.value.replace(/\D/g, '').slice(0, 6); if (code.value.length === 6) verify(); };
+      code.onkeydown = e => { if (e.key === 'Enter') verify(); };
+      q('.sc-acc-again').onclick = () => { q('.sc-acc-step2').hidden = true; q('.sc-acc-step1').hidden = false; send(); };
+      q('.sc-acc-back').onclick = () => { q('.sc-acc-step2').hidden = true; q('.sc-acc-step1').hidden = false; email.focus(); };
+      setTimeout(() => email.focus(), 50);
+    }
+
+    // signed in: what's synced, news on/off, sign out, delete account
+    async function openAccount() {
+      const a = await core(), s = a.session;
+      const m = modal(`
+        <div class="sc-modal-head"><div class="sc-modal-title">Your account</div><button type="button" class="sc-modal-x" data-close aria-label="Close">✕</button></div>
+        <p class="sc-modal-p">${esc(s.email)}</p>
+        <div class="sc-acc-box"><b>Synced</b>: prompter text size, speed, spacing and reading line, mirror and flip, pedal keys, voice scroll, shooting assistant, grid, camera start delay, your own app icon.<span>Not synced: recordings, scripts, and which mic, camera and folder you use (they're different on every Mac).</span></div>
+        <label class="sc-acc-news"><input type="checkbox" class="sc-acc-newsbox"${s.news ? ' checked' : ''}> Send me Space Cam news (a few emails a year)</label>
+        <div class="sc-modal-row"><button type="button" class="btn ghost danger-text sc-acc-del">Delete account</button><button type="button" class="btn ghost sc-acc-out">Sign out</button></div>`);
+      const q = c => m.wrap.querySelector(c);
+      q('.sc-acc-newsbox').onchange = e => a.setNews(e.target.checked).catch(x => { e.target.checked = !e.target.checked; toast(x.message); });
+      q('.sc-acc-out').onclick = async () => { await a.signOut(); m.close(); renderRow(); toast('Signed out. Your settings stay on this Mac.'); };
+      q('.sc-acc-del').onclick = async () => {
+        if (!(await window.spaceCamConfirm('Delete your account?', `${s.email} and the settings saved with it are deleted from the server. Settings on this Mac stay. This can't be undone.`, 'Delete account'))) return;
+        try { await a.deleteAccount(); m.close(); renderRow(); toast('Account deleted.'); } catch (x) { toast(x.message); }
+      };
+    }
+
+    row.onclick = () => (A?.signedIn ? openAccount() : openSignIn());
+    core().then(a => {
+      renderRow();
+      let reloaded = false; try { reloaded = sessionStorage.getItem('spaceCamPrefsReload') === '1'; sessionStorage.removeItem('spaceCamPrefsReload'); } catch {}
+      if (a.signedIn) a.refresh().then(r => { renderRow(); if (r.changed && !reloaded) reloadForPrefs(); }).catch(() => {});
+      // send changed settings now and then, and when the window is hidden or closed
+      setInterval(() => a.push().catch(() => {}), 60e3);
+      addEventListener('visibilitychange', () => { if (document.hidden) a.push().catch(() => {}); });
+      // Mac app, first launch: welcome + optional sign-up
+      if (window.spaceCamApp && !a.signedIn && !store.get('accountAsked', false)) setTimeout(() => openSignIn({ welcome: true }), 600);
+    }).catch(() => renderRow());
+    renderRow();
   }
   // Shared confirm popup (also used by the prompter's script delete): resolves true on the red button, false otherwise
   window.spaceCamConfirm = (title, text, okLabel = 'Delete') => new Promise(resolve => {
@@ -2766,6 +2871,50 @@ function init() {
     for (const t of takes.filter(t => (t.audio === 'browser' || t.video === 'browser') && !t.recovered && !t.saving)) await saveTake(t);
   }
 
+  // ---- Space for recordings: how much fits, and one click to clear takes left in Chrome's storage ----
+  // Every take is written into Chrome's storage on this Mac first (crash-safe), even when the folder is on a card.
+  // bytes a second: Mac-camera video at its real bitrate (what WebcamCore uses), or the camera's current picture before recording
+  const vidBps = () => (web.recording && web.bytesPerSec) || (() => { const vs = web.stream?.getVideoTracks()[0]?.getSettings() || {}; return (Math.min(50e6, Math.max(8e6, (vs.width || 1920) * (vs.height || 1080) * (vs.frameRate || 30) * 0.2)) + 192_000) / 8; })();
+  const audioBps = () => audio.sampleRate * audio.channels * 3;
+  const storageFree = async () => { const { quota = 0, usage = 0 } = await navigator.storage.estimate(); return Math.max(0, quota - usage); };
+  const gb = b => b < 1e9 ? Math.max(1, Math.round(b / 1e6)) + ' MB' : (b / 1e9).toFixed(b < 10e9 ? 1 : 0) + ' GB';
+  async function renderSpace() {
+    const el = $('scSpaceTxt'); if (!el) return;
+    try {
+      const free = await storageFree();
+      const mins = Math.floor(free * 0.95 / vidBps() / 60);
+      el.textContent = `Room for about ${mins > 600 ? '10+ h' : mins >= 120 ? Math.floor(mins / 60) + ' h' : mins + ' min'} of video`;
+      el.classList.toggle('low', mins < 10);
+    } catch { el.textContent = ''; }
+  }
+  renderSpace(); setInterval(() => { if (!take) renderSpace(); }, 60_000);
+  async function freeUpSpace() {
+    if (take || takes.some(t => t.saving)) return toast('Wait until the take has stopped and saved.', 'error');
+    const [af, vf] = await Promise.all([AudioCore.supported ? audio.listStored().catch(() => []) : [], WebcamCore.supported ? web.listStored().catch(() => []) : []]);
+    const files = [...af.map(f => ({ ...f, kind: 'audio' })), ...vf.map(f => ({ ...f, kind: 'video' }))];
+    const bytes = files.reduce((n, f) => n + (f.size || 0), 0);
+    if (!files.length) {
+      const free = await storageFree().catch(() => 0);
+      return toast(`Nothing to clear: no takes are kept in Chrome. ${gb(free)} is free for recording. For more, free space on the Mac (empty the Trash, delete big files).`);
+    }
+    const n = files.length;
+    const m = modal(`
+      <div class="sc-modal-head"><div class="sc-modal-title">Free up space</div><button type="button" class="sc-modal-x" data-close aria-label="Close">✕</button></div>
+      <p class="sc-modal-p">${n} file${n > 1 ? 's' : ''} (${gb(bytes)}) ${n > 1 ? 'are' : 'is'} still kept in Chrome's storage on this Mac: takes that haven't been saved to the folder yet. Save them first if you need them. Deleting removes them for good.</p>
+      <div class="sc-modal-row"><button type="button" class="btn ghost sc-fu-save">Save all to folder</button><button type="button" class="btn ghost danger-text sc-fu-del">Delete ${gb(bytes)}</button></div>`);
+    m.wrap.querySelector('.sc-fu-save').onclick = () => { m.close(); ui.saveAll.click(); };
+    m.wrap.querySelector('.sc-fu-del').onclick = async () => {
+      m.close();
+      for (const f of files) { try { await (f.kind === 'audio' ? audio : web).deleteStored(f.name); } catch {} }
+      const gone = new Set(files.map(f => f.name));
+      takes.forEach(t => { if (t.name && gone.has(t.name) && (t.audio === 'browser' || t.audio === 'kept')) t.audio = 'none'; if (t.videoName && gone.has(t.videoName) && (t.video === 'browser' || t.video === 'kept')) t.video = 'none'; });
+      takes = takes.filter(t => !(t.recovered && t.audio === 'none' && (!t.videoName || t.video === 'none')));
+      saveTakes(); renderTakes(); renderSpace();
+      toast(`Freed ${gb(bytes)}.`);
+    };
+  }
+  $('scFreeUp').onclick = freeUpSpace;
+
   // Takes left in browser storage by a crash or an unsaved session
   if (AudioCore.supported) audio.listStored().then(files => {
     const known = new Set(takes.map(t => t.name));
@@ -2992,6 +3141,12 @@ function init() {
       if (!ok) return;
       sessionStorage.setItem('spaceCam.noMicOk', '1'); // asked once per session
     }
+    // Less than one minute of room in browser storage: don't start (the take would break within seconds).
+    // Checked before a take number is used, so a refused start doesn't skip a Take_N.
+    try {
+      const need = ((vidOk ? vidBps() : 0) + (micOk ? audioBps() : 0)) * 60;
+      if (need) { const free = await storageFree(); if (free < need) return stopWarning('Not enough space to record', `Chrome has room for less than a minute of recording (${gb(free)} left for Space Cam). Takes are written on this Mac first, even when the folder is on a card. Click Free up space at the bottom left, or free space on the Mac, then try again.`); }
+    } catch {}
     closeSaved();
     const started = new Date(), no = nextNo(), label = `Take_${no}`;
     let base = label;
@@ -3075,13 +3230,13 @@ function init() {
       bps += ab;
       lim.push({ sec: Math.floor((2 ** 32 - 1 - 44) / ab), why: 'an audio file can’t grow past 4 GB' });
     }
-    if (t.video === 'recording') bps += (12_000_000 + 192_000) / 8;
+    if (t.video === 'recording') bps += vidBps();
+    t.bps = bps;
     if (bps) {
       try {
         const { quota = 0, usage = 0 } = await navigator.storage.estimate();
-        const sec = Math.floor(((quota - usage) * 0.9) / bps);
-        if (sec < 120) toast(`Browser storage is almost full — only about ${Math.max(0, Math.floor(sec / 60))} min of recording fits.`, 'error');
-        lim.push({ sec: Math.max(10, sec), why: 'the browser’s storage was almost full' });
+        const sec = Math.floor(((quota - usage) * 0.95) / bps);
+        lim.push({ sec: Math.max(10, sec), why: 'this Mac’s space for recordings ran out', space: true });
       } catch {}
     }
     return lim.sort((x, y) => x.sec - y.sec)[0] || null;
@@ -3133,6 +3288,7 @@ function init() {
   // a part that stops on its own (unplugged, blocked, crashed) stops the rest
   audio.addEventListener('state', () => { if (take && take.audio === 'recording' && audio.state !== 'recording' && !stopping) stopTogether('the microphone stopped (unplugged or blocked)'); });
   web.addEventListener('state', () => { if (take && take.video === 'recording' && !web.recording && !stopping) stopTogether('the Mac camera stopped'); });
+  web.addEventListener('full', () => { if (take && take.video === 'recording' && !stopping) stopTogether('this Mac’s space for recordings ran out (everything up to now is kept)'); });
   cam.addEventListener('state', e => { if (take && take.camera && e.detail.state === 'disconnected' && !stopping) stopTogether('the USB camera disconnected'); });
 
   function tick() {
@@ -3144,8 +3300,20 @@ function init() {
       } catch {}
     }
     const s = Math.floor((Date.now() - take.startedAt) / 1000), lim = take.limit;
+    // Free space can shrink while recording (other apps, Chrome's own share): re-check every 10 s.
+    if (take.bps && s && s % 10 === 0 && take.spaceAt !== s) {
+      take.spaceAt = s; const t0 = take;
+      storageFree().then(free => {
+        if (take !== t0) return;
+        const left = Math.floor(free * 0.95 / t0.bps), end = s + Math.max(10, left);
+        const other = t0.limit && !t0.limit.space ? t0.limit : t0.otherLimit; // the camera's 29:59 / WAV 4 GB limit stays
+        if (t0.limit && !t0.limit.space) t0.otherLimit = t0.limit;
+        t0.limit = other && other.sec <= end ? other : { sec: end, why: 'this Mac’s space for recordings ran out', space: true };
+        if (left < 60 && !t0.spaceWarned) { t0.spaceWarned = true; toast('About one minute of space left — the take will stop and save by itself.', 'error'); }
+      }).catch(() => {});
+    }
     if (lim && s >= lim.sec) { if (take.camera && /29:59/.test(lim.why)) cam.markStoppedByCamera(); stopTogether(lim.why); return; }
-    if (lim && s === lim.sec - 60) toast(`One minute left: ${lim.why}.`, 'error');
+    if (lim && !lim.space && s === lim.sec - 60) toast(`One minute left: ${lim.why}.`, 'error');
     renderRec();
   }
 

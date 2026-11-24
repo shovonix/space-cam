@@ -89,6 +89,8 @@ export class WebcamCore extends EventTarget {
     if (!fmt) { this.#fail('Chrome can’t record video here.'); return null; }
     // bitrate follows the picture: 1080p30 ≈ 12 Mbps (as before), 4K25 ≈ 41 Mbps
     const vbps = Math.round(Math.min(50e6, Math.max(8e6, px * fps * 0.2)));
+    this.bytesPerSec = (vbps + (audioTrack ? 192_000 : 0)) / 8; // what this take writes to browser storage each second
+    this.full = false;
     const name = `${baseName}.${fmt.ext}`;
     try { await this.#ask('open', { name }); } catch { return null; }
     const tracks = [...this.stream.getVideoTracks()];
@@ -97,7 +99,7 @@ export class WebcamCore extends EventTarget {
     const rec = new MediaRecorder(new MediaStream(tracks), { mimeType: fmt.mime, videoBitsPerSecond: vbps, audioBitsPerSecond: 192_000 });
     this.#writes = Promise.resolve();
     rec.ondataavailable = e => {
-      if (!e.data?.size) return;
+      if (!e.data?.size || this.full) return;
       // keep chunks in order: each write waits for the one before
       this.#writes = this.#writes.then(() => e.data.arrayBuffer()).then(buf => this.#worker.postMessage({ cmd: 'chunk', buf }, [buf]));
     };
@@ -201,6 +203,11 @@ export class WebcamCore extends EventTarget {
     this.#worker = new Worker(new URL('./video-writer.worker.js' + new URL(import.meta.url).search, import.meta.url)); // same ?v= as this file
     this.#worker.onmessage = e => {
       const m = e.data;
+      // No room left on the Mac (or Chrome's share of it): say it once and stop the take; what's written so far is kept.
+      if (m.ev === 'error' && m.cmd === 'chunk') {
+        if (!this.full && this.recording) { this.full = true; this.#emit('full', { message: m.message }); }
+        return;
+      }
       if (m.ev === 'error') this.#fail(`Video file error (${m.cmd}): ${m.message}`);
       const key = m.ev === 'error' ? m.cmd : ({ opened: 'open', closed: 'close', list: 'list', deleted: 'delete' })[m.ev];
       const p = this.#pending.get(key);

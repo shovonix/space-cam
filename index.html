@@ -1,7 +1,7 @@
 <meta charset="UTF-8">
 <script>/* Space Cam: a hard reload (Cmd+Shift+R) skips the service worker, so there is no controller. Remember it: that reload starts disconnected. */try{var nv=performance.getEntriesByType('navigation')[0];if(nv&&nv.type==='reload'&&navigator.serviceWorker&&!navigator.serviceWorker.controller)sessionStorage.setItem('spaceCamHardReload','1');}catch(e){}</script>
 <script>window.coi = { coepCredentialless: () => true };</script>
-<script>/* Space Cam, localhost only: ?fresh = see Voice scroll and the Shooting assistant like a first-time visitor (off, not tried yet). Scripts, takes and other settings stay. */try{if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)&&/[?&]fresh\b/.test(location.search)){['voiceOn','voiceEngine','assistOn','assistLight','assistFrame','triedVoice','triedAssist','triedLight','triedFrame'].forEach(function(k){localStorage.removeItem('spaceCam.'+k);});history.replaceState(null,'',location.pathname+location.hash);}}catch(e){}</script>
+<script>/* Space Cam, localhost only: ?fresh = see Voice scroll and the Shooting assistant like a first-time visitor (off, not tried yet). Scripts, takes and other settings stay. */try{if(/^(localhost|127\.0\.0\.1)$/.test(location.hostname)&&/[?&]fresh\b/.test(location.search)){['voiceOn','voiceEngine','assistOn','assistLight','assistFrame','triedVoice','triedAssist','triedLight','triedFrame','accountAsked','account','accountPushed'].forEach(function(k){localStorage.removeItem('spaceCam.'+k);});history.replaceState(null,'',location.pathname+location.hash);}}catch(e){}</script>
 <script>
 /* Space Cam: put the side panels in their saved state before the first paint (no open-then-close flash on reload),
    with no slide animation until the page is ready. studio.js takes over and removes these classes. */
@@ -32,7 +32,7 @@ html.scp-r #stage{right:0!important}
 </style>
 <script src="coi-serviceworker.js"></script>
 <!-- Space Cam styles in the head: nothing paints unstyled on reload (keep its ?v= the same as studio.js at the bottom) -->
-<link rel="stylesheet" href="studio.css?v=2026-11-17h">
+<link rel="stylesheet" href="studio.css?v=2026-11-24">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#0A0A0B">
 <meta name="mobile-web-app-capable" content="yes">
@@ -743,7 +743,7 @@ body.touch #screen-note{order:5;margin-top:12px;padding:10px 12px;font-size:12px
 (function(){
   if(/^#stage/.test(location.hash)) return;
   var t=null; try{ t=JSON.parse(localStorage.getItem('spaceCam.theme')||'null'); }catch(e){}
-  if(t==='light') document.documentElement.setAttribute('data-theme','light');
+  if(t==='light' && !window.spaceCamApp) document.documentElement.setAttribute('data-theme','light'); // the Mac app is dark only
   var L='html[data-theme="light"]';
   var CAMBG='body[data-cv="bg"].sc-cam-bg #stage', NOCAM=':not('+CAMBG+'):not('+CAMBG+' *)';
   var COLOR=/#([0-9a-f]{3,8})\b|rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)/gi;
@@ -858,8 +858,12 @@ body.touch #screen-note{order:5;margin-top:12px;padding:10px 12px;font-size:12px
 <!-- What's new: edit before every deploy (see CLAUDE.md). Shown in the update notice and once after the reload. Plain words, one line each. -->
 <script type="application/json" id="sc-changes">
 {
+  "added": [
+    "Under Save location: how many minutes of video still fit, and a Free up space button that clears takes still kept in Chrome."
+  ],
   "fixed": [
-    "First time: the camera switch now turns on your Mac's built-in camera. A USB camera is added from the camera list (Add USB camera…), and from then on it's remembered."
+    "Mac camera takes no longer fail with \"No space available\": Record only refuses when less than a minute fits, and a take stops and saves by itself before space runs out.",
+    "The space check now uses the real 4K bitrate, so it warns in time."
   ]
 }
 </script>
@@ -5632,7 +5636,7 @@ var qrcode = function() {
   });
 
   // ---- Build/version indicator (control window top bar) ----
-  var APP_VERSION = 'v1.0.2 beta'; // bump with each deploy (v1.0 beta, then v1.0.1 beta … until the public v1.0): shows in the logo chip, and open copies get the "new version" toast
+  var APP_VERSION = 'v1.0.3 beta'; // bump with each deploy (v1.0 beta, then v1.0.1 beta … until the public v1.0): shows in the logo chip, and open copies get the "new version" toast
   if(buildMeta && !isStageWindow){
     buildMeta.textContent = APP_VERSION;
     // the version lives on the bottom line now, beside the copyright: "Space Cam v1.8.1 © shovonix"
@@ -5973,7 +5977,10 @@ var qrcode = function() {
     var dlRow = document.createElement('div'); dlRow.className = 'vs-dl';
     dlRow.innerHTML = '<button type="button" class="btn vs-dl-btn" data-help="Downloads the offline speech engine and English voice model: 41 MB, once. It stays in this browser, works without internet, and nothing you say leaves your Mac.">Download offline voice · 41 MB</button><span class="vs-dl-bar" hidden><i></i></span><span class="vs-dl-note"></span><span class="vs-dl-what">Vosk English speech model (small) + engine. Works offline.</span>';
     if(sec){ sec.insertBefore(engRow, accRow); sec.insertBefore(dlRow, statusEl || null); }
-    var engSel = engRow.querySelector('select'); engSel.value = engine;
+    var engSel = engRow.querySelector('select');
+    // Mac app (Electron): Chrome's Google speech service isn't there, so only the offline engine is offered
+    if(window.spaceCamApp){ var gOpt = engSel.querySelector('option[value="google"]'); if(gOpt) gOpt.remove(); engine = 'local'; }
+    engSel.value = engine;
     var dlBtn = dlRow.querySelector('.vs-dl-btn'), dlBar = dlRow.querySelector('.vs-dl-bar'), dlFill = dlBar.querySelector('i'), dlNote = dlRow.querySelector('.vs-dl-note');
     engRow.hidden = true; dlRow.hidden = true; setTimeout(function(){ renderEngine(); }, 0);
     var MODEL_URL = new URL('models/vosk-model-small-en-us-0.15.tar.gz', location.href).href, MODEL_CACHE = 'spacecam-voice-v1';
@@ -6254,4 +6261,4 @@ window.claude.hot.snapshot(function(){ return { state: state }; });
 </script>
 <!-- Bump ?v= on every deploy so browsers load the new files instead of cached ones.
      studio.js passes the same ?v= on to every file it loads (engines, workers). -->
-<script type="module" src="studio.js?v=2026-11-17h"></script>
+<script type="module" src="studio.js?v=2026-11-24"></script>

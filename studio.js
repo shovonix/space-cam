@@ -2883,11 +2883,11 @@ function init() {
     try {
       const free = await storageFree();
       const mins = Math.floor(free * 0.95 / vidBps() / 60);
-      el.textContent = `Room for about ${mins > 600 ? '10+ h' : mins >= 120 ? Math.floor(mins / 60) + ' h' : mins + ' min'} of video`;
+      el.textContent = `Room for about ${mins > 600 ? '10+ h' : mins >= 120 ? Math.floor(mins / 60) + ' h ' + (mins % 60) + ' min' : mins + ' min'} of video (${gb(free)})`;
       el.classList.toggle('low', mins < 10);
     } catch { el.textContent = ''; }
   }
-  renderSpace(); setInterval(() => { if (!take) renderSpace(); }, 60_000);
+  renderSpace(); setInterval(renderSpace, 10_000); // every 10 s, recording or not: the number counts down while a take records
   async function freeUpSpace() {
     if (take || takes.some(t => t.saving)) return toast('Wait until the take has stopped and saved.', 'error');
     const [af, vf] = await Promise.all([AudioCore.supported ? audio.listStored().catch(() => []) : [], WebcamCore.supported ? web.listStored().catch(() => []) : []]);

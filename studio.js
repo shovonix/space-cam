@@ -383,7 +383,6 @@ function init() {
       <div class="sc-folder-line">
         <button type="button" class="sc-folder-pill" id="scFolderRow" title="Where takes are saved">${'<svg viewBox="0 0 24 24"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>'}<b id="scFolderName">Downloads</b></button>
       </div>
-      <div class="sc-space-line"><span id="scSpaceTxt" data-help="Takes are written on this Mac first, so a crash can't lose them. Chrome gives Space Cam about 10 GB for that. With a folder chosen, Mac-camera video moves there in 1 GB pieces while it records, so long takes only need room in the folder."></span><button type="button" class="sc-link" id="scFreeUp">Free up space</button></div>
     </div>
     <div class="sec sc-sec">
       <div class="sec-title"><span>Bluetooth device</span><span class="sc-status" id="scCardPedalState">Off</span></div>
@@ -2961,47 +2960,8 @@ function init() {
   const storageFree = async () => { const { quota = 0, usage = 0 } = await navigator.storage.estimate(); return Math.max(0, quota - usage); };
   const gb = b => b < 1e9 ? Math.max(1, Math.round(b / 1e6)) + ' MB' : (b / 1e9).toFixed(b < 10e9 ? 1 : 0) + ' GB';
   const PIECES_RESERVE = 2.3e9; // browser storage a take needs when its video goes to the folder piece by piece
-  async function renderSpace() {
-    const el = $('scSpaceTxt'); if (!el) return;
-    try {
-      const free = await storageFree();
-      if (folder && await folderOk(false)) { // long takes are fine: the video goes to the folder while recording
-        el.textContent = `Video records into the folder (${gb(free)} free in Chrome)`;
-        el.classList.toggle('low', free < PIECES_RESERVE);
-        return;
-      }
-      const mins = Math.floor(free * 0.95 / vidBps() / 60);
-      el.textContent = `Room for about ${mins > 600 ? '10+ h' : mins >= 120 ? Math.floor(mins / 60) + ' h ' + (mins % 60) + ' min' : mins + ' min'} of video (${gb(free)})`;
-      el.classList.toggle('low', mins < 10);
-    } catch { el.textContent = ''; }
-  }
-  renderSpace(); setInterval(renderSpace, 10_000); // every 10 s, recording or not: the number counts down while a take records
-  async function freeUpSpace() {
-    if (take || takes.some(t => t.saving)) return toast('Wait until the take has stopped and saved.', 'error');
-    const [af, vf] = await Promise.all([AudioCore.supported ? audio.listStored().catch(() => []) : [], WebcamCore.supported ? web.listStored().catch(() => []) : []]);
-    const files = [...af.map(f => ({ ...f, kind: 'audio' })), ...vf.map(f => ({ ...f, kind: 'video' }))];
-    const bytes = files.reduce((n, f) => n + (f.size || 0), 0);
-    if (!files.length) {
-      const free = await storageFree().catch(() => 0);
-      return toast(`Nothing to clear: no takes are kept in Chrome. ${gb(free)} is free for recording. For more, free space on the Mac (empty the Trash, delete big files).`);
-    }
-    const n = files.length;
-    const m = modal(`
-      <div class="sc-modal-head"><div class="sc-modal-title">Free up space</div><button type="button" class="sc-modal-x" data-close aria-label="Close">✕</button></div>
-      <p class="sc-modal-p">${n} file${n > 1 ? 's' : ''} (${gb(bytes)}) ${n > 1 ? 'are' : 'is'} still kept in Chrome's storage on this Mac: takes that haven't been saved to the folder yet. Save them first if you need them. Deleting removes them for good.</p>
-      <div class="sc-modal-row"><button type="button" class="btn ghost sc-fu-save">Save all to folder</button><button type="button" class="btn ghost danger-text sc-fu-del">Delete ${gb(bytes)}</button></div>`);
-    m.wrap.querySelector('.sc-fu-save').onclick = () => { m.close(); ui.saveAll.click(); };
-    m.wrap.querySelector('.sc-fu-del').onclick = async () => {
-      m.close();
-      for (const f of files) { try { await (f.kind === 'audio' ? audio : web).deleteStored(f.name); } catch {} }
-      const gone = new Set(files.map(f => f.name));
-      takes.forEach(t => { if (t.name && gone.has(t.name) && (t.audio === 'browser' || t.audio === 'kept')) t.audio = 'none'; if (t.videoName && gone.has(t.videoName) && (t.video === 'browser' || t.video === 'kept')) t.video = 'none'; });
-      takes = takes.filter(t => !(t.recovered && t.audio === 'none' && (!t.videoName || t.video === 'none')));
-      saveTakes(); renderTakes(); renderSpace();
-      toast(`Freed ${gb(bytes)}.`);
-    };
-  }
-  $('scFreeUp').onclick = freeUpSpace;
+  // The space line and Free up space under Save location were removed (Shovon, 24 Nov 2026).
+  // The space check at Record and the low-space warnings while recording stay.
 
   // Takes left in browser storage by a crash or an unsaved session
   if (AudioCore.supported) audio.listStored().then(files => {
@@ -3237,7 +3197,7 @@ function init() {
     // Checked before a take number is used, so a refused start doesn't skip a Take_N.
     try {
       const need = (vidOk ? (web.partsDir ? PIECES_RESERVE / 60 : vidBps()) : 0) * 60 + (micOk ? audioBps() * 60 : 0);
-      if (need) { const free = await storageFree(); if (free < need) return stopWarning('Not enough space to record', `Chrome has room for less than a minute of recording (${gb(free)} left for Space Cam). Takes are written on this Mac first, even when the folder is on a card. Click Free up space at the bottom left, or free space on the Mac, then try again.`); }
+      if (need) { const free = await storageFree(); if (free < need) return stopWarning('Not enough space to record', `Chrome has room for less than a minute of recording (${gb(free)} left for Space Cam). Takes are written on this Mac first, even when the folder is on a card. Save or delete takes still waiting in Recordings, or free space on the Mac, then try again.`); }
     } catch {}
     closeSaved();
     const started = new Date(), no = nextNo(), label = `Take_${no}`;

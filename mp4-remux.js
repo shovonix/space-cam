@@ -7,6 +7,9 @@
 // [new ftyp][mdat header][slices of the original file's sample data …][new moov]. A sound offset (capture cards:
 // the HDMI picture is ~120 ms late) is kept as a standard edit list (an empty edit before the track starts).
 //
+// Sound timing is evened out too (evenSound): Chrome's AAC frames are clock-stamped, which left tiny holes (bumps)
+// in players that follow timestamps. A normal MP4 from an older save is accepted and rebuilt only for that.
+//
 //   import { defragmentMp4 } from './mp4-remux.js';
 //   const blob = await defragmentMp4(file, { audioShiftMs: 120 });   // throws if the file isn't what we expect
 
@@ -50,7 +53,7 @@ export async function defragmentMp4(file, { audioShiftMs = 0 } = {}) {
   }
   const moovB = top.find(b => b.type === 'moov');
   if (!moovB) throw new Error('no moov');
-  if (!top.some(b => b.type === 'moof')) return file; // already a normal MP4
+  const fragmented = top.some(b => b.type === 'moof');
 
   // 2) the original moov: tracks, their timescales, handler, stsd; trex defaults
   const mv = new DataView(await file.slice(moovB.o, moovB.o + moovB.size).arrayBuffer()), mvBytes = new Uint8Array(mv.buffer);
@@ -69,8 +72,13 @@ export async function defragmentMp4(file, { audioShiftMs = 0 } = {}) {
     kids(mv, mi.o + mi.hdr, mi.o + mi.size, (t3, o3, s3) => { if (t3 !== 'stbl') tr.minfKeep.push(mvBytes.slice(o3, o3 + s3)); });
     const st = find(mv, mi.o + mi.hdr, mi.o + mi.size, 'stbl');
     const sd = find(mv, st.o + st.hdr, st.o + st.size, 'stsd'); tr.stsd = mvBytes.slice(sd.o, sd.o + sd.size);
+    if (!fragmented) readTables(mv, st, tr, find(mv, o + h, o + s, 'edts'), movieScale); // a normal MP4: its own index
     tracks.set(tr.id, tr);
   });
+  if (!fragmented) { // already a normal MP4: only rebuilt when its sound timing needs evening out (an older Space Cam save)
+    const snd = [...tracks.values()].find(t => t.handler === 'soun');
+    if (!snd || new Set(snd.samples.map(s => s.dur)).size <= 1) return file;
+  }
 
   // 3) every moof: where each run of samples sits in the file, with sizes, durations, flags, composition offsets
   for (let i = 0; i < top.length; i++) {
@@ -101,7 +109,7 @@ export async function defragmentMp4(file, { audioShiftMs = 0 } = {}) {
           // the frame lengths before them, so the last sample before a piece is stretched or shortened to meet it:
           // every sample keeps exactly the time it had in the original (checked packet by packet).
           if (decode != null) {
-            if (tr.samples.length && tr.time !== decode) { const last = tr.samples[tr.samples.length - 1]; last.dur = Math.max(1, last.dur + decode - tr.time); }
+            if (tr.handler !== 'soun' && tr.samples.length && tr.time !== decode) { const last = tr.samples[tr.samples.length - 1]; last.dur = Math.max(1, last.dur + decode - tr.time); }
             tr.time = decode; decode = null;
           }
           for (let k = 0; k < n; k++) {
@@ -120,6 +128,7 @@ export async function defragmentMp4(file, { audioShiftMs = 0 } = {}) {
   }
   const list = [...tracks.values()].filter(t => t.samples.length);
   if (!list.length) throw new Error('no samples');
+  list.forEach(evenSound);
 
   // 4) new layout: ftyp · mdat (all runs, in file order) · moov
   const ftyp = box('ftyp', enc.encode('isom'), u32s([0x200]), enc.encode('isomiso2avc1mp41'));
@@ -164,6 +173,49 @@ export async function defragmentMp4(file, { audioShiftMs = 0 } = {}) {
   for (const r of runs) parts.push(file.slice(r.c.at, r.c.at + r.c.bytes));
   parts.push(moov);
   return new Blob(parts, { type: 'video/mp4' });
+}
+
+// A normal MP4's own sample tables → the same samples/chunks lists the fragment reader makes (so older saves can be
+// rebuilt too). The start offset comes from an empty edit at the start of the edit list.
+function readTables(dv, st, tr, edts, movieScale) {
+  const box = t => find(dv, st.o + st.hdr, st.o + st.size, t), body = b => b.o + b.hdr + 4;
+  const stts = box('stts'), stsz = box('stsz'), stsc = box('stsc'), stco = box('stco') || box('co64'), stss = box('stss'), ctts = box('ctts');
+  const durs = []; { let p = body(stts); const n = dv.getUint32(p); p += 4; for (let i = 0; i < n; i++, p += 8) { const c = dv.getUint32(p), d = dv.getUint32(p + 4); for (let k = 0; k < c; k++) durs.push(d); } }
+  let p = body(stsz); const fixed = dv.getUint32(p), count = dv.getUint32(p + 4); p += 8;
+  const sizes = []; for (let i = 0; i < count; i++) sizes.push(fixed || dv.getUint32(p + i * 4));
+  const syncSet = stss ? (() => { const s = new Set(); let q = body(stss); const n = dv.getUint32(q); q += 4; for (let i = 0; i < n; i++) s.add(dv.getUint32(q + i * 4)); return s; })() : null;
+  const cts = []; if (ctts) { let q = body(ctts); const n = dv.getUint32(q); q += 4; for (let i = 0; i < n; i++, q += 8) { const c = dv.getUint32(q), o = dv.getInt32(q + 4); for (let k = 0; k < c; k++) cts.push(o); } }
+  const is64 = name4(dv, stco.o + 4) === 'co64'; let q = body(stco); const nChunks = dv.getUint32(q); q += 4;
+  const offs = []; for (let i = 0; i < nChunks; i++) offs.push(is64 ? Number(dv.getBigUint64(q + i * 8)) : dv.getUint32(q + i * 4));
+  const runs = []; { let r = body(stsc); const n = dv.getUint32(r); r += 4; for (let i = 0; i < n; i++, r += 12) runs.push([dv.getUint32(r), dv.getUint32(r + 4)]); }
+  let si = 0;
+  for (let c = 0; c < nChunks; c++) {
+    let per = runs[0][1]; for (const [first, n] of runs) if (c + 1 >= first) per = n;
+    const chunk = { at: offs[c], bytes: 0, n: per };
+    for (let k = 0; k < per && si < count; k++, si++) {
+      tr.samples.push({ dur: durs[si] ?? durs[durs.length - 1], size: sizes[si], sync: !syncSet || syncSet.has(si + 1), cts: cts[si] || 0 });
+      chunk.bytes += sizes[si];
+    }
+    tr.chunks.push(chunk);
+  }
+  tr.start = 0;
+  if (edts) { const el = find(dv, edts.o + edts.hdr, edts.o + edts.size, 'elst');
+    if (el) { const v = dv.getUint8(el.o + el.hdr), e = el.o + el.hdr + 8; // first entry: segment_duration, media_time
+      const segDur = v === 1 ? Number(dv.getBigUint64(e)) : dv.getUint32(e), mediaTime = v === 1 ? Number(dv.getBigInt64(e + 8)) : dv.getInt32(e + 4);
+      if (mediaTime === -1) tr.start = Math.round(segDur / movieScale * tr.scale); } }
+}
+
+// Sound frames back to back at their true length (27 Nov 2026). Chrome stamps AAC frames from the clock, not from
+// the sample count: most say 1023 samples (really 1024) and every few seconds one says ~1150 to catch up. Players
+// that follow timestamps (QuickTime, Premiere, Resolve) left a ~2.6 ms hole at each catch-up: a small bump in the
+// sound every ~4 s. The samples themselves are all there, so every frame gets its real length (1024 for AAC; the
+// nearest standard size otherwise). Total length changes by a few ms over minutes, so sync stays as it was.
+function evenSound(t) {
+  if (t.handler !== 'soun' || !t.samples.length) return;
+  const durs = t.samples.map(s => s.dur).sort((a, b) => a - b), mid = durs[durs.length >> 1];
+  const size = [1024, 960, 2048, 512, 480].reduce((b, c) => (Math.abs(c - mid) < Math.abs(b - mid) ? c : b), 1024);
+  if (Math.abs(size - mid) > 8) return; // not the frame sizes we know: leave the timing as recorded
+  t.samples.forEach(s => { s.dur = size; });
 }
 
 // duration field of mvhd / tkhd / mdhd (box bytes, version 0 or 1)

@@ -2708,6 +2708,14 @@ function init() {
             if (fh.move) { try { await fh.move(newName); } catch { await copyRename(r.dir, r.file, t.name, newName); } }
             else await copyRename(r.dir, r.file, t.name, newName);
             t.name = newName;
+            // the untouched original from Clean up voice follows the new name too (Take_7_original.mp3 → Intro_original.mp3)
+            if (t.origName) try {
+              const newO = origMp3Name(newName), oh = await r.dir.getFileHandle(t.origName);
+              if (!(await r.dir.getFileHandle(newO).then(() => true, () => false))) {
+                if (oh.move) await oh.move(newO); else await copyRename(r.dir, await oh.getFile(), t.origName, newO);
+                t.origName = newO;
+              }
+            } catch {} // the original keeps its old name if it can't be renamed; nothing is lost
           } catch (e) { { toast('Could not rename the file: ' + (e?.message || e), 'error'); return false; } }
         }
       }

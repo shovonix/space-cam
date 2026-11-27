@@ -519,29 +519,37 @@ function init() {
     { const mw = $('scMeterWrap'); if (mw) { const lv = row('Level'); lv.classList.add('sc-lvrow'); mw.before(lv); lv.append(mw); } } // level bar on its own labelled row, like the camera rows
     const sndBtns = ['scSndStart', 'scSndStop', 'scSndError'].map(id => $(id));
     soundSec.querySelector('.sec-title')?.remove(); soundSec.prepend(h(`<div class="sc-grp">Sounds</div>`), swList(...sndBtns));
+    // One "Notification sounds" switch turns the start beep, stop beep and error alarm on or off together (27 Nov 2026).
+    // The three separate switches stay in the page (hidden) and keep their own stored settings.
+    { const g = sndBtns[0]?.closest('.sc-swgrid'); g?.classList.add('sc-gone');
+      g?.before(swList(h(`<button type="button" class="tbtn" id="scSndAll" aria-pressed="true"><span data-help="A beep when recording starts and stops, and an alarm when something goes wrong (camera or mic disconnected, recording stopped on its own). Use headphones if you don't want the beeps in the recording.">Notification sounds</span></button>`))); }
+    // Mic settings button under the mic list (opens the Mic settings window, like Camera settings)
+    { const GEAR = $('scPrevSet')?.querySelector('svg')?.outerHTML || '';
+      const b = h(`<button type="button" class="btn sc-prev-set sc-mic-set" id="scMicSet" title="Big live wave, level and Polish for the voice">${GEAR}<span>Microphone settings</span></button>`);
+      const pick = $('scMic'); (pick.closest('.sc-pickrow') || pick).after(b); }
     // Clean up voice: switch · Noise removal · Background · Listen / Hear original · Polish (like Audition's
     // Essential Sound → Dialogue) · one-time download. Wired up next to the live wave (data-k = setting name).
     const cSl = (k, name, help, min = 0, max = 100) => `<div class="slider-group"><div class="slider-label"><span data-help="${help}">${name}</span><span class="sc-cv-val" data-v="${k}"></span></div><input type="range" data-k="${k}" min="${min}" max="${max}" step="5" aria-label="${name}"></div>`;
     const cSel = (k, opts) => { const s = h(`<select class="sc-select sc-clean-sel" data-k="${k}">${opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>`); return s; };
     audioSec.append(h(`<div class="sc-grp sc-grp-new sc-new-clean">Clean up voice <span class="sc-new">New</span></div>`),
       swList(h(`<button type="button" class="tbtn" id="scCleanSw" aria-pressed="false"><span data-help="Takes out room noise, hum and some echo, then polishes the voice (EQ, de-ess, dynamics, loudness), like Adobe Podcast and Audition, on this Mac. The recording stays untouched; this happens when the take is saved, and the original is kept next to it as Take_N_original.mp3.">Clean up voice</span></button>`)));
-    { const box = h(`<div class="sc-clean" id="scCleanBox" hidden>
-        ${cSl('noise', 'Noise removal', 'How much noise the model may take away. Too high can make a voice sound squeezed; 100% removes everything it can.')}
-        ${cSl('background', 'Background', 'Mixes some of the room back under your voice, like Adobe Podcast’s Background slider. A little (10–25%) keeps the voice natural and full; 0% is total silence between words.')}
+    { const box = h(`<div class="sc-clean sc-cset" id="scCleanBox" hidden>
+        <div class="sc-cgrid">${cSl('noise', 'Noise removal', 'How much noise the model may take away. Too high can make a voice sound squeezed; 100% removes everything it can.')}
+        ${cSl('background', 'Background', 'Mixes some of the room back under your voice, like Adobe Podcast’s Background slider. A little (10–25%) keeps the voice natural and full; 0% is total silence between words.')}</div>
         <div class="sc-clean-btns"><button type="button" class="btn sc-clean-listen" id="scCleanListen" aria-pressed="false" data-help="Hear the finished sound (cleanup + polish) in your headphones, to set the sliders before you record. Use headphones: through the speakers the mic hears itself.">Listen</button><button type="button" class="btn sc-clean-orig" id="scCleanOrig" aria-pressed="false" data-help="While listening: switch between the finished and the original sound to compare." disabled>Hear original</button></div>
-        <div class="sc-grp">Polish</div>
+        <div class="sc-polish sc-cset"><div class="sc-grp">Polish</div>
         <div class="sc-clean-sw"></div>
         <div class="sc-clean-rows"></div>
-        ${cSl('warmth', 'Warmth', 'Body of the voice around 220 Hz. Right = fuller, left = less boomy (good for a deep voice close to the mic).', -100, 100)}
+        <div class="sc-cgrid">${cSl('warmth', 'Warmth', 'Body of the voice around 220 Hz. Right = fuller, left = less boomy (good for a deep voice close to the mic).', -100, 100)}
         ${cSl('presence', 'Presence', 'Clarity around 3.5 kHz and a little air on top. Helps a voice cut through; too much sounds sharp.')}
         ${cSl('deess', 'De-ess', 'Softens sharp “s” and “sh” sounds, only while they happen.')}
-        ${cSl('dynamics', 'Dynamics', 'Evens out loud and quiet words (a gentle compressor that follows your speaking level). Higher = more even, more “radio”.')}
-        <button type="button" class="sc-link sc-clean-reset">Reset to default</button>
+        ${cSl('dynamics', 'Dynamics', 'Evens out loud and quiet words (a gentle compressor that follows your speaking level). Higher = more even, more “radio”.')}</div>
+        <button type="button" class="sc-link sc-clean-reset">Reset to default</button></div>
       </div>`);
       box.querySelector('.sc-clean-sw').append(swList(h(`<button type="button" class="tbtn" data-k="rumble" aria-pressed="true"><span data-help="Cuts everything below 80 Hz: desk knocks, traffic, air-con rumble. The voice isn't touched.">Reduce rumble</span></button>`)));
       box.querySelector('.sc-clean-rows').append(
         row('Hum', cSel('hum', [['0', 'Off'], ['50', '50 Hz'], ['60', '60 Hz']])),
-        row('Loudness', cSel('loudness', [['', 'Off'], ['-16', 'Podcast · −16 LUFS'], ['-14', 'YouTube · −14 LUFS']])));
+        row('Loudness', cSel('loudness', [['', 'Off'], ['-16', 'Podcast −16'], ['-14', 'YouTube −14']])));
       box.querySelector('.sc-clean-rows .sc-row .sc-lab').dataset.help = 'Mains hum from lights or cables: 50 Hz in Bangladesh, Europe and most of Asia; 60 Hz in the US.';
       box.querySelectorAll('.sc-clean-rows .sc-row .sc-lab')[1].dataset.help = 'Sets the saved take to a standard loudness, the same every time, with peaks kept under −1.5 dB. Podcast: −16 LUFS. YouTube: −14 LUFS.';
       audioSec.append(box); }
@@ -604,6 +612,7 @@ function init() {
         'Record start sound': '<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M17 15V8M14.5 10.5 17 8l2.5 2.5"/>',
         'Record stop sound': '<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M17 8v7M14.5 12.5 17 15l2.5-2.5"/>',
         'Error sound': '<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M17.5 7.5v5"/><circle cx="17.5" cy="16" r=".9" class="d"/>',
+        'Notification sounds': '<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/>',
         'Alert sounds': '<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M15.5 9.5a3.5 3.5 0 0 1 0 5M18.5 7a7.5 7.5 0 0 1 0 10"/>',
         'Voice scroll': '<rect x="9" y="3.5" width="6" height="10" rx="3"/><path d="M6 11a6 6 0 0 0 12 0M12 17v3.5"/>',
         'Camera on Stage': '<rect x="3" y="4" width="18" height="12" rx="2"/><circle cx="12" cy="9" r="2"/><path d="M8.8 16c.5-1.8 1.7-2.8 3.2-2.8s2.7 1 3.2 2.8M9 20h6"/>',
@@ -844,7 +853,9 @@ function init() {
 
   // Three sound switches (start, stop, error); turning one on plays its sound once so you know what it is
   const sndSwitches = [...soundSec.querySelectorAll('[data-snd]')];
-  const renderSoundBtn = () => sndSwitches.forEach(b => b.setAttribute('aria-pressed', String(sfxOn(b.dataset.snd))));
+  const sndAll = $('scSndAll'), sndAnyOn = () => sndSwitches.some(b => sfxOn(b.dataset.snd));
+  const renderSoundBtn = () => { sndSwitches.forEach(b => b.setAttribute('aria-pressed', String(sfxOn(b.dataset.snd)))); sndAll?.setAttribute('aria-pressed', String(sndAnyOn())); };
+  if (sndAll) sndAll.onclick = () => { const on = !sndAnyOn(); sndSwitches.forEach(b => store.set('snd_' + b.dataset.snd, on)); sfxLastErr = 0; renderSoundBtn(); if (on) sfx('start', true); };
   sndSwitches.forEach(b => b.onclick = () => { const k = b.dataset.snd, on = !sfxOn(k); store.set('snd_' + k, on); renderSoundBtn(); if (on) { if (k === 'error') sfxLastErr = 0; sfx(k, true); } });
   renderSoundBtn();
 
@@ -1415,6 +1426,7 @@ function init() {
     ui.db.textContent = peakHold <= -119 ? "−∞ dB" : `peak ${peakHold.toFixed(0)} dB`;
     ui.cDb.textContent = ui.db.textContent;
     ui.clip.classList.toggle('on', clip);
+    msLevel(pct, toPct(peakHold), ui.db.textContent, clip);
     if (vclean.running) rawClip = clip; // Clean up voice on: the wave draws the cleaned sound (see vclean 'level')
     else pushWave(e.detail.peakDb, clip, e.detail.rmsDb);
   });
@@ -1456,6 +1468,7 @@ function init() {
       waveClip[waveHead] = waveClipAcc;
       waveHead = (waveHead + 1) % WAVE_N;
     }
+    msPush(waveVal(waveAcc), waveClipAcc); // Mic settings' big wave scrolls all the time, not only while recording
     waveAcc = -120; waveClipAcc = 0;
     noiseHist[noiseHead] = waveRmsMin; noiseHead = (noiseHead + 1) % NOISE_N; noiseFilled = Math.min(NOISE_N, noiseFilled + 1); waveRmsMin = 0;
     if (noiseFilled >= 25) { const s = Array.from(noiseHist.subarray(0, noiseFilled)).sort((a, b) => a - b); noiseDb = s[Math.floor(s.length * 0.1)]; }
@@ -1508,19 +1521,21 @@ function init() {
   const cleanSet = () => ({ ...CLEAN_DEFAULTS, ...store.get('cleanSet', {}) }); // the sliders (voice-polish.js CLEAN_DEFAULTS)
   const cleanSw = $('scCleanSw'), cleanBox = $('scCleanBox'), cleanDl = document.querySelector('.sc-clean-dl');
   const listenBtn = $('scCleanListen'), origBtn = $('scCleanOrig');
+  const cleanQ = sel => document.querySelectorAll('.sc-cset ' + sel); // Clean up voice controls in the Mic tab + Polish in Mic settings
   const cleanVal = (k, v) => k === 'warmth' ? (v > 0 ? '+' : '') + v : v + '%';
   // put the stored values into every control (sliders, Rumble switch, Hum / Loudness lists)
   function showCleanSet() {
     const s = cleanSet();
-    cleanBox.querySelectorAll('input[data-k]').forEach(i => { i.value = s[i.dataset.k]; cleanBox.querySelector(`[data-v="${i.dataset.k}"]`).textContent = cleanVal(i.dataset.k, s[i.dataset.k]); });
-    cleanBox.querySelectorAll('select[data-k]').forEach(x => { x.value = s[x.dataset.k] == null ? '' : String(s[x.dataset.k]); });
-    cleanBox.querySelectorAll('button[data-k]').forEach(b => b.setAttribute('aria-pressed', String(!!s[b.dataset.k])));
+    cleanQ('input[data-k]').forEach(i => { i.value = s[i.dataset.k]; document.querySelector(`.sc-cset [data-v="${i.dataset.k}"]`).textContent = cleanVal(i.dataset.k, s[i.dataset.k]); });
+    cleanQ('select[data-k]').forEach(x => { x.value = s[x.dataset.k] == null ? '' : String(s[x.dataset.k]); });
+    cleanQ('button[data-k]').forEach(b => b.setAttribute('aria-pressed', String(!!s[b.dataset.k])));
   }
   const saveCleanSet = patch => { const s = { ...cleanSet(), ...patch }; store.set('cleanSet', s); vclean.setSettings(s); showCleanSet(); };
-  cleanBox.querySelectorAll('input[data-k]').forEach(i => i.oninput = () => saveCleanSet({ [i.dataset.k]: +i.value }));
-  cleanBox.querySelectorAll('select[data-k]').forEach(x => x.onchange = () => { x.blur(); saveCleanSet({ [x.dataset.k]: x.value === '' ? null : +x.value }); });
-  cleanBox.querySelectorAll('button[data-k]').forEach(b => b.onclick = () => saveCleanSet({ [b.dataset.k]: !cleanSet()[b.dataset.k] }));
-  cleanBox.querySelector('.sc-clean-reset').onclick = () => { store.set('cleanSet', {}); saveCleanSet({}); toast('Clean up voice is back to its default settings.', 'ok'); };
+  cleanQ('input[data-k]').forEach(i => i.oninput = () => saveCleanSet({ [i.dataset.k]: +i.value }));
+  cleanQ('select[data-k]').forEach(x => x.onchange = () => { x.blur(); saveCleanSet({ [x.dataset.k]: x.value === '' ? null : +x.value }); });
+  cleanQ('button[data-k]').forEach(b => b.onclick = () => saveCleanSet({ [b.dataset.k]: !cleanSet()[b.dataset.k] }));
+  { const rb = document.querySelector('.sc-polish .sc-clean-reset'); // quiet reset: no message, the link says "Done ✓" for a moment
+    rb.onclick = () => { store.set('cleanSet', {}); saveCleanSet({}); rb.textContent = 'Done ✓'; clearTimeout(rb._t); rb._t = setTimeout(() => { rb.textContent = 'Reset to default'; }, 1200); }; }
   showCleanSet();
   const resetNoise = () => { noiseHist.fill(-120); noiseFilled = 0; noiseDb = null; };
   let cleanChain = Promise.resolve();
@@ -1529,6 +1544,10 @@ function init() {
     const ready = await VoiceClean.ready(), on = cleanOn(), micOn = audio.state !== 'off' && !!audio.stream;
     cleanSw.setAttribute('aria-pressed', String(on));
     cleanBox.hidden = !on || !ready; cleanDl.hidden = !on || ready;
+    { const pol = document.querySelector('.sc-polish'), off = document.querySelector('.sc-ms-off');
+      if (pol && off) { pol.hidden = !on || !ready; off.hidden = on && ready;
+        off.querySelector('p').textContent = on && !ready ? 'Download Clean up voice in the Mic tab first (34 MB, once).' : 'Polish (rumble, hum, EQ, de-ess, dynamics, loudness) works together with Clean up voice.';
+        off.querySelector('.sc-ms-on').hidden = on; } }
     const want = on && ready && micOn;
     if (!want) listenOn = origOn = false;
     if (vclean.running && (!want || vclean.stream !== audio.stream)) { await vclean.stop(); resetNoise(); }
@@ -1538,9 +1557,15 @@ function init() {
     }
     vclean.setBypass(origOn);
     listenBtn.disabled = false; origBtn.disabled = !listenOn; // Listen with the mic off turns the mic on first
-    listenBtn.setAttribute('aria-pressed', String(listenOn)); listenBtn.textContent = listenOn ? 'Stop listening' : 'Listen';
-    origBtn.setAttribute('aria-pressed', String(origOn)); origBtn.textContent = origOn ? 'Hear finished' : 'Hear original';
+    const HP = '<svg viewBox="0 0 24 24" class="sc-ic" aria-hidden="true"><path d="M4 15v-3a8 8 0 0 1 16 0v3"/><rect x="3.5" y="14" width="4" height="6" rx="1.5"/><rect x="16.5" y="14" width="4" height="6" rx="1.5"/></svg>';
+    const AB = '<svg viewBox="0 0 24 24" class="sc-ic" aria-hidden="true"><path d="M7 7h11l-3-3M17 17H6l3 3"/></svg>';
+    listenBtn.setAttribute('aria-pressed', String(listenOn)); listenBtn.innerHTML = HP + `<span>${listenOn ? 'Stop listening' : 'Listen'}</span>`;
+    origBtn.setAttribute('aria-pressed', String(origOn)); origBtn.innerHTML = AB + `<span>${origOn ? 'Hear finished' : 'Hear original'}</span>`;
     listenBtn.title = vclean.running ? '' : 'Turns the mic on and plays the finished sound in your headphones';
+    try { if (micSetOn()) msInfo(); } catch {} // the window's label ("Original sound" / "Cleaned + polished") at once
+    { const box = document.querySelector('.sc-ms-btns'); // the same pair in Microphone settings
+      if (box) { box.hidden = !on || !ready;
+        [[listenBtn, '.sc-ms-listen'], [origBtn, '.sc-ms-orig']].forEach(([src, sel]) => { const b = box.querySelector(sel); b.innerHTML = src.innerHTML; b.disabled = src.disabled; b.setAttribute('aria-pressed', src.getAttribute('aria-pressed')); }); } }
     renderWave();
   }
   cleanSw.onclick = () => { store.set('cleanVoice', !cleanOn()); renderClean(); };
@@ -1569,6 +1594,89 @@ function init() {
     catch (e) { toast('Could not clean up the voice, so it was saved without it: ' + (e?.message || e), 'error'); return null; }
   }
   const origMp3Name = n => n.replace(/\.mp3$/i, '') + '_original.mp3';
+
+  // ---- Mic settings: a window over the script, like Camera settings (27 Nov 2026). Left: a big live wave, the level
+  // meter and what the mic is; right: Clean up voice + Polish (moved here from the Mic tab). Set the sound, press
+  // Back (or Esc), record. Leaves by itself when a take starts.
+  const micSet = h(`<div class="sc-micset" hidden role="dialog" aria-label="Microphone settings">
+      <div class="sc-ms-head"><div class="sc-ms-title"><b>Microphone settings</b><span class="sc-ms-dev"></span></div>
+        <span class="sc-modal-hint"><kbd>Esc</kbd> back</span><button type="button" class="sc-cs-save sc-ms-back" title="Back to the prompter (Esc)">${BACK_IC}<span>Back</span></button></div>
+      <div class="sc-ms-body">
+        <div class="sc-ms-left">
+          <div class="sc-ms-wave"><canvas></canvas><span class="sc-ms-tag"></span></div>
+          <div class="sc-clean-btns sc-ms-btns"><button type="button" class="btn sc-ms-listen" data-help="Hear the finished sound (cleanup + polish) in your headphones. Use headphones: through the speakers the mic hears itself."></button><button type="button" class="btn sc-ms-orig" data-help="While listening: switch between the finished and the original sound to compare."></button></div>
+          <div class="sc-ms-meter"><div class="sc-ms-bar"><i></i><b></b></div><div class="sc-ms-read"><span class="sc-ms-db">Mic off</span><span class="sc-ms-clip">Too loud</span></div>
+            <div class="sc-ms-scale"><span>−50</span><span>−24</span><span>−12</span><span>−6</span><span>0 dB</span></div></div>
+          <div class="sc-ms-info"></div>
+          <p class="sc-ms-tip">Talk at your normal recording volume. The bar should sit around −12 dB, with peaks never reaching 0. Turn the mic's gain up or down to get there, then set Clean up voice by ear with Listen.</p>
+        </div>
+        <div class="sc-ms-right"></div>
+      </div>
+    </div>`);
+  $('stage').append(micSet);
+  // Clean up voice itself (switch, Noise removal, Background, Listen) stays in the Mic tab; Polish lives in here
+  const msPolishOff = h(`<div class="sc-ms-off"><b>Polish</b><p>Polish (rumble, hum, EQ, de-ess, dynamics, loudness) works together with Clean up voice.</p><button type="button" class="btn sc-ms-on">Turn on Clean up voice</button></div>`);
+  micSet.querySelector('.sc-ms-right').append(document.querySelector('.sc-polish'), msPolishOff);
+  msPolishOff.querySelector('.sc-ms-on').onclick = () => { if (!cleanOn()) cleanSw.click(); };
+  const msQ = s => micSet.querySelector(s), msCv = msQ('.sc-ms-wave canvas');
+  const micSetOn = () => document.body.classList.contains('sc-micset-on');
+  const MS_N = 260, msHist = new Float32Array(MS_N), msClip = new Uint8Array(MS_N); let msHead = 0;
+  // called by pushWave (~25 times a second) with the same loudness the small waves use (cleaned when Clean up voice runs)
+  function msPush(v, clip) {
+    msHist[msHead] = v; msClip[msHead] = clip ? 1 : 0; msHead = (msHead + 1) % MS_N;
+    if (micSetOn()) msDraw();
+  }
+  function msDraw() {
+    const dpr = window.devicePixelRatio || 1, W = Math.round(msCv.clientWidth * dpr), H = Math.round(msCv.clientHeight * dpr);
+    if (!W || !H) return;
+    if (msCv.width !== W || msCv.height !== H) { msCv.width = W; msCv.height = H; }
+    const g = msCv.getContext('2d'); g.clearRect(0, 0, W, H);
+    const bw = 3 * dpr, pitch = 5 * dpr, n = Math.min(MS_N, Math.floor((W + pitch - bw) / pitch)), x0 = W - ((n - 1) * pitch + bw), mid = H / 2;
+    g.fillStyle = 'rgba(255,255,255,.08)'; g.fillRect(0, mid - dpr / 2, W, dpr); // the silence line
+    for (let i = 0; i < n; i++) {
+      const k = (msHead - n + i + MS_N) % MS_N, v = msHist[k], hh = Math.max(bw, v * H * 0.92);
+      g.fillStyle = msClip[k] ? '#E5484D' : v > 0.02 ? 'rgba(255,255,255,.9)' : 'rgba(255,255,255,.28)';
+      g.beginPath(); g.roundRect(x0 + i * pitch, mid - hh / 2, bw, hh, bw / 2); g.fill();
+    }
+  }
+  // called by the mic's level handler: meter, readout, clip warning
+  function msLevel(pct, peakPct, text, clip) {
+    if (!micSetOn()) return;
+    msQ('.sc-ms-bar i').style.width = pct + '%'; msQ('.sc-ms-bar b').style.left = peakPct + '%';
+    msQ('.sc-ms-db').textContent = text; msQ('.sc-ms-clip').classList.toggle('on', clip);
+  }
+  function msInfo() {
+    const on = audio.state !== 'off';
+    msQ('.sc-ms-dev').textContent = on ? (audio.deviceLabel || 'Microphone') : msTurning ? 'Mic off — turning it on…' : 'Mic off — switch it on in the Mic tab';
+    msQ('.sc-ms-tag').textContent = !on ? 'Mic off' : vclean.running ? (origOn ? 'Original sound' : 'Cleaned + polished') : 'Mic sound (Clean up voice off)';
+    const nz = noiseDb == null ? '…' : noiseDb <= -119 ? '−∞ dB' : Math.round(noiseDb) + ' dB';
+    msQ('.sc-ms-info').innerHTML = [
+      ['Sample rate', on ? (audio.sampleRate / 1000) + ' kHz' : '—'], ['Channels', on ? (audio.channels > 1 ? 'Stereo' : 'Mono') : '—'],
+      [vclean.running ? 'Noise after cleanup' : 'Room noise', on ? nz : '—'], ['Saved as', cleanOn() ? 'Cleaned MP3 + original' : 'MP3'],
+    ].map(([k, v]) => `<div><span>${k}</span><b>${v}</b></div>`).join('');
+  }
+  let msTimer = 0, msTurning = false;
+  async function openMicSet() {
+    if (micSetOn()) return;
+    if (take) return toast('Stop recording first.', 'error');
+    closeBig();
+    try { window.spaceCamPrompter?.pause(); } catch {}
+    document.body.classList.add('sc-micset-on'); micSet.hidden = false;
+    document.addEventListener('keydown', micSetKey, true);
+    msInfo(); msDraw(); msTimer = setInterval(msInfo, 1000);
+    if (audio.state === 'off') { msTurning = true; msInfo(); try { await openMic(); } finally { msTurning = false; msInfo(); } }
+    renderClean();
+  }
+  function closeMicSet() {
+    if (!micSetOn()) return;
+    document.body.classList.remove('sc-micset-on'); micSet.hidden = true;
+    document.removeEventListener('keydown', micSetKey, true); clearInterval(msTimer);
+  }
+  function micSetKey(e) { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeMicSet(); } }
+  msQ('.sc-ms-back').onclick = closeMicSet;
+  // Listen / Hear original in here are the same buttons as in the Mic tab (renderClean_ keeps both pairs alike)
+  msQ('.sc-ms-listen').onclick = () => listenBtn.click(); msQ('.sc-ms-orig').onclick = () => origBtn.click();
+  $('scMicSet').onclick = openMicSet;
   function renderMic() {
     const on = audio.state !== 'off';
     renderRailTabs(on ? undefined : null);
@@ -2576,7 +2684,7 @@ function init() {
     let file; try { file = await web.getStoredFile(t.videoName); } catch { return toast('This take’s video is no longer in the browser.', 'error'), false; }
     const ext = /\.[a-z0-9]+$/i.exec(t.videoName)?.[0] || '.mp4';
     const name = (t.label ? safeFileName(t.label, { ...t, audio: 'none' }).replace(/\.mp3$/i, '') : t.videoName.replace(/\.[a-z0-9]+$/i, '')) + ext;
-    downloadBlob(await WebcamCore.shiftAudio(file, t.avShiftMs || 0), name);
+    downloadBlob(await WebcamCore.finalize(file, t.avShiftMs || 0), name); // normal MP4 (Resolve), sound offset kept
     if (!quiet) toast(`${name} downloaded.`, 'ok');
     return true;
   }
@@ -3201,7 +3309,7 @@ function init() {
   }
 
   async function startTake() {
-    closeBig(); // the settings window steps aside for the take
+    closeBig(); closeMicSet(); // the settings windows step aside for the take
     const camOk = src === 'sony' && cam.state === 'connected' && cam.has('record');
     const vidOk = src === 'mac' && webOn();
     const micReady = audio.state === 'ready';
@@ -3300,6 +3408,7 @@ function init() {
       t.audio = ok ? 'browser' : 'none'; // WAV is safe in browser storage
     }
     if (t.video === 'recording') t.video = v ? 'browser' : 'none';
+    if (t.videoName && web.lastFrames) t.frames = web.lastFrames; // frame health (camera fps, frames Chrome dropped), for checking later
     if (t.audio === 'browser' && cleanOn()) { t.clean = true; t.cleanSet = cleanSet(); } // Clean up voice, applied on save with these settings
     takes.push(t); saveTakes(); renderTakes(); renderRec();
     try { renderSampleBtn(); } catch {} // 3rd take of your own: sample data goes away
@@ -3391,6 +3500,10 @@ function init() {
   web.addEventListener('state', () => { if (take && take.video === 'recording' && !web.recording && !stopping) stopTogether('the Mac camera stopped'); });
   web.addEventListener('partsoff', e => { console.warn('[video] pieces stay in browser storage:', e.detail.message); toast('Couldn’t write the video to the folder (card full or removed?). The rest of this take stays on this Mac, up to about 10 GB.', 'error'); });
   web.dirResolver = async () => (await folderOk(false)) ? folder : null; // pieces of an earlier take, after a reload or crash
+  web.addEventListener('frames', e => {
+    const f = e.detail; console.warn('[video] frames missing:', f);
+    toast(`The picture is missing frames: ${f.deliveredFps} of ${Math.round(f.settingsFps || f.cameraFps)} per second${f.droppedPct ? ` (${f.droppedPct}% dropped)` : ''}. The Mac is busy: close other apps, or turn off Camera behind text and the Stage camera while recording.`, 'error');
+  });
   web.addEventListener('full', () => { if (take && take.video === 'recording' && !stopping) stopTogether('this Mac’s space for recordings ran out (everything up to now is kept)'); });
   cam.addEventListener('state', e => { if (take && take.camera && e.detail.state === 'disconnected' && !stopping) stopTogether('the USB camera disconnected'); });
 

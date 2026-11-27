@@ -1794,3 +1794,97 @@ body.stage-window #sc-space-banner{display:none}
 .sc-clean .sc-row{margin-top:6px}
 .sc-clean-sel{max-width:170px}
 .sc-clean-reset{display:block;margin:12px 0 2px;font-size:12px}
+/* Compact Mic tab (27 Nov 2026): Sounds as one row of three buttons; Clean up voice sliders two per row */
+#right-rail .sc-chips{display:flex!important;gap:6px;margin:2px 0 4px}
+#right-rail .sc-chips .sc-swb{flex:1;justify-content:center;min-height:30px!important;padding:0 6px!important;border:1px solid #333!important;border-radius:8px!important;color:#8a8a8f!important}
+#right-rail .sc-chips .sc-swb::after{display:none}
+#right-rail .sc-chips .sc-swb > span{gap:0}
+#right-rail .sc-chips .sc-swb > span svg{display:none}
+#right-rail .sc-chips .sc-swb[aria-pressed="true"]{background:#f0f0ee!important;border-color:#f0f0ee!important;color:#0A0A0B!important}
+#scSoundSec .caption{display:none}
+#right-rail .sc-clean .sc-grp{margin-top:10px}
+#right-rail .sc-clean-btns{margin-top:6px}
+#right-rail .sc-clean-reset{margin:8px 0 0}
+/* Mic tab (27 Nov 2026): no Level row and no live wave box here; the center panel shows the level */
+#right-rail .sc-lvrow, #scWaveRail{display:none!important}
+/* Clean up voice spacing + buttons (27 Nov 2026) */
+#right-rail .sc-clean{margin-top:4px}
+#right-rail .sc-clean-btns{gap:10px;margin:10px 0 4px}
+#right-rail .sc-clean-btns .btn{display:inline-flex!important;align-items:center;justify-content:center;gap:7px;height:34px!important;min-height:0!important;padding:0 10px!important;margin:0!important;line-height:1!important;font-size:12.5px!important;border-radius:9px!important}
+#right-rail .sc-clean-btns .btn .sc-ic{width:15px;height:15px;flex:none;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+#right-rail .sc-clean-btns .btn span{display:block;line-height:1}
+#right-rail .sc-clean .sc-grp{margin:14px 0 4px}
+#right-rail .sc-clean-reset{margin:10px 0 4px}
+/* ---- Mic settings window (27 Nov 2026): over the script, like Camera settings ---- */
+body.sc-micset-on #scroller,body.sc-micset-on #guide,body.sc-micset-on #progress-wrap,body.sc-micset-on #bottombar,body.sc-micset-on .sc-wave-center,body.sc-micset-on .sc-mark,body.sc-micset-on #stage .sc-marks-clear,body.sc-micset-on .sc-center-cam{visibility:hidden!important}
+#right-rail .sc-mic-set{margin:8px 0 2px}
+.sc-micset{position:absolute;z-index:12;top:72px;left:50%;transform:translateX(-50%);width:min(980px,calc(100% - 48px));max-height:calc(100% - 96px);overflow:auto;display:flex;flex-direction:column;gap:16px;padding:18px 20px;border-radius:16px;background:rgba(18,18,20,.94);border:1px solid rgba(255,255,255,.16);box-shadow:0 20px 60px rgba(0,0,0,.6);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);animation:scCardIn .16s ease-out}
+.sc-micset[hidden]{display:none}
+.sc-ms-head{display:flex;align-items:center;gap:12px}
+.sc-ms-title{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.sc-ms-title b{font:700 15px 'Archivo',system-ui,sans-serif;color:#fff}
+.sc-ms-title span{font-size:12.5px;color:#a5a5a9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc-micset .sc-cs-save{position:static!important}
+.sc-micset kbd{font:600 10px var(--mono);border:1px solid rgba(255,255,255,.25);border-radius:4px;padding:0 4px;margin-right:4px}
+.sc-ms-body{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:26px;align-items:start}
+.sc-ms-left{display:flex;flex-direction:column;gap:14px}
+.sc-ms-wave{position:relative;height:170px;border-radius:12px;background:#0c0c0e;border:1px solid rgba(255,255,255,.08);overflow:hidden}
+.sc-ms-wave canvas{position:absolute;inset:12px 10px;width:calc(100% - 20px);height:calc(100% - 24px)}
+.sc-ms-tag{position:absolute;left:12px;top:8px;font:600 10px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:#8a8a8f}
+.sc-ms-bar{position:relative;height:10px;border-radius:5px;background:#1d1d20;overflow:hidden}
+.sc-ms-bar i{position:absolute;left:0;top:0;bottom:0;width:0;border-radius:5px;background:linear-gradient(90deg,#f0f0ee 0 76%,#f5c451 76% 90%,#E5484D 90%)}
+.sc-ms-bar b{position:absolute;top:0;bottom:0;width:2px;left:0;background:#fff}
+.sc-ms-read{display:flex;justify-content:space-between;margin-top:6px;font:600 11px var(--mono);color:#d6d6d8}
+.sc-ms-clip{color:#E5484D;visibility:hidden}.sc-ms-clip.on{visibility:visible}
+.sc-ms-scale{display:flex;justify-content:space-between;margin-top:2px;font:500 10px var(--mono);color:#6d6d72}
+.sc-ms-info{display:grid;grid-template-columns:1fr 1fr;gap:8px 18px;padding:12px 14px;border-radius:12px;background:rgba(255,255,255,.04)}
+.sc-ms-info div{display:flex;justify-content:space-between;gap:10px;font-size:12px}
+.sc-ms-info span{color:#8a8a8f}.sc-ms-info b{color:#f0f0ee;font-weight:600}
+.sc-ms-tip{margin:0;font-size:12px;line-height:1.5;color:#8a8a8f}
+.sc-ms-right{display:flex;flex-direction:column;gap:6px}
+.sc-ms-off{display:flex;flex-direction:column;gap:8px;padding:14px;border-radius:12px;border:1px dashed #3a3a3f}
+.sc-ms-off[hidden]{display:none}.sc-ms-off b{font-size:13px;color:#fff}.sc-ms-off p{margin:0;font-size:12px;line-height:1.5;color:#a5a5a9}
+.sc-ms-off .btn{align-self:flex-start;height:32px;padding:0 12px}
+/* Polish controls inside the window (same layout as in the rail) */
+.sc-micset .sc-polish .sc-grp{margin:0 0 4px}
+.sc-micset .sc-clean-reset{margin:8px 0 0}
+@media (max-width:900px){.sc-ms-body{grid-template-columns:1fr}}
+/* one slider per row with its icon, in the Mic tab and in Mic settings (27 Nov 2026) */
+#right-rail .sc-cgrid{display:block;margin:2px 0}
+.sc-micset .sc-cgrid{display:block;margin:2px 0}
+.sc-micset .slider-group{display:grid;grid-template-columns:150px minmax(0,1fr) 46px;align-items:center;column-gap:12px;min-height:38px;margin:0}
+.sc-micset .slider-group .slider-label{display:contents}
+.sc-micset .slider-group .slider-label > span:first-child{order:1;display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:#d6d6d8;white-space:nowrap}
+.sc-micset .slider-group input[type=range]{order:2;width:100%;margin:0}
+.sc-micset .slider-group .slider-label > span:last-child{order:3;text-align:right;font:600 11px var(--mono);color:#a5a5a9}
+.sc-micset .slider-group .caption{display:none}
+.sc-micset .sc-clean-rows{display:block;margin:0}
+.sc-micset .sc-clean-rows .sc-row{display:flex;flex-direction:row;align-items:center;justify-content:space-between;gap:12px;min-height:40px}
+.sc-micset .sc-clean-rows .sc-lab{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:#d6d6d8}
+.sc-micset .sc-clean-sel{max-width:200px;width:200px;height:34px;margin:0!important;padding:0 10px!important}
+.sc-micset .sc-ic,#right-rail .sc-clean .sc-ic{width:16px;height:16px;flex:none}
+.sc-micset svg.sc-ic{fill:none;stroke:#9a9aa0;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.sc-micset svg.sc-ic .d{fill:#9a9aa0;stroke:none}
+/* centred without transform, so the open animation (which uses transform) can't make it jump; more room on top */
+.sc-micset{left:0;right:0;margin:0 auto;transform:none;top:96px;max-height:calc(100% - 120px);animation:scMsIn .16s ease-out}
+@keyframes scMsIn{from{opacity:0;translate:0 8px}to{opacity:1;translate:0 0}}
+/* Microphone settings fills the whole center area (27 Nov 2026) */
+.sc-micset{top:84px;bottom:24px;left:24px;right:24px;width:auto;max-width:1240px;max-height:none;padding:22px 26px;gap:18px}
+.sc-ms-body{flex:1;min-height:0;grid-template-columns:minmax(0,1.35fr) minmax(320px,1fr);gap:32px;align-items:stretch}
+.sc-ms-left{min-height:0;gap:16px}
+.sc-ms-wave{flex:1;min-height:200px;height:auto}
+.sc-ms-wave canvas{inset:28px 14px 14px}
+.sc-ms-wave canvas{width:calc(100% - 28px);height:calc(100% - 42px)}
+.sc-ms-tag{top:10px;left:14px}
+.sc-ms-bar{height:12px;border-radius:6px}
+.sc-ms-info{padding:14px 16px;gap:10px 22px}
+.sc-ms-info div{font-size:12.5px}
+.sc-ms-right{min-height:0;overflow:auto;padding:4px 4px 4px 28px;border-left:1px solid rgba(255,255,255,.08)}
+.sc-micset .slider-group,.sc-micset .sc-clean-rows .sc-row{min-height:44px}
+.sc-micset .sc-swb{min-height:44px}
+@media (max-width:900px){.sc-ms-right{border-left:0;padding-left:0}}
+.sc-micset .sc-ms-btns{display:flex;gap:10px;margin:0}
+.sc-micset .sc-ms-btns[hidden]{display:none}
+.sc-micset .sc-ms-btns .btn{flex:1;display:inline-flex!important;align-items:center;justify-content:center;gap:8px;height:40px!important;min-height:0!important;padding:0 12px!important;margin:0!important;line-height:1!important;font-size:13px!important;border-radius:10px!important}
+.sc-micset .sc-ms-btns .btn .sc-ic{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.sc-micset .sc-ms-btns .btn span{line-height:1}

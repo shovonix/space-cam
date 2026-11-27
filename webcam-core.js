@@ -38,6 +38,24 @@ export class WebcamCore extends EventTarget {
   segBytes = 0;        // piece size override (testing); 0 = the worker's 1 GiB
   #rec = null; #worker = null; #pending = new Map(); #writes = Promise.resolve(); #extraTracks = [];
   #recDir = null; #moving = Promise.resolve();
+  #frameStart = null; #frameT0 = 0; #frameTimer = 0; #framesWarned = false;
+  lastFrames = null; // frame health of the last take (see frameHealth), kept with the take
+
+  // Chrome's own count of camera frames (MediaStreamTrack.stats, Chrome 136+): how many the camera sent, how many
+  // reached the page/recorder, how many Chrome dropped (too busy). null where the browser doesn't have it.
+  #frameStats() {
+    const s = this.stream?.getVideoTracks()[0]?.stats;
+    return s && typeof s.totalFrames === 'number' ? { total: s.totalFrames, delivered: s.deliveredFrames, discarded: s.discardedFrames } : null;
+  }
+  /** While recording: { seconds, cameraFps, deliveredFps, droppedPct, settingsFps, size } since the take started. */
+  frameHealth() {
+    const a = this.#frameStart, b = this.#frameStats();
+    if (!a || !b) return null;
+    const sec = (performance.now() - this.#frameT0) / 1000, total = b.total - a.total, del = b.delivered - a.delivered;
+    const vs = this.stream?.getVideoTracks()[0]?.getSettings() || {};
+    return { seconds: Math.round(sec), cameraFps: +(total / sec).toFixed(2), deliveredFps: +(del / sec).toFixed(2),
+      droppedPct: total ? +(100 * (b.discarded - a.discarded) / total).toFixed(1) : 0, settingsFps: vs.frameRate, size: `${vs.width}×${vs.height}`, resizeMode: vs.resizeMode };
+  }
   /** true while finished pieces of the current take are going to the folder */
   get partsActive() { return !!(this.recording && this.#recDir); }
 
@@ -75,8 +93,14 @@ export class WebcamCore extends EventTarget {
     }
     const track = this.stream.getVideoTracks()[0];
     try { // 4K only for cameras that really offer it (16:9, 3840 wide); everything else stays exactly as opened
+      // A capture card sends the camera's own rate (24p/25p/30p). No frameRate here and resizeMode 'none': Chrome then
+      // takes the card's native 4K mode as it is. Before (27 Nov 2026) it asked for 30 fps and was allowed to rescale,
+      // and an A7 III at 24p came out as an uneven ~23 fps (40–45 ms between frames, about 1 in 24 frames missing).
       const cap = track?.getCapabilities?.() || {};
-      if ((cap.width?.max || 0) >= 3840 && (cap.height?.max || 0) >= 2160) await track.applyConstraints({ width: { ideal: 3840 }, height: { ideal: 2160 }, aspectRatio: { ideal: 16 / 9 }, frameRate: { ideal: 30 } });
+      if ((cap.width?.max || 0) >= 3840 && (cap.height?.max || 0) >= 2160) {
+        try { await track.applyConstraints({ width: { ideal: 3840 }, height: { ideal: 2160 }, aspectRatio: { ideal: 16 / 9 }, resizeMode: 'none' }); }
+        catch { await track.applyConstraints({ width: { ideal: 3840 }, height: { ideal: 2160 }, aspectRatio: { ideal: 16 / 9 } }); }
+      }
     } catch {}
     this.label = track?.label || 'Mac camera';
     this.deviceId = track?.getSettings().deviceId || deviceId;
@@ -119,7 +143,15 @@ export class WebcamCore extends EventTarget {
     rec.onerror = e => this.#fail('Video recording error: ' + (e?.error?.message || 'unknown'));
     this.#rec = rec;
     rec.start(1000);
-    console.info(`[video] ${name}: ${vs.width}×${vs.height} @ ${Math.round(fps)} fps, ${(vbps / 1e6).toFixed(0)} Mbps, ${fmt.mime}`);
+    console.info(`[video] ${name}: ${vs.width}×${vs.height} @ ${fps} fps (${vs.resizeMode || '?'}), ${(vbps / 1e6).toFixed(0)} Mbps, ${fmt.mime}`);
+    this.#frameStart = this.#frameStats(); this.#frameT0 = performance.now(); this.#framesWarned = false;
+    this.lastFrames = null;
+    clearInterval(this.#frameTimer);
+    this.#frameTimer = setInterval(() => { // every 5 s: is Chrome getting every frame from the camera?
+      const f = this.frameHealth();
+      const short = f && f.settingsFps && f.deliveredFps < f.settingsFps * 0.94; // fewer frames than the camera's rate
+      if (f && !this.#framesWarned && f.seconds > 8 && (f.droppedPct >= 3 || short)) { this.#framesWarned = true; this.#emit('frames', f); }
+    }, 5000);
     this.recording = true; this.recordingName = name;
     this.#setState('connected');
     return name;
@@ -128,6 +160,9 @@ export class WebcamCore extends EventTarget {
   async stopRecording() {
     if (!this.recording || !this.#rec) return null;
     const rec = this.#rec;
+    clearInterval(this.#frameTimer);
+    this.lastFrames = this.frameHealth();
+    if (this.lastFrames) console.info('[video] frames:', this.lastFrames);
     await new Promise(r => { rec.onstop = r; try { rec.stop(); } catch { r(); } });
     await this.#writes;
     this.#extraTracks.forEach(t => t.stop()); this.#extraTracks = [];
@@ -147,6 +182,22 @@ export class WebcamCore extends EventTarget {
    * Returns a Blob made of slices of the original (nothing big is copied); returns the file as it is if the
    * layout isn't what we expect, so saving never fails because of this. Tested 17 Nov 2026 on Take_81.
    */
+  /**
+   * The saved MP4: Chrome's fragmented file rebuilt as a normal MP4 with one full index (mp4-remux.js), so DaVinci
+   * Resolve imports it (it rejects fragmented MP4; found 27 Nov 2026). Same picture and sound bytes, same timing;
+   * the capture-card sound offset goes into an edit list. If that fails for any reason, falls back to the old way
+   * (fragmented, with the sound moved by shiftAudio), so saving never fails because of this.
+   */
+  static async finalize(file, audioShiftMs = 0) {
+    try {
+      const { defragmentMp4 } = await import('./mp4-remux.js' + new URL(import.meta.url).search);
+      return await defragmentMp4(file, { audioShiftMs: Math.max(0, audioShiftMs || 0) });
+    } catch (e) {
+      console.warn('[video] could not rebuild as a normal MP4, saving as recorded:', e);
+      return WebcamCore.shiftAudio(file, audioShiftMs);
+    }
+  }
+
   static async shiftAudio(file, ms) {
     if (!(ms > 0) || !file || file.size < 16) return file;
     try {
@@ -270,7 +321,7 @@ export class WebcamCore extends EventTarget {
   /** Copies a stored video into a folder handle. Deletes the stored copy on success.
    *  audioShiftMs > 0 moves the sound that much later in the saved copy (see shiftAudio). */
   async moveToFolder(name, dirHandle, destName = name, audioShiftMs = 0, onProgress = null) {
-    const file = await WebcamCore.shiftAudio(await this.getStoredFile(name), audioShiftMs);
+    const file = await WebcamCore.finalize(await this.getStoredFile(name), audioShiftMs);
     const w = await (await dirHandle.getFileHandle(destName, { create: true })).createWritable();
     let done = 0; // onProgress(0..1) as the bytes are copied (a 30-min 4K take is ~8 GB)
     const count = new TransformStream({ transform(chunk, c) { done += chunk.byteLength; onProgress?.(done / (file.size || 1)); c.enqueue(chunk); } });

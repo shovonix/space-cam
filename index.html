@@ -32,7 +32,7 @@ html.scp-r #stage{right:0!important}
 </style>
 <script src="coi-serviceworker.js"></script>
 <!-- Space Cam styles in the head: nothing paints unstyled on reload (keep its ?v= the same as studio.js at the bottom) -->
-<link rel="stylesheet" href="studio.css?v=2026-11-27f">
+<link rel="stylesheet" href="studio.css?v=2026-11-27g">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <meta name="theme-color" content="#0A0A0B">
 <meta name="mobile-web-app-capable" content="yes">
@@ -859,7 +859,7 @@ body.touch #screen-note{order:5;margin-top:12px;padding:10px 12px;font-size:12px
 <script type="application/json" id="sc-changes">
 {
   "fixed": [
-    "No more “done” messages after you delete, save, rename or download something. Errors and warnings still show."
+    "The prompter on the Stage no longer stops and jumps when the main Space Cam window is covered or minimized."
   ]
 }
 </script>
@@ -4507,8 +4507,30 @@ var qrcode = function() {
     if(!bc) return;
     bc.postMessage({type:'scrollpos', g: curG()});
   }
-  function tick(t){
+  // Hidden / covered control window (27 Nov 2026): Chrome stops requestAnimationFrame in a window that's minimized
+  // or covered (e.g. by the Stage window or another app) and slows its timers, so the script stopped moving and the
+  // Stage — which follows this window's position — froze and then jumped ("bumps every few seconds"). A worker's
+  // timer isn't slowed down, so it wakes this window ~10×/s; when no animation frame has run for a while, the
+  // same step as tick() runs from here and the position keeps going out to the Stage.
+  var lastTickWall = 0, beat = null;
+  function heartbeat(){
+    if(!playing || isStageWindow || pair.role === 'guest') return;
+    var now = performance.now();
+    if(lastTickWall && now - lastTickWall < 150) return; // frames are running: tick() does the work
+    tick(now, true);
+  }
+  function startBeat(){
+    if(beat || isStageWindow) return;
+    try{
+      var src = 'var t=setInterval(function(){postMessage(0)},100);onmessage=function(){clearInterval(t);close()}';
+      beat = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+      beat.onmessage = heartbeat;
+    }catch(e){ beat = { postMessage: function(){}, terminate: function(){}, iv: setInterval(heartbeat, 100) }; }
+  }
+  function stopBeat(){ if(!beat) return; try{ beat.postMessage(0); beat.terminate(); }catch(e){} if(beat.iv) clearInterval(beat.iv); beat = null; }
+  function tick(t, fromBeat){
     if(!playing) return;
+    lastTickWall = performance.now();
     if(!lastT) lastT = t;
     var dt = (t - lastT) / 1000;
     lastT = t;
@@ -4527,6 +4549,9 @@ var qrcode = function() {
       pause();
       return;
     }
+    if(!fromBeat){ rafId = requestAnimationFrame(tick); return; }
+    // from the heartbeat: make sure a frame is asked for, so smooth frames take over again as soon as the window shows
+    if(rafId) cancelAnimationFrame(rafId);
     rafId = requestAnimationFrame(tick);
   }
 
@@ -4544,8 +4569,8 @@ var qrcode = function() {
     // comment above. They still flip `playing` and update wake-lock/UI
     // locally (useful on the real external display), but position only
     // ever comes from the control window's broadcasts.
-    playG = null;
-    if(!isStageWindow) rafId = requestAnimationFrame(tick);
+    playG = null; lastTickWall = 0;
+    if(!isStageWindow){ rafId = requestAnimationFrame(tick); startBeat(); }
     else startFollow();
     if(bc && !applyingRemote) bc.postMessage({type:'playing', value:true});
     if(pair.role === 'host') pairSend({ t: 'play', v: true, pos: getPos() });
@@ -4556,6 +4581,7 @@ var qrcode = function() {
     playing = false;
     playG = null;
     if(rafId) cancelAnimationFrame(rafId);
+    stopBeat();
     stopFollow();
     playIcon.innerHTML = '<path d="M8 5v14l11-7z"/>';
     playBtn.classList.remove('active');
@@ -4594,7 +4620,9 @@ var qrcode = function() {
     var dt = follow.lastT ? Math.min((t - follow.lastT) / 1000, 0.1) : 0;
     follow.lastT = t;
     if(follow.anchorG !== null && follow.g !== null){
-      var predicted = follow.anchorG + state.speed * Math.min((performance.now() - follow.anchorT) / 1000, 0.25);
+      // keeps gliding at the set speed while a position update is late (up to 1.5 s; was 0.25 s, then it froze and
+      // jumped when the control window was covered); 'playing' false still stops it at once
+      var predicted = follow.anchorG + state.speed * Math.min((performance.now() - follow.anchorT) / 1000, 1.5);
       follow.g += state.speed * dt;
       var err = predicted - follow.g;
       if(Math.abs(err) > 60) follow.g = predicted; else follow.g += err * 0.15;
@@ -5632,7 +5660,7 @@ var qrcode = function() {
   });
 
   // ---- Build/version indicator (control window top bar) ----
-  var APP_VERSION = 'v1.0.11 beta'; // bump with each deploy (v1.0 beta, then v1.0.1 beta … until the public v1.0): shows in the logo chip, and open copies get the "new version" toast
+  var APP_VERSION = 'v1.0.12 beta'; // bump with each deploy (v1.0 beta, then v1.0.1 beta … until the public v1.0): shows in the logo chip, and open copies get the "new version" toast
   if(buildMeta && !isStageWindow){
     buildMeta.textContent = APP_VERSION;
     // the version lives on the bottom line now, beside the copyright: "Space Cam v1.8.1 © shovonix"
@@ -6257,4 +6285,4 @@ window.claude.hot.snapshot(function(){ return { state: state }; });
 </script>
 <!-- Bump ?v= on every deploy so browsers load the new files instead of cached ones.
      studio.js passes the same ?v= on to every file it loads (engines, workers). -->
-<script type="module" src="studio.js?v=2026-11-27f"></script>
+<script type="module" src="studio.js?v=2026-11-27g"></script>

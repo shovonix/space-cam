@@ -534,24 +534,24 @@ function init() {
     audioSec.append(h(`<div class="sc-grp sc-grp-new sc-new-clean">Clean up voice <span class="sc-new">New</span></div>`),
       swList(h(`<button type="button" class="tbtn" id="scCleanSw" aria-pressed="false"><span data-help="Takes out room noise, hum and some echo, then polishes the voice (EQ, de-ess, dynamics, loudness), like Adobe Podcast and Audition, on this Mac. The recording stays untouched; this happens when the take is saved, and the original is kept next to it as Take_N_original.mp3.">Clean up voice</span></button>`)));
     { const box = h(`<div class="sc-clean sc-cset" id="scCleanBox" hidden>
-        <div class="sc-cgrid">${cSl('noise', 'Noise removal', 'How much noise the model may take away. Too high can make a voice sound squeezed; 100% removes everything it can.')}
-        ${cSl('background', 'Background', 'Mixes some of the room back under your voice, like Adobe Podcast’s Background slider. A little (10–25%) keeps the voice natural and full; 0% is total silence between words.')}</div>
+        <div class="sc-cgrid">${cSl('noise', 'Noise removal', 'How much room noise, hiss and echo the model may take away. Start at 50–70%. Too high can make a voice sound squeezed or thin; 100% removes everything it can.')}
+        ${cSl('background', 'Background', 'Mixes some of the room back under your voice, like Adobe Podcast’s Background slider. A little (15–25%) keeps the voice natural and full instead of “in a vacuum”; 0% is total silence between words.')}</div>
         <div class="sc-clean-btns"><button type="button" class="btn sc-clean-listen" id="scCleanListen" aria-pressed="false" data-help="Hear the finished sound (cleanup + polish) in your headphones, to set the sliders before you record. Use headphones: through the speakers the mic hears itself.">Listen</button><button type="button" class="btn sc-clean-orig" id="scCleanOrig" aria-pressed="false" data-help="While listening: switch between the finished and the original sound to compare." disabled>Hear original</button></div>
-        <div class="sc-polish sc-cset"><div class="sc-grp">Polish</div>
+        <div class="sc-polish sc-cset"><div class="sc-grp"><span data-help="Finishing touches for the voice, in the same order as Adobe Audition’s dialogue chain. You hear them in Listen; they’re applied to the cleaned Take_N.mp3 when the take is saved. The recording itself stays untouched as Take_N_original.mp3.">Polish</span></div>
         <div class="sc-clean-sw"></div>
         <div class="sc-clean-rows"></div>
-        <div class="sc-cgrid">${cSl('warmth', 'Warmth', 'Body of the voice around 220 Hz. Right = fuller, left = less boomy (good for a deep voice close to the mic).', -100, 100)}
-        ${cSl('presence', 'Presence', 'Clarity around 3.5 kHz and a little air on top. Helps a voice cut through; too much sounds sharp.')}
-        ${cSl('deess', 'De-ess', 'Softens sharp “s” and “sh” sounds, only while they happen.')}
-        ${cSl('dynamics', 'Dynamics', 'Evens out loud and quiet words (a gentle compressor that follows your speaking level). Higher = more even, more “radio”.')}</div>
-        <button type="button" class="sc-link sc-clean-reset">Reset to default</button></div>
+        <div class="sc-cgrid">${cSl('warmth', 'Warmth', 'The body of your voice (around 220 Hz, up to ±4 dB). Move right if your voice sounds thin; move left if it sounds boomy or muddy, or when you sit very close to the mic. 0 = unchanged.', -100, 100)}
+        ${cSl('presence', 'Presence', 'Clarity: lifts the range where words are understood (around 3.5 kHz, up to +5 dB) plus a little air on top. Raise it if your voice sounds dull or muffled; lower it if it sounds sharp or harsh.')}
+        ${cSl('deess', 'De-ess', 'Softens sharp “s” and “sh” sounds. It only acts while one of them is louder than your voice and leaves everything else alone. Raise it if “s” hisses or stings, for example after raising Presence.')}
+        ${cSl('dynamics', 'Dynamics', 'Evens out loud and quiet words: a gentle compressor that learns your normal speaking level and pulls down the words that jump above it. 30% is light; higher sounds more even and more “radio”. Lower it if your voice sounds squashed.')}</div>
+        <button type="button" class="sc-link sc-clean-reset" data-help="Puts every Polish control back to its starting value: Reduce rumble on, Hum off, Podcast −16, Warmth 0, Presence 30%, De-ess 30%, Dynamics 30%.">Reset to default</button></div>
       </div>`);
-      box.querySelector('.sc-clean-sw').append(swList(h(`<button type="button" class="tbtn" data-k="rumble" aria-pressed="true"><span data-help="Cuts everything below 80 Hz: desk knocks, traffic, air-con rumble. The voice isn't touched.">Reduce rumble</span></button>`)));
+      box.querySelector('.sc-clean-sw').append(swList(h(`<button type="button" class="tbtn" data-k="rumble" aria-pressed="true"><span data-help="Cuts everything below 80 Hz, where voices have almost nothing: desk knocks, traffic, air-con rumble, bumps on the mic stand. Leave it on; turn it off only for a very deep voice that loses some of its low end.">Reduce rumble</span></button>`)));
       box.querySelector('.sc-clean-rows').append(
         row('Hum', cSel('hum', [['0', 'Off'], ['50', '50 Hz'], ['60', '60 Hz']])),
         row('Loudness', cSel('loudness', [['', 'Off'], ['-16', 'Podcast −16'], ['-14', 'YouTube −14']])));
-      box.querySelector('.sc-clean-rows .sc-row .sc-lab').dataset.help = 'Mains hum from lights or cables: 50 Hz in Bangladesh, Europe and most of Asia; 60 Hz in the US.';
-      box.querySelectorAll('.sc-clean-rows .sc-row .sc-lab')[1].dataset.help = 'Sets the saved take to a standard loudness, the same every time, with peaks kept under −1.5 dB. Podcast: −16 LUFS. YouTube: −14 LUFS.';
+      box.querySelector('.sc-clean-rows .sc-row .sc-lab').dataset.help = 'Removes a steady electrical buzz from lights, cables or a ground loop: a very narrow cut at the mains frequency and its next three multiples. Choose 50 Hz in Bangladesh, Europe and most of Asia, 60 Hz in the US. Keep it Off when you hear no buzz.';
+      box.querySelectorAll('.sc-clean-rows .sc-row .sc-lab')[1].dataset.help = 'Measures the whole saved take and sets it to a standard loudness, so every take comes out equally loud, with peaks kept under −1.5 dB. Podcast −16 for podcasts and general use, YouTube −14 for YouTube (a little louder), Off to keep your own level. While you Listen it rides the volume to give you an idea; the exact level is set on save.';
       audioSec.append(box); }
     audioSec.append(
       h(`<div class="vs-dl sc-clean-dl" hidden><button type="button" class="btn vs-dl-btn" data-help="Downloads the voice cleanup engine (DeepFilterNet3): ${VoiceClean.MB} MB, once. It stays in this browser and runs on your Mac; your voice never leaves it.">Download · ${VoiceClean.MB} MB</button><span class="vs-dl-bar" hidden><i></i></span><span class="vs-dl-note"></span><span class="vs-dl-what">DeepFilterNet3 noise removal. Runs on your Mac.</span></div>`));

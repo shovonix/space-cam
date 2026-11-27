@@ -864,6 +864,9 @@ function init() {
   // Message card at the top (clear of the reading line): icon, bold title, one line of what to do (split at " — "),
   // and at most one button that fixes it. Red only for real breakage ('error'); 'ok' = white tick; '' = hint/info.
   function toast(msg, kind = '', { action = null, ms = 0 } = {}) {
+    // No "done" messages after something you just did (deleted, saved, renamed, downloaded …): you see the result
+    // already (Shovon, 27 Nov 2026). Errors, warnings, tips and messages with a button still show.
+    if (kind === 'ok' && !action) { console.info('[done]', msg); return; }
     if (kind === 'error') sfx('error');
     const i = msg.indexOf(' — '), title = i > 0 ? msg.slice(0, i) : msg, detail = i > 0 ? msg.slice(i + 3) : '';
     const icon = kind === 'error' ? '<svg viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>'
@@ -2246,7 +2249,7 @@ function init() {
           const r = await (await core()).verify(email.value.trim(), c, q('.sc-acc-newsbox').checked);
           m.close(); renderRow();
           if (r.changed) { toast('Signed in. Loading your settings…'); setTimeout(reloadForPrefs, 900); }
-          else toast('Signed in. Your settings are saved to your account.');
+          else toast('Signed in. Your settings are saved to your account.', 'ok');
         } catch (x) { err('.sc-acc-step2', x.message); busy(b, false, 'Sign in'); }
       };
       q('.sc-acc-send').onclick = send;
@@ -2270,10 +2273,10 @@ function init() {
         <div class="sc-modal-row"><button type="button" class="btn ghost danger-text sc-acc-del">Delete account</button><button type="button" class="btn ghost sc-acc-out">Sign out</button></div>`);
       const q = c => m.wrap.querySelector(c);
       q('.sc-acc-newsbox').onchange = e => a.setNews(e.target.checked).catch(x => { e.target.checked = !e.target.checked; toast(x.message); });
-      q('.sc-acc-out').onclick = async () => { await a.signOut(); m.close(); renderRow(); toast('Signed out. Your settings stay on this Mac.'); };
+      q('.sc-acc-out').onclick = async () => { await a.signOut(); m.close(); renderRow(); toast('Signed out. Your settings stay on this Mac.', 'ok'); };
       q('.sc-acc-del').onclick = async () => {
         if (!(await window.spaceCamConfirm('Delete your account?', `${s.email} and the settings saved with it are deleted from the server. Settings on this Mac stay. This can't be undone.`, 'Delete account'))) return;
-        try { await a.deleteAccount(); m.close(); renderRow(); toast('Account deleted.'); } catch (x) { toast(x.message); }
+        try { await a.deleteAccount(); m.close(); renderRow(); toast('Account deleted.', 'ok'); } catch (x) { toast(x.message); }
       };
     }
 

@@ -1790,3 +1790,7 @@ body.stage-window #sc-space-banner{display:none}
 .sc-clean-btns .btn{flex:1;height:32px;min-height:0;font-size:12.5px;white-space:nowrap}
 .sc-clean-btns .btn[aria-pressed="true"]{background:#fff;color:#0A0A0B;border-color:#fff}
 .sc-clean-btns .btn:disabled{opacity:.4;cursor:default}
+.sc-clean .sc-grp{margin-top:14px}
+.sc-clean .sc-row{margin-top:6px}
+.sc-clean-sel{max-width:170px}
+.sc-clean-reset{display:block;margin:12px 0 2px;font-size:12px}

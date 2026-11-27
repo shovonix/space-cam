@@ -8,7 +8,8 @@ const { CamCore } = await import('./cam-core.js' + V);
 const { AudioCore } = await import('./audio-core.js' + V);
 const { WebcamCore } = await import('./webcam-core.js' + V);
 const { AssistCore, FACE_MB } = await import('./assist-core.js' + V);
-const { VoiceClean } = await import('./voice-clean-core.js' + V);
+const { VoiceClean, cleanDefaults } = await import('./voice-clean-core.js' + V);
+const CLEAN_DEFAULTS = await cleanDefaults();
 try { if (localStorage.getItem('spaceCam.triedVoice')) document.body.classList.add('sc-tried-voice'); if (JSON.parse(localStorage.getItem('spaceCam.triedLight'))) document.body.classList.add('sc-tried-light'); if (JSON.parse(localStorage.getItem('spaceCam.triedFrame'))) document.body.classList.add('sc-tried-frame'); } catch {}
 
 // The stage window (#stage) and its mini preview (#stage-preview) are plain prompter views; the only thing
@@ -518,13 +519,33 @@ function init() {
     { const mw = $('scMeterWrap'); if (mw) { const lv = row('Level'); lv.classList.add('sc-lvrow'); mw.before(lv); lv.append(mw); } } // level bar on its own labelled row, like the camera rows
     const sndBtns = ['scSndStart', 'scSndStop', 'scSndError'].map(id => $(id));
     soundSec.querySelector('.sec-title')?.remove(); soundSec.prepend(h(`<div class="sc-grp">Sounds</div>`), swList(...sndBtns));
-    // Clean up voice: switch · Strength · Listen / Hear original · one-time download (wired up next to the live wave)
+    // Clean up voice: switch · Noise removal · Background · Listen / Hear original · Polish (like Audition's
+    // Essential Sound → Dialogue) · one-time download. Wired up next to the live wave (data-k = setting name).
+    const cSl = (k, name, help, min = 0, max = 100) => `<div class="slider-group"><div class="slider-label"><span data-help="${help}">${name}</span><span class="sc-cv-val" data-v="${k}"></span></div><input type="range" data-k="${k}" min="${min}" max="${max}" step="5" aria-label="${name}"></div>`;
+    const cSel = (k, opts) => { const s = h(`<select class="sc-select sc-clean-sel" data-k="${k}">${opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>`); return s; };
     audioSec.append(h(`<div class="sc-grp sc-grp-new sc-new-clean">Clean up voice <span class="sc-new">New</span></div>`),
-      swList(h(`<button type="button" class="tbtn" id="scCleanSw" aria-pressed="false"><span data-help="Takes out room noise, hum and some echo, like Adobe Podcast, on this Mac. The recording stays untouched; the cleanup happens when the take is saved, and the original is kept next to it as Take_N_original.mp3.">Clean up voice</span></button>`)),
-      h(`<div class="sc-clean" id="scCleanBox" hidden>
-        <div class="slider-group"><div class="slider-label"><span data-help="How much noise to take away. Lower keeps more of the room; 100% removes all of it.">Strength</span><span id="scCleanStrVal">80%</span></div><input type="range" id="scCleanStr" min="10" max="100" step="5" value="80" aria-label="Clean up strength"></div>
-        <div class="sc-clean-btns"><button type="button" class="btn sc-clean-listen" id="scCleanListen" aria-pressed="false" data-help="Hear the cleaned mic in your headphones, to test the strength before you record. Use headphones: through the speakers the mic hears itself.">Listen</button><button type="button" class="btn sc-clean-orig" id="scCleanOrig" aria-pressed="false" data-help="While listening: switch between the cleaned and the original sound to compare." disabled>Hear original</button></div>
-      </div>`),
+      swList(h(`<button type="button" class="tbtn" id="scCleanSw" aria-pressed="false"><span data-help="Takes out room noise, hum and some echo, then polishes the voice (EQ, de-ess, dynamics, loudness), like Adobe Podcast and Audition, on this Mac. The recording stays untouched; this happens when the take is saved, and the original is kept next to it as Take_N_original.mp3.">Clean up voice</span></button>`)));
+    { const box = h(`<div class="sc-clean" id="scCleanBox" hidden>
+        ${cSl('noise', 'Noise removal', 'How much noise the model may take away. Too high can make a voice sound squeezed; 100% removes everything it can.')}
+        ${cSl('background', 'Background', 'Mixes some of the room back under your voice, like Adobe Podcast’s Background slider. A little (10–25%) keeps the voice natural and full; 0% is total silence between words.')}
+        <div class="sc-clean-btns"><button type="button" class="btn sc-clean-listen" id="scCleanListen" aria-pressed="false" data-help="Hear the finished sound (cleanup + polish) in your headphones, to set the sliders before you record. Use headphones: through the speakers the mic hears itself.">Listen</button><button type="button" class="btn sc-clean-orig" id="scCleanOrig" aria-pressed="false" data-help="While listening: switch between the finished and the original sound to compare." disabled>Hear original</button></div>
+        <div class="sc-grp">Polish</div>
+        <div class="sc-clean-sw"></div>
+        <div class="sc-clean-rows"></div>
+        ${cSl('warmth', 'Warmth', 'Body of the voice around 220 Hz. Right = fuller, left = less boomy (good for a deep voice close to the mic).', -100, 100)}
+        ${cSl('presence', 'Presence', 'Clarity around 3.5 kHz and a little air on top. Helps a voice cut through; too much sounds sharp.')}
+        ${cSl('deess', 'De-ess', 'Softens sharp “s” and “sh” sounds, only while they happen.')}
+        ${cSl('dynamics', 'Dynamics', 'Evens out loud and quiet words (a gentle compressor that follows your speaking level). Higher = more even, more “radio”.')}
+        <button type="button" class="sc-link sc-clean-reset">Reset to default</button>
+      </div>`);
+      box.querySelector('.sc-clean-sw').append(swList(h(`<button type="button" class="tbtn" data-k="rumble" aria-pressed="true"><span data-help="Cuts everything below 80 Hz: desk knocks, traffic, air-con rumble. The voice isn't touched.">Reduce rumble</span></button>`)));
+      box.querySelector('.sc-clean-rows').append(
+        row('Hum', cSel('hum', [['0', 'Off'], ['50', '50 Hz'], ['60', '60 Hz']])),
+        row('Loudness', cSel('loudness', [['', 'Off'], ['-16', 'Podcast · −16 LUFS'], ['-14', 'YouTube · −14 LUFS']])));
+      box.querySelector('.sc-clean-rows .sc-row .sc-lab').dataset.help = 'Mains hum from lights or cables: 50 Hz in Bangladesh, Europe and most of Asia; 60 Hz in the US.';
+      box.querySelectorAll('.sc-clean-rows .sc-row .sc-lab')[1].dataset.help = 'Sets the saved take to a standard loudness, the same every time, with peaks kept under −1.5 dB. Podcast: −16 LUFS. YouTube: −14 LUFS.';
+      audioSec.append(box); }
+    audioSec.append(
       h(`<div class="vs-dl sc-clean-dl" hidden><button type="button" class="btn vs-dl-btn" data-help="Downloads the voice cleanup engine (DeepFilterNet3): ${VoiceClean.MB} MB, once. It stays in this browser and runs on your Mac; your voice never leaves it.">Download · ${VoiceClean.MB} MB</button><span class="vs-dl-bar" hidden><i></i></span><span class="vs-dl-note"></span><span class="vs-dl-what">DeepFilterNet3 noise removal. Runs on your Mac.</span></div>`));
     // PROMPTER: Connect stage · Stage preview (or floating) · Stage sync · Stage view · text · lines · fade · margin · pedal · keys
     const mir = $('mirror-btn'), flp = $('flip-btn'), rot = $('rotate-btn');
@@ -601,7 +622,15 @@ function init() {
         'Shooting assistant': '<path d="M12 3l1.6 3.9L17.5 8.5l-3.9 1.6L12 14l-1.6-3.9L6.5 8.5l3.9-1.6z"/><path d="M18 14l.8 1.9 1.9.8-1.9.8L18 19.4l-.8-1.9-1.9-.8 1.9-.8zM6 15l.6 1.4 1.4.6-1.4.6L6 19l-.6-1.4L4 17l1.4-.6z"/>',
         'Level': '<path d="M5 18v-4M9.5 18V9M14 18v-6M18.5 18V5"/>',
         'Clean up voice': '<path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 11v2"/><path d="M17.5 3.5l.6 1.4 1.4.6-1.4.6-.6 1.4-.6-1.4-1.4-.6 1.4-.6z" class="d"/>',
-        'Strength': '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>',
+        'Noise removal': '<path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/>',
+        'Background': '<path d="M3 17c2-3 4-3 6 0s4 3 6 0 4-3 6 0" opacity=".45"/><path d="M8 13V7M12 13V4M16 13V8"/>',
+        'Reduce rumble': '<path d="M3 15c1.5-2 3-2 4.5 0s3 2 4.5 0 3-2 4.5 0 3 2 4.5 0"/><path d="M4 7h16" opacity=".45"/>',
+        'Hum': '<path d="M3 12c1.5-4 3-4 4.5 0s3 4 4.5 0 3-4 4.5 0 3 4 4.5 0"/>',
+        'Loudness': '<path d="M4 9.5h3.5L12 6v12l-4.5-3.5H4z"/><path d="M16 9v6M19 7v10"/>',
+        'Warmth': '<path d="M12 4c3 3 5 5.5 5 9a5 5 0 0 1-10 0c0-2 1-3.5 2-4.5.5 1.5 1.5 2.5 3 2.5-1-3 0-5 0-7z"/>',
+        'Presence': '<path d="M3 15l4-4 4 3 4-7 6 5"/>',
+        'De-ess': '<path d="M15 6.5c-1-1-2.5-1.5-4-1.5-2.2 0-3.5 1.2-3.5 2.8 0 3.8 8.5 2.2 8.5 6.4 0 1.7-1.5 2.8-3.8 2.8-1.6 0-3-.6-4-1.6"/>',
+        'Dynamics': '<path d="M4 18V6M4 12h16"/><path d="M8 9v6M12 7v10M16 9.5v5M20 11v2"/>',
       };
       const rr = $('right-rail');
       rr.querySelectorAll('.sc-swb > span:first-child, .slider-group .slider-label > span:first-child, .sc-row > .sc-lab').forEach(el => {
@@ -1476,9 +1505,23 @@ function init() {
   let rawClip = false, listenOn = false, origOn = false;
   vclean.addEventListener('level', e => pushWave(e.detail.peakDb, rawClip, e.detail.rmsDb));
   const cleanOn = () => !!store.get('cleanVoice', false);
-  const cleanStr = () => +store.get('cleanStrength', 80);
+  const cleanSet = () => ({ ...CLEAN_DEFAULTS, ...store.get('cleanSet', {}) }); // the sliders (voice-polish.js CLEAN_DEFAULTS)
   const cleanSw = $('scCleanSw'), cleanBox = $('scCleanBox'), cleanDl = document.querySelector('.sc-clean-dl');
-  const strIn = $('scCleanStr'), strVal = $('scCleanStrVal'), listenBtn = $('scCleanListen'), origBtn = $('scCleanOrig');
+  const listenBtn = $('scCleanListen'), origBtn = $('scCleanOrig');
+  const cleanVal = (k, v) => k === 'warmth' ? (v > 0 ? '+' : '') + v : v + '%';
+  // put the stored values into every control (sliders, Rumble switch, Hum / Loudness lists)
+  function showCleanSet() {
+    const s = cleanSet();
+    cleanBox.querySelectorAll('input[data-k]').forEach(i => { i.value = s[i.dataset.k]; cleanBox.querySelector(`[data-v="${i.dataset.k}"]`).textContent = cleanVal(i.dataset.k, s[i.dataset.k]); });
+    cleanBox.querySelectorAll('select[data-k]').forEach(x => { x.value = s[x.dataset.k] == null ? '' : String(s[x.dataset.k]); });
+    cleanBox.querySelectorAll('button[data-k]').forEach(b => b.setAttribute('aria-pressed', String(!!s[b.dataset.k])));
+  }
+  const saveCleanSet = patch => { const s = { ...cleanSet(), ...patch }; store.set('cleanSet', s); vclean.setSettings(s); showCleanSet(); };
+  cleanBox.querySelectorAll('input[data-k]').forEach(i => i.oninput = () => saveCleanSet({ [i.dataset.k]: +i.value }));
+  cleanBox.querySelectorAll('select[data-k]').forEach(x => x.onchange = () => { x.blur(); saveCleanSet({ [x.dataset.k]: x.value === '' ? null : +x.value }); });
+  cleanBox.querySelectorAll('button[data-k]').forEach(b => b.onclick = () => saveCleanSet({ [b.dataset.k]: !cleanSet()[b.dataset.k] }));
+  cleanBox.querySelector('.sc-clean-reset').onclick = () => { store.set('cleanSet', {}); saveCleanSet({}); toast('Clean up voice is back to its default settings.', 'ok'); };
+  showCleanSet();
   const resetNoise = () => { noiseHist.fill(-120); noiseFilled = 0; noiseDb = null; };
   let cleanChain = Promise.resolve();
   const renderClean = () => (cleanChain = cleanChain.then(renderClean_, () => {}));
@@ -1486,23 +1529,21 @@ function init() {
     const ready = await VoiceClean.ready(), on = cleanOn(), micOn = audio.state !== 'off' && !!audio.stream;
     cleanSw.setAttribute('aria-pressed', String(on));
     cleanBox.hidden = !on || !ready; cleanDl.hidden = !on || ready;
-    strIn.value = cleanStr(); strVal.textContent = cleanStr() + '%';
     const want = on && ready && micOn;
     if (!want) listenOn = origOn = false;
     if (vclean.running && (!want || vclean.stream !== audio.stream)) { await vclean.stop(); resetNoise(); }
     if (want && !vclean.running) {
-      try { await vclean.start(audio.stream, { strength: cleanStr(), listen: listenOn }); resetNoise(); }
+      try { await vclean.start(audio.stream, { set: cleanSet(), listen: listenOn }); resetNoise(); }
       catch (e) { toast('Clean up voice could not start: ' + (e?.message || e), 'error'); }
     }
     vclean.setBypass(origOn);
     listenBtn.disabled = false; origBtn.disabled = !listenOn; // Listen with the mic off turns the mic on first
     listenBtn.setAttribute('aria-pressed', String(listenOn)); listenBtn.textContent = listenOn ? 'Stop listening' : 'Listen';
-    origBtn.setAttribute('aria-pressed', String(origOn)); origBtn.textContent = origOn ? 'Hear cleaned' : 'Hear original';
-    listenBtn.title = vclean.running ? '' : 'Turns the mic on and plays the cleaned sound in your headphones';
+    origBtn.setAttribute('aria-pressed', String(origOn)); origBtn.textContent = origOn ? 'Hear finished' : 'Hear original';
+    listenBtn.title = vclean.running ? '' : 'Turns the mic on and plays the finished sound in your headphones';
     renderWave();
   }
   cleanSw.onclick = () => { store.set('cleanVoice', !cleanOn()); renderClean(); };
-  strIn.oninput = () => { store.set('cleanStrength', +strIn.value); strVal.textContent = strIn.value + '%'; vclean.setStrength(+strIn.value); };
   listenBtn.onclick = async () => {
     listenOn = !listenOn; if (!listenOn) origOn = false;
     if (listenOn && !store.get('cleanHeadphonesTold', false)) { store.set('cleanHeadphonesTold', true); toast('Use headphones — through the speakers the mic hears itself and howls.', ''); }
@@ -1524,7 +1565,7 @@ function init() {
   async function cleanedWav(t, wav, onP) {
     if (!t.clean) return null;
     if (!(await VoiceClean.ready())) { toast('Clean up voice isn’t downloaded yet, so this take was saved without it.', 'error'); return null; }
-    try { return await VoiceClean.cleanFile(wav, t.cleanStr ?? 80, onP); }
+    try { return (await VoiceClean.cleanFile(wav, t.cleanSet || cleanSet(), onP)).blob; }
     catch (e) { toast('Could not clean up the voice, so it was saved without it: ' + (e?.message || e), 'error'); return null; }
   }
   const origMp3Name = n => n.replace(/\.mp3$/i, '') + '_original.mp3';
@@ -3259,7 +3300,7 @@ function init() {
       t.audio = ok ? 'browser' : 'none'; // WAV is safe in browser storage
     }
     if (t.video === 'recording') t.video = v ? 'browser' : 'none';
-    if (t.audio === 'browser' && cleanOn()) { t.clean = true; t.cleanStr = cleanStr(); } // Clean up voice, applied on save
+    if (t.audio === 'browser' && cleanOn()) { t.clean = true; t.cleanSet = cleanSet(); } // Clean up voice, applied on save with these settings
     takes.push(t); saveTakes(); renderTakes(); renderRec();
     try { renderSampleBtn(); } catch {} // 3rd take of your own: sample data goes away
     if (reason) { /* stopped by an error or a limit: stopTogether shows one card with the warning */ }

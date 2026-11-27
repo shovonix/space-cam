@@ -1,10 +1,15 @@
-// voice-clean.worker.js — cleans a whole WAV take with DeepFilterNet3 when it is saved (see voice-clean-core.js).
-// The take is read in pieces (long takes never sit in memory as one block), mixed to mono, brought to 48 kHz if needed,
-// cleaned 10 ms at a time, and written as a 32-bit float WAV, 48 kHz mono. The model's own delay is taken off, so the
-// cleaned sound lines up with the original to the sample (same start, same length) and the camera sync stays right.
-// Message in:  { file: File|Blob (WAV), atten: dB (100 = no limit), wasmUrl, cache }
-// Messages out: { ev:'progress', p: 0..1 } … then { ev:'done', blob } or { ev:'error', message }
+// voice-clean.worker.js — cleans and polishes a whole WAV take when it is saved (see voice-clean-core.js).
+// Pass 1: read the take in pieces, mono, 48 kHz → DeepFilterNet removes the noise (its 30 ms delay is taken off, so
+//         every cleaned sample lines up with the original) → Background: some of what was removed is mixed back
+//         (like Adobe Podcast's Background slider; keeps the voice natural) → Polish (voice-polish.js: rumble, hum,
+//         warmth, presence, de-ess, dynamics) → measure the loudness (EBU R128).
+// Pass 2: gain to the loudness target → look-ahead limiter (−1.5 dBFS) → 32-bit float WAV, 48 kHz mono,
+//         same length as the original, so the camera sync stays right.
+// Message in:  { file: File|Blob (WAV), set: {noise, background, rumble, hum, warmth, presence, deess, dynamics, loudness}, wasmUrl, cache }
+// Messages out: { ev:'progress', p: 0..1 } … then { ev:'done', blob, lufs } or { ev:'error', message }
 import { DeepFilter } from './lib/deepfilternet/index.js';
+const V = new URL(self.location.href).search; // same ?v= stamp as the page, so updates reach every browser
+const polishLib = import('./voice-polish.js' + V); // loaded at once, awaited inside the handler (a top-level await would drop the first message)
 
 const RATE = 48000;
 export const DELAY = 1440; // samples the model's output lags its input at 48 kHz (30 ms = 3 frames of 480, measured 24 Nov 2026)
@@ -36,35 +41,41 @@ function wavHeader(samples) {
 
 self.onmessage = async e => {
   let df = null;
+  const { Polish, LoudnessMeter, Limiter, dbToLin, attenFor, bgGainFor, CLEAN_DEFAULTS } = await polishLib;
   try {
-    const { file, atten = 100, wasmUrl, cache, delay = DELAY } = e.data;
+    const { file, wasmUrl, cache, delay = DELAY } = e.data, set = { ...CLEAN_DEFAULTS, ...e.data.set };
     const r = await (await caches.open(cache)).match(wasmUrl);
     if (!r) throw new Error('Clean up voice is not downloaded yet');
     const url = URL.createObjectURL(await r.blob());
-    df = await DeepFilter.create({ wasmUrl: url, attenuationLimit: atten });
+    df = await DeepFilter.create({ wasmUrl: url, attenuationLimit: attenFor(set.noise ?? 70) });
     URL.revokeObjectURL(url);
-    const N = df.frameLength;
+    const N = df.frameLength, bg = bgGainFor(set.background ?? 10);
+    const polish = new Polish(RATE); polish.set({ ...set, live: false });
+    const meter = new LoudnessMeter();
 
     const w = await readWavInfo(file);
     const bps = w.bits / 8, frameBytes = bps * w.channels, isFloat = w.format === 3;
     const total = Math.floor(w.dataBytes / frameBytes);
     const ratio = w.rate / RATE, outTotal = Math.round(total / ratio);
 
-    // output: collected in ~1 s blocks; the first `delay` cleaned samples are the model warming up and are dropped
-    const blocks = []; let blk = new Float32Array(RATE), blkN = 0, skip = delay, written = 0;
+    // the original samples, in order, so each cleaned sample meets the original sample it came from (Background mix)
+    const inQ = []; let inHead = 0;
+    const takeIn = () => { while (inQ.length && inHead >= inQ[0].length) { inQ.shift(); inHead = 0; } return inQ.length ? inQ[0][inHead++] : 0; };
+
+    // pass 1 output: ~1 s blocks, each turned into a Blob right away (long takes don't pile up in memory)
+    const pass1 = []; let blk = new Float32Array(RATE), blkN = 0, skip = delay, written = 0;
+    const flush = () => { if (!blkN) return; const b = blk.subarray(0, blkN); polish.process(b); meter.push(b); pass1.push(new Blob([b.slice()])); blk = new Float32Array(RATE); blkN = 0; };
     const emit = arr => {
       for (let i = 0; i < arr.length && written < outTotal; i++) {
         if (skip > 0) { skip--; continue; }
-        let v = arr[i]; v = v > 1 ? 1 : v < -1 ? -1 : v;
-        blk[blkN++] = v; written++;
-        if (blkN === blk.length) { blocks.push(blk); blk = new Float32Array(RATE); blkN = 0; }
+        const x = takeIn(), y = arr[i];
+        blk[blkN++] = bg ? y + bg * (x - y) : y; written++;
+        if (blkN === blk.length) flush();
       }
     };
-    // 10 ms frames into the model
     const frame = new Float32Array(N); let fN = 0;
-    const feed = arr => { for (let i = 0; i < arr.length; i++) { frame[fN++] = arr[i]; if (fN === N) { emit(df.process(frame)); fN = 0; } } };
-    // linear resampling to 48 kHz (most Mac mics already run at 48 kHz: then this is a straight copy)
-    let prev = 0, inPos = 0, tOut = 0; // inPos = index of the first sample of the current block
+    const feed = arr => { inQ.push(arr); for (let i = 0; i < arr.length; i++) { frame[fN++] = arr[i]; if (fN === N) { emit(df.process(frame)); fN = 0; } } };
+    let prev = 0, inPos = 0, tOut = 0; // linear resampling to 48 kHz (a straight copy when the mic already runs at 48 kHz)
     const resample = x => {
       if (ratio === 1) return feed(x);
       const out = [];
@@ -75,10 +86,10 @@ self.onmessage = async e => {
         out.push(a + (b - a) * f); tOut++;
       }
       prev = x[x.length - 1]; inPos += x.length;
-      feed(out);
+      feed(Float32Array.from(out));
     };
 
-    const STEP = RATE * 2; // input frames per read
+    const STEP = RATE * 2;
     for (let done = 0; done < total;) {
       const n = Math.min(STEP, total - done);
       const dv = new DataView(await file.slice(w.dataAt + done * frameBytes, w.dataAt + (done + n) * frameBytes).arrayBuffer());
@@ -97,13 +108,26 @@ self.onmessage = async e => {
       }
       resample(mono);
       done += n;
-      self.postMessage({ ev: 'progress', p: total ? done / total : 1 });
+      self.postMessage({ ev: 'progress', p: 0.85 * (total ? done / total : 1) });
     }
-    // push silence through so the last real samples come out of the model
-    const tail = new Float32Array(N);
-    while (written < outTotal) feed(tail);
-    if (blkN) blocks.push(blk.subarray(0, blkN));
-    self.postMessage({ ev: 'done', blob: new Blob([wavHeader(written), ...blocks], { type: 'audio/wav' }) });
+    while (written < outTotal) feed(new Float32Array(N)); // push silence through so the last real samples come out
+    flush();
+
+    // pass 2: loudness gain (the target is for two speakers; a mono voice plays on both, so it sits 3 dB lower) + limiter
+    const lufs = meter.integrated();
+    const gain = set.loudness != null && lufs != null ? dbToLin(Math.max(-20, Math.min(24, set.loudness - 3 - lufs))) : 1;
+    const lim = new Limiter(RATE, -1.5), out = []; let lskip = lim.delay, outN = 0;
+    for (let b = 0; b < pass1.length; b++) {
+      const a = new Float32Array(await pass1[b].arrayBuffer());
+      if (gain !== 1) for (let i = 0; i < a.length; i++) a[i] *= gain;
+      const o = lim.process(a, new Float32Array(a.length));
+      const keep = lskip > 0 ? o.subarray(Math.min(lskip, o.length)) : o; lskip = Math.max(0, lskip - o.length);
+      if (keep.length) { out.push(new Blob([keep.slice()])); outN += keep.length; }
+      pass1[b] = null;
+      self.postMessage({ ev: 'progress', p: 0.85 + 0.15 * (b + 1) / pass1.length });
+    }
+    { const tail = lim.process(new Float32Array(lim.delay), new Float32Array(lim.delay)).subarray(0, outTotal - outN); if (tail.length) { out.push(new Blob([tail.slice()])); outN += tail.length; } }
+    self.postMessage({ ev: 'done', blob: new Blob([wavHeader(outN), ...out], { type: 'audio/wav' }), lufs: lufs == null ? null : lufs + 20 * Math.log10(gain) + 3 });
   } catch (err) {
     self.postMessage({ ev: 'error', message: String(err?.message || err) });
   } finally { try { df?.destroy(); } catch {} }
